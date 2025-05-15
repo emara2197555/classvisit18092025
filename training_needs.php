@@ -144,6 +144,48 @@ if ($teacher) {
             v.teacher_id = ? {$semester_condition}
             AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
     ", $params);
+    
+    // جلب متوسطات الدرجات لكل نوع زائر على حدة
+    $visitor_types = [1 => 'المدير', 2 => 'النائب الأكاديمي', 3 => 'منسق المادة', 4 => 'موجه المادة'];
+    $visitor_scores = [];
+    
+    foreach ($visitor_types as $visitor_type_id => $visitor_type_name) {
+        $visitor_condition = "AND v.visitor_type_id = ?";
+        $visitor_params = [$teacher_id, $visitor_type_id];
+        
+        // إضافة شرط الفصل الدراسي إذا تم تحديده
+        if (!empty($semester_condition)) {
+            $visitor_params = array_merge([$teacher_id, $visitor_type_id], array_slice($params, 1));
+        }
+        
+        $visitor_sql = "
+            SELECT 
+                ei.id AS indicator_id,
+                AVG(ve.score) AS avg_score
+            FROM 
+                visit_evaluations ve
+            JOIN 
+                visits v ON ve.visit_id = v.id
+            JOIN 
+                evaluation_indicators ei ON ve.indicator_id = ei.id
+            WHERE 
+                v.teacher_id = ? {$visitor_condition} {$semester_condition}
+                AND ve.score > 0
+            GROUP BY 
+                ei.id
+            ORDER BY 
+                ei.id
+        ";
+        
+        $visitor_data = query($visitor_sql, $visitor_params);
+        
+        foreach ($visitor_data as $data) {
+            if (!isset($visitor_scores[$data['indicator_id']])) {
+                $visitor_scores[$data['indicator_id']] = [];
+            }
+            $visitor_scores[$data['indicator_id']][$visitor_type_id] = $data['avg_score'];
+        }
+    }
 }
 
 // فلترة الاحتياجات للحصول على الورش المطلوبة فقط
@@ -280,7 +322,10 @@ usort($required_workshops, function($a, $b) {
                                     <th class="py-3 px-4 border-b text-right">المؤشر</th>
                                     <th class="py-3 px-4 border-b text-center">متوسط الدرجة</th>
                                     <th class="py-3 px-4 border-b text-right">النسبة المئوية</th>
-                                    <th class="py-3 px-4 border-b text-right">أنواع الزائرين</th>
+                                    <th class="py-3 px-4 border-b text-center">مدير</th>
+                                    <th class="py-3 px-4 border-b text-center">أكاديمي</th>
+                                    <th class="py-3 px-4 border-b text-center">موجه</th>
+                                    <th class="py-3 px-4 border-b text-center">منسق</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -292,7 +337,7 @@ usort($required_workshops, function($a, $b) {
                                         $current_domain = $need['domain_id'];
                                 ?>
                                     <tr class="bg-gray-50">
-                                        <td colspan="5" class="py-2 px-4 border-b font-medium">
+                                        <td colspan="8" class="py-2 px-4 border-b font-medium">
                                             <?= htmlspecialchars($need['domain_name']) ?>
                                         </td>
                                     </tr>
@@ -322,10 +367,42 @@ usort($required_workshops, function($a, $b) {
                                                 <?= number_format($need['percentage_score'], 2) ?>%
                                             </span>
                                         </td>
-                                        <td class="py-2 px-4 border-b">
-                                            <?= htmlspecialchars($need['visitor_types']) ?>
-                                            (<?= $need['visitor_types_count'] ?>)
+                                        <?php
+                                        // عرض درجات أنواع الزائرين الأربعة
+                                        $visitor_types = [1 => 'المدير', 2 => 'النائب الأكاديمي', 3 => 'منسق المادة', 4 => 'موجه المادة'];
+                                        foreach ($visitor_types as $visitor_type_id => $visitor_type_name):
+                                            $score = isset($visitor_scores[$need['indicator_id']][$visitor_type_id]) 
+                                                ? $visitor_scores[$need['indicator_id']][$visitor_type_id] 
+                                                : null;
+                                        ?>
+                                        <td class="py-2 px-4 border-b text-center">
+                                            <?php if ($score !== null): ?>
+                                                <?php 
+                                                // تحويل الدرجة إلى نسبة مئوية
+                                                $score_percentage = $score * 25;
+                                                
+                                                // تحديد لون النسبة حسب قيمتها
+                                                $score_class = '';
+                                                if ($score_percentage < 50) {
+                                                    $score_class = 'text-red-700';
+                                                } elseif ($score_percentage < 60) {
+                                                    $score_class = 'text-orange-700';
+                                                } elseif ($score_percentage < 70) {
+                                                    $score_class = 'text-yellow-700';
+                                                } elseif ($score_percentage < 80) {
+                                                    $score_class = 'text-blue-600';
+                                                } else {
+                                                    $score_class = 'text-green-700';
+                                                }
+                                                ?>
+                                                <span class="<?= $score_class ?>">
+                                                    <?= number_format($score_percentage, 2) ?>%
+                                                </span>
+                                            <?php else: ?>
+                                                -
+                                            <?php endif; ?>
                                         </td>
+                                        <?php endforeach; ?>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

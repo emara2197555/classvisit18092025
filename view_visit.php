@@ -320,6 +320,9 @@ if ($visit['attendance_type'] == 'remote') {
     }
 </style>
 
+<!-- إضافة مكتبة Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <div class="visit-header">
     <h1 class="text-2xl font-bold">تقرير الزيارة الصفية</h1>
     <div class="flex space-x-2 space-x-reverse">
@@ -405,30 +408,36 @@ if ($visit['attendance_type'] == 'remote') {
     <div class="result-box">
         <h2 class="text-xl font-semibold mb-4">نتيجة التقييم</h2>
         
-        <div class="text-center">
-            <?php
-            $bg_color = 'bg-gray-100';
-            $text_color = 'text-gray-800';
+        <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8 md:space-x-reverse">
+            <div class="w-full md:w-1/3">
+                <?php
+                $bg_color = 'bg-gray-100';
+                $text_color = 'text-gray-800';
+                
+                if ($average_score >= 3.6) {
+                    $bg_color = 'bg-green-100';
+                    $text_color = 'text-green-800';
+                } else if ($average_score >= 3.2) {
+                    $bg_color = 'bg-blue-100';
+                    $text_color = 'text-blue-800';
+                } else if ($average_score >= 2.6) {
+                    $bg_color = 'bg-yellow-100';
+                    $text_color = 'text-yellow-800';
+                } else if ($average_score >= 2.0) {
+                    $bg_color = 'bg-orange-100';
+                    $text_color = 'text-orange-800';
+                } else {
+                    $bg_color = 'bg-red-100';
+                    $text_color = 'text-red-800';
+                }
+                ?>
+                <div class="final-score <?= $text_color ?>"><?= number_format($average_score, 2) ?> (<?= $percentage_score ?>%)</div>
+                <div class="final-grade <?= $bg_color ?> <?= $text_color ?>"><?= $grade ?></div>
+            </div>
             
-            if ($average_score >= 3.6) {
-                $bg_color = 'bg-green-100';
-                $text_color = 'text-green-800';
-            } else if ($average_score >= 3.2) {
-                $bg_color = 'bg-blue-100';
-                $text_color = 'text-blue-800';
-            } else if ($average_score >= 2.6) {
-                $bg_color = 'bg-yellow-100';
-                $text_color = 'text-yellow-800';
-            } else if ($average_score >= 2.0) {
-                $bg_color = 'bg-orange-100';
-                $text_color = 'text-orange-800';
-            } else {
-                $bg_color = 'bg-red-100';
-                $text_color = 'text-red-800';
-            }
-            ?>
-            <div class="final-score <?= $text_color ?>"><?= number_format($average_score, 2) ?> (<?= $percentage_score ?>%)</div>
-            <div class="final-grade <?= $bg_color ?> <?= $text_color ?>"><?= $grade ?></div>
+            <div class="w-full md:w-2/3">
+                <canvas id="scoreChart" width="400" height="250"></canvas>
+            </div>
         </div>
     </div>
 
@@ -586,6 +595,91 @@ function openTab(tabName) {
         activeButton.classList.add('active');
     }
 }
+
+// إنشاء الرسم البياني الدائري عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    const scorePercentage = <?= $percentage_score ?>;
+    const remainingPercentage = 100 - scorePercentage;
+    
+    // تحديد اللون بناءً على النتيجة
+    let chartColor = '#ef4444'; // أحمر للنتيجة المنخفضة
+    
+    if (scorePercentage >= 90) {
+        chartColor = '#10b981'; // أخضر للممتاز
+    } else if (scorePercentage >= 80) {
+        chartColor = '#3b82f6'; // أزرق للجيد جدًا
+    } else if (scorePercentage >= 65) {
+        chartColor = '#f59e0b'; // أصفر ذهبي للجيد
+    } else if (scorePercentage >= 50) {
+        chartColor = '#f97316'; // برتقالي للمقبول
+    }
+    
+    const ctx = document.getElementById('scoreChart').getContext('2d');
+    const scoreChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['نسبة التقييم', 'المتبقي'],
+            datasets: [{
+                data: [scorePercentage, remainingPercentage],
+                backgroundColor: [
+                    chartColor,
+                    '#e5e7eb'
+                ],
+                borderColor: [
+                    chartColor,
+                    '#e5e7eb'
+                ],
+                borderWidth: 1,
+                cutout: '70%'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    rtl: true,
+                    labels: {
+                        font: {
+                            family: 'Tajawal, sans-serif'
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.raw + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // إضافة نص في وسط الرسم البياني
+    Chart.register({
+        id: 'centerText',
+        beforeDraw: function(chart) {
+            const width = chart.width;
+            const height = chart.height;
+            const ctx = chart.ctx;
+
+            ctx.restore();
+            const fontSize = (height / 140).toFixed(2);
+            ctx.font = fontSize + 'em Tajawal, sans-serif';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#333';
+
+            const text = scorePercentage + '%';
+            const textX = Math.round((width - ctx.measureText(text).width) / 2);
+            const textY = height / 2;
+
+            ctx.fillText(text, textX, textY);
+            ctx.save();
+        }
+    });
+});
 </script>
 
 <?php

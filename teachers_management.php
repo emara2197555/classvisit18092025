@@ -18,6 +18,9 @@ if (!$school) {
 
 $school_id = $school['id'];
 
+// جلب جميع المدارس المتوفرة في النظام
+$all_schools = query("SELECT id, name FROM schools ORDER BY name");
+
 // معالجة طلبات الحذف
 if (isset($_GET['delete_id']) && !empty($_GET['delete_id'])) {
     $teacher_id = (int)$_GET['delete_id'];
@@ -45,6 +48,7 @@ $phone = '';
 $success_message = '';
 $error_message = '';
 $selected_subjects = []; // إضافة مصفوفة للمواد المختارة
+$school_id = isset($_GET['edit_id']) ? (int)$school_id : $school['id']; // قيمة افتراضية للمدرسة
 
 // الوظائف المتاحة
 $job_titles = [
@@ -68,6 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $job_title = sanitize($_POST['job_title']);
     $phone = sanitize($_POST['phone']);
     $subjects = isset($_POST['subjects']) ? $_POST['subjects'] : [];
+    $school_id = isset($_POST['school_id']) ? (int)$_POST['school_id'] : $school_id;
+    
+    // التحقق من صحة معرف المدرسة
+    $school_exists = query_row("SELECT id FROM schools WHERE id = ?", [$school_id]);
+    if (!$school_exists) {
+        $error_message = "المدرسة المختارة غير موجودة.";
+        $error_in_subjects = true;
+    }
     
     // التحقق من مواد المعلم حسب دوره
     $error_in_subjects = false;
@@ -138,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // تحميل بيانات المعلم للتعديل
 if (isset($_GET['edit_id']) && !empty($_GET['edit_id'])) {
     $edit_id = (int)$_GET['edit_id'];
-    $teacher = query_row("SELECT * FROM teachers WHERE id = ? AND school_id = ?", [$edit_id, $school_id]);
+    $teacher = query_row("SELECT * FROM teachers WHERE id = ?", [$edit_id]);
     
     if ($teacher) {
         $teacher_id = $teacher['id'];
@@ -147,6 +159,7 @@ if (isset($_GET['edit_id']) && !empty($_GET['edit_id'])) {
         $email = $teacher['email'];
         $job_title = $teacher['job_title'];
         $phone = $teacher['phone'];
+        $school_id = $teacher['school_id']; // استرجاع معرف المدرسة للمعلم
         
         // استرجاع المواد المرتبطة بالمعلم
         $subjects_rows = query("SELECT subject_id FROM teacher_subjects WHERE teacher_id = ?", [$teacher_id]);
@@ -155,7 +168,12 @@ if (isset($_GET['edit_id']) && !empty($_GET['edit_id'])) {
 }
 
 // استرجاع قائمة المعلمين
-$teachers = query("SELECT * FROM teachers WHERE school_id = ? ORDER BY name", [$school_id]);
+$teachers = query("
+    SELECT t.*, s.name as school_name
+    FROM teachers t
+    JOIN schools s ON t.school_id = s.id
+    ORDER BY t.name
+", []);
 
 // استرجاع قائمة المواد الدراسية المتاحة
 $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NULL ORDER BY name", [$school_id]);
@@ -268,6 +286,18 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
                             </div>
                             
                             <div class="mb-3">
+                                <label for="school" class="form-label">المدرسة <span class="text-danger">*</span></label>
+                                <select class="form-select" id="school" name="school_id" required>
+                                    <option value="">اختر المدرسة...</option>
+                                    <?php foreach ($all_schools as $school_item): ?>
+                                        <option value="<?php echo $school_item['id']; ?>" <?php echo ($school_item['id'] == $school_id) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($school_item['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
                                 <label for="phone" class="form-label">رقم الهاتف</label>
                                 <input type="text" class="form-control" id="phone" name="phone" value="<?php echo $phone; ?>">
                             </div>
@@ -322,6 +352,7 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
                                             <th>الرقم الشخصي</th>
                                             <th>المسمى الوظيفي</th>
                                             <th>المواد</th>
+                                            <th>المدرسة</th>
                                             <th>العمليات</th>
                                         </tr>
                                     </thead>
@@ -356,6 +387,7 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
                                                     }
                                                     ?>
                                                 </td>
+                                                <td><?php echo htmlspecialchars($teacher['school_name']); ?></td>
                                                 <td>
                                                     <a href="teachers_management.php?edit_id=<?php echo $teacher['id']; ?>" class="btn btn-sm btn-outline-primary">
                                                         <i class="bi bi-pencil-square"></i>

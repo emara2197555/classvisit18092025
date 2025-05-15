@@ -214,7 +214,7 @@ try {
             <!-- المادة -->
             <div>
                 <label class="block mb-2 font-semibold">المادة:</label>
-                <select id="subject" name="subject_id" class="w-full border p-2 rounded" required onchange="loadTeachers(<?= $school_id ?>, this.value)">
+                <select id="subject" name="subject_id" class="w-full border p-2 rounded" required>
                     <option value="">اختر المادة...</option>
                     <?php foreach ($subjects as $subject): ?>
                         <option value="<?= $subject['id'] ?>"><?= htmlspecialchars($subject['name']) ?></option>
@@ -618,7 +618,16 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // استدعاء وظيفة تحديث اسم الزائر عند تغيير نوع الزائر
-    document.getElementById('visitor-type').addEventListener('change', updateVisitorName);
+    document.getElementById('visitor-type').addEventListener('change', function() {
+        updateVisitorName();
+        
+        // إذا تم اختيار مادة، قم بتحديث قائمة المعلمين
+        const subjectId = document.getElementById('subject').value;
+        const schoolId = document.getElementById('school').value;
+        if (subjectId && schoolId) {
+            loadTeachers(schoolId, subjectId);
+        }
+    });
 
     // عند تغيير حالة اختيار المعمل
     document.getElementById('has-lab').addEventListener('change', function() {
@@ -627,6 +636,22 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // التحكم بظهور مؤشرات المعمل
         toggleLabIndicators();
+    });
+
+    // مستمع لتغيير المادة لتحديث قائمة الزائرين والمعلمين
+    document.getElementById('subject').addEventListener('change', function() {
+        const schoolId = document.getElementById('school').value;
+        const subjectId = this.value;
+        
+        // تحديث قائمة المعلمين
+        if (schoolId && subjectId) {
+            loadTeachers(schoolId, subjectId);
+        }
+        
+        // إذا كان نوع الزائر محدد، نقوم بتحديث قائمة الزائرين
+        if (document.getElementById('visitor-type').value) {
+            updateVisitorName();
+        }
     });
 });
 
@@ -661,69 +686,116 @@ function updateVisitorName() {
     const visitorTypeSelect = document.getElementById('visitor-type');
     const visitorNameDiv = document.getElementById('visitor-name');
     const visitorPersonIdInput = document.getElementById('visitor-person-id');
+    const schoolId = document.getElementById('school').value;
+    const subjectSelect = document.getElementById('subject');
+    const subjectId = subjectSelect ? subjectSelect.value : '';
+    const visitorPersonId = visitorPersonIdInput.value; // حفظ قيمة الزائر الحالي
     
-    // إعادة تعيين قيمة معرف الزائر
-    visitorPersonIdInput.value = '';
+    // تفريغ القيم الحالية
+    visitorNameDiv.innerHTML = '';
+    // لا نفرغ معرف الزائر لكي نحتفظ بالقيمة الحالية
     
-    if (visitorTypeSelect.value) {
-        // جلب أسماء الزائرين بناءً على نوع الزائر المحدد
-        fetch(`api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.visitors.length > 0) {
-                    // إنشاء قائمة منسدلة لاختيار الزائر
-                    let visitorHtml = '<label class="block mb-2 text-sm font-semibold">اختر الزائر:</label>';
-                    visitorHtml += '<select id="visitor-person" class="w-full border p-2 rounded text-sm" onchange="updateVisitorPersonId(this.value)">';
-                    visitorHtml += '<option value="">اختر الزائر...</option>';
-                    
-                    data.visitors.forEach(visitor => {
-                        visitorHtml += `<option value="${visitor.id}">${visitor.name}</option>`;
-                    });
-                    
-                    visitorHtml += '</select>';
-                    visitorNameDiv.innerHTML = visitorHtml;
-                } else {
-                    visitorNameDiv.innerHTML = '<p class="text-sm text-red-500">لا يوجد زائرين من هذا النوع</p>';
-                }
-            })
-            .catch(error => {
-                console.error('Error loading visitors:', error);
-                visitorNameDiv.innerHTML = '<p class="text-sm text-red-500">حدث خطأ أثناء تحميل بيانات الزائرين</p>';
-            });
-    } else {
-        visitorNameDiv.innerHTML = "";
-    }
-}
-
-// دالة تحديث معرف الزائر الشخصي
-function updateVisitorPersonId(visitorId) {
-    document.getElementById('visitor-person-id').value = visitorId;
-}
-
-// دالة جلب المعلمين حسب المدرسة والمادة
-function loadTeachers(schoolId, subjectId) {
-    const teacherSelect = document.getElementById('teacher');
-    const visitorTypeSelect = document.getElementById('visitor-type');
-    teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
+    // لا نفعل شيئاً إذا كان نوع الزائر غير محدد
+    if (!visitorTypeSelect.value) return;
     
-    if (!schoolId || !subjectId) return;
+    // إظهار مؤشر التحميل
+    visitorNameDiv.innerHTML = '<span class="text-gray-500">جاري تحميل الأسماء...</span>';
     
-    // الحصول على نوع الزائر المحدد
-    const visitorType = visitorTypeSelect.options[visitorTypeSelect.selectedIndex].text;
-    
-    // استعلام AJAX لجلب المعلمين
-    fetch(`api/get_teachers.php?school_id=${schoolId}&subject_id=${subjectId}&exclude_roles=مدير,النائب الأكاديمي,موجه المادة,منسق المادة`)
+    // طلب الحصول على أسماء الزائرين بناءً على النوع
+    fetch(`api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}&school_id=${schoolId}&subject_id=${subjectId}`)
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.teachers.length > 0) {
-                data.teachers.forEach(teacher => {
-                    teacherSelect.add(new Option(teacher.name, teacher.id));
+            if (data.success && data.visitors.length > 0) {
+                // إنشاء قائمة منسدلة للزائرين
+                const select = document.createElement('select');
+                select.id = 'visitor-person';
+                select.className = 'w-full border p-2 rounded mt-2';
+                select.required = true;
+                
+                // إضافة خيار فارغ
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = 'اختر اسم الزائر...';
+                select.appendChild(emptyOption);
+                
+                // إضافة الزائرين إلى القائمة
+                data.visitors.forEach(visitor => {
+                    const option = document.createElement('option');
+                    option.value = visitor.id;
+                    option.textContent = visitor.name;
+                    select.appendChild(option);
                 });
+                
+                // إضافة القائمة إلى الصفحة
+                visitorNameDiv.innerHTML = '';
+                visitorNameDiv.appendChild(select);
+                
+                // استعادة الاختيار السابق إذا كان موجوداً
+                if (visitorPersonId) {
+                    select.value = visitorPersonId;
+                }
+                
+                // إضافة مستمع لحدث تغيير الزائر
+                select.addEventListener('change', function() {
+                    visitorPersonIdInput.value = this.value;
+                });
+            } else {
+                // إظهار رسالة في حالة عدم وجود زائرين
+                visitorNameDiv.innerHTML = '<span class="text-red-500">لم يتم العثور على زائرين من هذا النوع</span>';
+                
+                if (data.message) {
+                    // عرض رسالة الخطأ إن وجدت
+                    console.error(data.message);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading visitor names:', error);
+            visitorNameDiv.innerHTML = '<span class="text-red-500">حدث خطأ أثناء تحميل البيانات</span>';
+        });
+}
+
+// دالة تحميل المعلمين المتوفرين
+function loadTeachers(schoolId, subjectId) {
+    const teacherSelect = document.getElementById('teacher');
+    
+    // إذا لم يتم اختيار مدرسة أو مادة، إفراغ القائمة
+    if (!schoolId || !subjectId) {
+        teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
+        return;
+    }
+
+    // الحصول على نوع الزائر ومعرف الشخص الزائر (إذا تم تحديدهما)
+    const visitorTypeId = document.getElementById('visitor-type').value || '';
+    const visitorPersonId = document.getElementById('visitor-person-id').value || '';
+    
+    // استرجاع المعلمين من API
+    fetch(`api/get_teachers.php?subject_id=${subjectId}&school_id=${schoolId}&visitor_type_id=${visitorTypeId}&visitor_person_id=${visitorPersonId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.teachers && data.teachers.length > 0) {
+                // إنشاء خيارات القائمة المنسدلة
+                let options = '<option value="">اختر المعلم...</option>';
+                data.teachers.forEach(teacher => {
+                    options += `<option value="${teacher.id}">${teacher.name}</option>`;
+                });
+                
+                teacherSelect.innerHTML = options;
+            } else {
+                teacherSelect.innerHTML = '<option value="">غير متاح</option>';
+                
+                // عرض رسالة الخطأ من API
+                if (data.message) {
+                    alert(data.message);
+                }
             }
         })
         .catch(error => {
             console.error('Error loading teachers:', error);
+            teacherSelect.innerHTML = '<option value="">حدث خطأ</option>';
         });
+        
+
 }
 
 // دالة عرض خطوة محددة من التقييم
