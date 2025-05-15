@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>نموذج زيارة صفية</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #1a365d;
+      --secondary-color: #2c5282;
+      --accent-color: #2b6cb0;
+      --light-bg: #f8fafc;
+      --border-color: #e2e8f0;
+      
+      /* ألوان جديدة للتقييم */
+      --score-4: #059669; /* أخضر */
+      --score-3: #0284c7; /* أزرق */
+      --score-2: #f59e0b; /* برتقالي */
+      --score-1: #dc2626; /* أحمر */
+      --score-0: #6b7280; /* رمادي */
+    }
+
+    body {
+      overflow-x: hidden;
+      max-height: 100vh;
+      margin: 0;
+      padding: 0;
+      background-color: #f1f5f9;
+      color: #1a202c;
+      font-family: 'Cairo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    
+    select[name^="score_"] { 
+      background-color: #fff;
+      border: 2px solid var(--border-color);
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+      margin-bottom: 0.75rem;
+      transition: all 0.3s ease;
+    }
+    
+    select[name^="score_"]:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.1);
+    }
+    
+    select[name^="score_"] option:nth-child(1) { /* الأدلة مستكملة */
+      background-color: var(--score-4);
+      color: white;
+    }
+
+    select[name^="score_"] option:nth-child(2) { /* معظم الأدلة */
+      background-color: var(--score-3);
+      color: white;
+    }
+
+    select[name^="score_"] option:nth-child(3) { /* بعض الأدلة */
+      background-color: var(--score-2);
+      color: white;
+    }
+
+    select[name^="score_"] option:nth-child(4) { /* الأدلة غير متوفرة */
+      background-color: var(--score-1);
+      color: white;
+    }
+
+    select[name^="score_"] option:nth-child(5) { /* لم يتم قياسه */
+      background-color: var(--score-0);
+      color: white;
+    }
+    
+    select[name^="recommend_"] { 
+      background-color: #fff;
+      border: 1px solid var(--border-color);
+    }
+    
+    input[name^="custom_recommend_"] { 
+      background-color: #fff;
+      border: 1px solid var(--border-color);
+    }
+    
+    .section {
+      border: 1px solid var(--border-color);
+      border-right: 4px solid var(--primary-color);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      background-color: #ffffff;
+      border-radius: 0.75rem;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .section h2 {
+      color: var(--primary-color);
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 2px solid var(--border-color);
+      background-color: #edf2f7;
+      border-radius: 0.5rem;
+    }
+
+    .indicator-label {
+      color: var(--secondary-color);
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      padding-right: 0.5rem;
+      border-right: 3px solid var(--accent-color);
+    }
+
+    .grid-container {
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+      background-color: #ffffff;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    select, input {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 0.5rem;
+      transition: all 0.3s ease;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.1);
+    }
+
+    button {
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    /* تنسيق شريط التمرير */
+    .section::-webkit-scrollbar,
+    .grid-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .section::-webkit-scrollbar-track,
+    .grid-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+
+    .section::-webkit-scrollbar-thumb,
+    .grid-container::-webkit-scrollbar-thumb {
+      background: var(--secondary-color);
+      border-radius: 3px;
+    }
+
+    .section::-webkit-scrollbar-thumb:hover,
+    .grid-container::-webkit-scrollbar-thumb:hover {
+      background: var(--primary-color);
+    }
+
+    /* تنسيقات إضافية */
+    .evaluation-header {
+      background-color: var(--light-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .step-navigation {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1.5rem;
+    }
+
+    .primary-button {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+    }
+
+    .secondary-button {
+      background-color: #718096;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+    }
+
+    .label-text {
+      color: #4a5568;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    /* تنسيق بوكس نتيجة التقييم */
+    .result-section {
+      border: 1px solid var(--border-color);
+      border-right: 4px solid var(--primary-color);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      background-color: #ffffff;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .result-section h2 {
+      color: var(--primary-color);
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 2px solid var(--border-color);
+      background-color: #edf2f7;
+      border-radius: 0.5rem;
+    }
+
+    /* تنسيق قوائم التقييم */
+    select[name^="score_"].score-4 {
+      background-color: rgba(5, 150, 105, 0.1);
+      border-color: var(--score-4);
+    }
+
+    select[name^="score_"].score-3 {
+      background-color: rgba(2, 132, 199, 0.1);
+      border-color: var(--score-3);
+    }
+
+    select[name^="score_"].score-2 {
+      background-color: rgba(245, 158, 11, 0.1);
+      border-color: var(--score-2);
+    }
+
+    select[name^="score_"].score-1 {
+      background-color: rgba(220, 38, 38, 0.1);
+      border-color: var(--score-1);
+    }
+
+    select[name^="score_"].score-0 {
+      background-color: rgba(107, 114, 128, 0.1);
+      border-color: var(--score-0);
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-6">
+  <script>
+    let currentStep = 1;
+    function showStep(step) {
+      const totalSteps = 7;
+      for (let i = 1; i <= totalSteps; i++) {
+        const el = document.getElementById(`step-${i}`);
+        if (el) el.style.display = (i === step) ? 'block' : 'none';
+      }
+    }
+    function nextStep() {
+      if (currentStep < 7) {
+        currentStep++;
+        showStep(currentStep);
+      }
+    }
+    function previousStep() {
+      if (currentStep > 1) {
+        currentStep--;
+        showStep(currentStep);
+      }
+    }
+    window.onload = () => showStep(1);
+
+    // بيانات المدارس والمواد والمعلمين
+    const schoolsData = {
+      "مدرسة النور الثانوية": {
+        "العلوم": ["أحمد محمد", "سارة خالد", "محمد علي"],
+        "الرياضيات": ["فاطمة أحمد", "عمر حسن", "نورا سعيد"],
+        "اللغة العربية": ["خالد إبراهيم", "ريم عادل", "سمير كمال"],
+        "اللغة الإنجليزية": ["ليلى عمر", "باسم سامي", "هدى كريم"]
+      },
+      "مدرسة الأمل المتوسطة": {
+        "العلوم": ["زينب حسين", "طارق محمود", "منى سعد"],
+        "الرياضيات": ["كريم عادل", "رانيا محمد", "أيمن خالد"],
+        "اللغة العربية": ["عبير محمد", "ياسر أحمد", "نهى سمير"],
+        "اللغة الإنجليزية": ["سلمى عماد", "وليد خالد", "دينا حسام"]
+      },
+      "مدرسة المستقبل الابتدائية": {
+        "العلوم": ["هاني سعيد", "نور الهدى", "عمرو خالد"],
+        "الرياضيات": ["سميرة حامد", "أشرف محمود", "إيمان صلاح"],
+        "اللغة العربية": ["محمود سامي", "هناء كمال", "رامي عادل"],
+        "اللغة الإنجليزية": ["ندى حسن", "كمال فؤاد", "مريم عصام"]
+      }
+    };
+
+    // دالة لتحديث قائمة المواد بناءً على المدرسة المختارة
+    function updateSubjects() {
+      const schoolSelect = document.getElementById('school');
+      const subjectSelect = document.getElementById('subject');
+      const teacherSelect = document.getElementById('teacher');
+      
+      subjectSelect.innerHTML = '<option value="">اختر المادة...</option>';
+      teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
+      
+      if (schoolSelect.value) {
+        const subjects = Object.keys(schoolsData[schoolSelect.value]);
+        subjects.forEach(subject => {
+          subjectSelect.add(new Option(subject, subject));
+        });
+      }
+    }
+
+    // دالة لتحديث قائمة المعلمين بناءً على المدرسة والمادة المختارة
+    function updateTeachers() {
+      const schoolSelect = document.getElementById('school');
+      const subjectSelect = document.getElementById('subject');
+      const teacherSelect = document.getElementById('teacher');
+      
+      teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
+      
+      if (schoolSelect.value && subjectSelect.value) {
+        const teachers = schoolsData[schoolSelect.value][subjectSelect.value];
+        teachers.forEach(teacher => {
+          teacherSelect.add(new Option(teacher, teacher));
+        });
+      }
+    }
+
+    // دالة للتحقق من اكتمال البيانات قبل بدء التقييم
+    function startEvaluation() {
+      const school = document.getElementById('school').value;
+      const subject = document.getElementById('subject').value;
+      const teacher = document.getElementById('teacher').value;
+      const date = document.getElementById('visit-date').value;
+
+      if (!school || !subject || !teacher || !date) {
+        alert('الرجاء إكمال جميع البيانات المطلوبة قبل بدء التقييم');
+        return;
+      }
+
+      // إخفاء نموذج الاختيار وإظهار نموذج التقييم
+      document.getElementById('selection-form').style.display = 'none';
+      document.getElementById('evaluation-form').style.display = 'block';
+      
+      // تحديث عنوان التقييم
+      document.getElementById('evaluation-header').innerHTML = `
+        <div class="text-lg mb-2">المدرسة: ${school}</div>
+        <div class="text-lg mb-2">المادة: ${subject}</div>
+        <div class="text-lg mb-2">المعلم: ${teacher}</div>
+        <div class="text-lg mb-2">تاريخ الزيارة: ${new Date(date).toLocaleDateString('ar-EG')}</div>
+      `;
+    }
+
+    // دالة للعودة إلى نموذج الاختيار
+    function backToSelection() {
+      document.getElementById('selection-form').style.display = 'block';
+      document.getElementById('evaluation-form').style.display = 'none';
+    }
+
+    function updateFormDisplay() {
+      const visitType = document.getElementById('visit-type').value;
+      const hasLab = document.getElementById('has-lab').checked;
+      
+      // إظهار/إخفاء الجزء الخاص بالمعمل
+      const labSection = document.getElementById('step-5');
+      if (labSection) {
+        labSection.style.display = hasLab ? 'none' : 'none';
+      }
+
+      // تحديث طريقة حساب المجموع
+      window.isPartialEvaluation = visitType === 'partial';
+    }
+
+    // تعديل دالة حساب المجموع لتدعم التقييم الجزئي
+    function calculateTotalScore() {
+      const totalIndicators = indicators.length;
+      let total = 0;
+      let count = 0;
+
+      for (let i = 1; i <= totalIndicators; i++) {
+        const el = document.querySelector(`[name='score_${i}']`);
+        if (el && el.value !== '') {
+          // في حالة التقييم الجزئي، نحسب فقط العناصر التي تم تقييمها
+          if (window.isPartialEvaluation || el.value !== '0') {
+            total += parseInt(el.value);
+            count++;
+          }
+        }
+      }
+
+      const average = count > 0 ? (total / count).toFixed(2) : 0;
+      let grade = '';
+      if (average >= 3.6) grade = 'ممتاز';
+      else if (average >= 3.2) grade = 'جيد جدًا';
+      else if (average >= 2.6) grade = 'جيد';
+      else if (average >= 2.0) grade = 'مقبول';
+      else grade = 'يحتاج إلى تحسين';
+
+      const evaluationType = window.isPartialEvaluation ? 'تقييم جزئي' : 'تقييم كلي';
+      document.getElementById("total-score").textContent = 
+        `${evaluationType}: النتيجة ${total} من ${count * 4} (المتوسط: ${average}) — التقدير: ${grade}`;
+    }
+
+    function createEvaluationBlock(labelText, id) {
+      const recs = recommendations[id] || [];
+      const options = recs.map(r => `<option>${r}</option>`).join("\n");
+      return `
+        <div>
+          <label class="indicator-label">${labelText}</label>
+          <select class="w-full border p-2 rounded mb-2" name="score_${id}">
+            <option value="4">الأدلة مستكملة</option>
+            <option value="3">معظم الأدلة</option>
+            <option value="2">بعض الأدلة</option>
+            <option value="1">الأدلة غير متوفرة</option>
+            <option value="0">لم يتم قياسه</option>
+          </select>
+          <select class="w-full border p-2 rounded mb-1" name="recommend_${id}">
+            <option value="">اختر توصية...</option>
+            ${options}
+          </select>
+          <input type="text" name="custom_recommend_${id}" placeholder="أدخل توصية مخصصة (اختياري)" class="w-full border p-2 rounded">
+        </div>
+      `;
+    }
+
+    // تحديث دالة تغيير لون حقل التقييم
+    function updateSelectColor() {
+      const selects = document.querySelectorAll('select[name^="score_"]');
+      selects.forEach(select => {
+        select.addEventListener('change', function() {
+          // إزالة جميع الكلاسات السابقة
+          this.classList.remove('score-0', 'score-1', 'score-2', 'score-3', 'score-4');
+          // إضافة الكلاس الجديد
+          if(this.value !== '') {
+            this.classList.add(`score-${this.value}`);
+          }
+        });
+      });
+    }
+
+    // تحديث دالة عرض النتيجة النهائية
+    function showFinalResult() {
+      calculateTotalScore();
+      const finalResultSection = document.getElementById('step-7');
+      const strengths = document.getElementById('strengths');
+      const improvements = document.getElementById('improvements');
+      const generalNotes = document.getElementById('general-notes').value;
+      const generalNotesDisplay = document.getElementById('general-notes-display');
+      
+      // تنظيف القوائم
+      strengths.innerHTML = '';
+      improvements.innerHTML = '';
+
+      // جمع نقاط القوة والتحسين
+      indicators.forEach((indicator, index) => {
+        const score = document.querySelector(`[name='score_${index + 1}']`).value;
+        if(score >= 3) {
+          strengths.innerHTML += `<li>${indicator}</li>`;
+        } else if(score > 0 && score < 3) {
+          improvements.innerHTML += `<li>${indicator}</li>`;
+        }
+      });
+
+      // إضافة الملاحظات العامة
+      if(generalNotes.trim()) {
+        generalNotesDisplay.querySelector('p').textContent = generalNotes;
+        generalNotesDisplay.style.display = 'block';
+      } else {
+        generalNotesDisplay.style.display = 'none';
+      }
+
+      // إخفاء جميع الخطوات وإظهار نتيجة التقييم
+      for (let i = 1; i <= 6; i++) {
+        const step = document.getElementById(`step-${i}`);
+        if (step) step.style.display = 'none';
+      }
+      finalResultSection.style.display = 'block';
+    }
+
+    // إضافة استدعاء دالة تحديث الألوان عند تحميل الصفحة
+    window.onload = () => {
+      showStep(1);
+      updateSelectColor();
+    };
+  </script>
+
+  <div class="max-w-5xl mx-auto p-6">
+    <!-- نموذج اختيار المدرسة والمادة والمعلم -->
+    <div id="selection-form">
+      <h1 class="text-2xl font-bold text-gray-800 mb-6">نموذج تقييم زيارة صفية</h1>
+      <div class="grid-container">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <!-- حقل نوع الزائر وإضافة تقييم المعمل على سطر واحد -->
+          <div class="flex items-center space-x-4 space-x-reverse col-span-2">
+            <div class="flex-1">
+              <label class="block mb-2 font-semibold">نوع الزائر:</label>
+              <select id="visitor-type" class="w-full border p-2 rounded">
+                <option value="">اختر نوع الزائر...</option>
+                <option value="principal">المدير</option>
+                <option value="academic-deputy">النائب الأكاديمي</option>
+                <option value="coordinator">المنسق</option>
+                <option value="supervisor">الموجه</option>
+              </select>
+            </div>
+            <div class="flex items-center mr-4 mt-8">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="has-lab" class="form-checkbox h-5 w-5 text-blue-600" onchange="updateFormDisplay()">
+                <span class="mr-2 font-semibold">إضافة تقييم المعمل</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">نوع الزيارة:</label>
+            <select id="visit-type" class="w-full border p-2 rounded" onchange="updateFormDisplay()">
+              <option value="full">تقييم كلي</option>
+              <option value="partial">تقييم جزئي</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">طريقة الحضور:</label>
+            <select id="attendance-type" class="w-full border p-2 rounded">
+              <option value="physical">حضور</option>
+              <option value="remote">عن بعد</option>
+              <option value="hybrid">مدمج</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">المدرسة:</label>
+            <select id="school" class="w-full border p-2 rounded" onchange="updateSubjects()">
+              <option value="">اختر المدرسة...</option>
+              <script>
+                Object.keys(schoolsData).forEach(school => {
+                  document.write(`<option value="${school}">${school}</option>`);
+                });
+              </script>
+            </select>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">المادة:</label>
+            <select id="subject" class="w-full border p-2 rounded" onchange="updateTeachers()">
+              <option value="">اختر المادة...</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">المعلم:</label>
+            <select id="teacher" class="w-full border p-2 rounded">
+              <option value="">اختر المعلم...</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block mb-2 font-semibold">تاريخ الزيارة:</label>
+            <input type="date" id="visit-date" class="w-full border p-2 rounded">
+          </div>
+        </div>
+      </div>
+
+      <button onclick="startEvaluation()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">بدء التقييم</button>
+    </div>
+
+    <!-- نموذج التقييم -->
+    <div id="evaluation-form" style="display: none;">
+      <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">نموذج تقييم زيارة صفية</h1>
+        <button onclick="backToSelection()" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">تغيير المعلم/المدرسة</button>
+      </div>
+
+      <div id="evaluation-header" class="evaluation-header"></div>
+
+      <div class="section" id="step-1" style="display: block;">
+        <h2>التخطيط للدرس</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="block1"></div>
+          <div id="block2"></div>
+          <div id="block3"></div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="nextStep()" class="primary-button">التالي</button>
+        </div>
+      </div>
+
+      <div class="section" id="step-2" style="display: none;">
+        <h2>تنفيذ الدرس</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="block4"></div>
+          <div id="block5"></div>
+          <div id="block6"></div>
+          <div id="block7"></div>
+          <div id="block8"></div>
+          <div id="block9"></div>
+          <div id="block10"></div>
+          <div id="block11"></div>
+          <div id="block12"></div>
+          <div id="block13"></div>
+          <div id="block14"></div>
+          <div id="block15"></div>
+          <div id="block16"></div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="previousStep()" class="secondary-button">السابق</button>
+          <button onclick="nextStep()" class="primary-button">التالي</button>
+        </div>
+      </div>
+
+      <div class="section" id="step-3" style="display: none;">
+        <h2>التقويم</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="block17"></div>
+          <div id="block18"></div>
+          <div id="block19"></div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="previousStep()" class="secondary-button">السابق</button>
+          <button onclick="nextStep()" class="primary-button">التالي</button>
+        </div>
+      </div>
+
+      <div class="section" id="step-4" style="display: none;">
+        <h2>الإدارة الصفية وبيئة التعلم</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="block20"></div>
+          <div id="block21"></div>
+          <div id="block22"></div>
+          <div id="block23"></div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="previousStep()" class="secondary-button">السابق</button>
+          <button onclick="nextStep()" class="primary-button">التالي</button>
+        </div>
+      </div>
+
+      <div class="section" id="step-5" style="display: none;">
+        <h2>جزء خاص بمادة العلوم (النشاط العملي)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div id="block24"></div>
+          <div id="block25"></div>
+          <div id="block26"></div>
+          <div id="block27"></div>
+          <div id="block28"></div>
+          <div id="block29"></div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="previousStep()" class="secondary-button">السابق</button>
+          <button onclick="nextStep()" class="primary-button">التالي</button>
+        </div>
+      </div>
+
+      <!-- إضافة قسم الملاحظات والتوصيات العامة -->
+      <div class="section" id="step-6" style="display: none;">
+        <h2>ملاحظات وتوصيات عامة</h2>
+        <div class="grid grid-cols-1 gap-4">
+          <div>
+            <textarea id="general-notes" class="w-full border p-4 rounded-lg h-48 resize-none" 
+              placeholder="أدخل الملاحظات والتوصيات العامة هنا..."
+              style="border: 2px solid var(--border-color);"></textarea>
+          </div>
+        </div>
+        <div class="step-navigation">
+          <button onclick="previousStep()" class="secondary-button">السابق</button>
+          <button onclick="showFinalResult()" class="primary-button">عرض النتيجة النهائية</button>
+        </div>
+      </div>
+
+      <!-- قسم نتيجة التقييم -->
+      <div class="section" id="step-7" style="display: none;">
+        <h2>نتيجة التقييم النهائية</h2>
+        <div class="grid grid-cols-1 gap-6">
+          <div id="total-score" class="text-xl font-bold p-4 bg-gray-50 rounded-lg border border-gray-200"></div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-4 rounded-lg border border-gray-200">
+              <h3 class="text-lg font-semibold mb-3 text-gray-700">نقاط القوة:</h3>
+              <ul id="strengths" class="list-disc list-inside space-y-2 text-gray-600"></ul>
+            </div>
+            <div class="bg-white p-4 rounded-lg border border-gray-200">
+              <h3 class="text-lg font-semibold mb-3 text-gray-700">نقاط تحتاج إلى تحسين:</h3>
+              <ul id="improvements" class="list-disc list-inside space-y-2 text-gray-600"></ul>
+            </div>
+          </div>
+
+          <div id="general-notes-display" class="bg-white p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-3 text-gray-700">ملاحظات وتوصيات عامة:</h3>
+            <p class="text-gray-600 whitespace-pre-line"></p>
+          </div>
+        </div>
+      </div>
+
+      <button class="primary-button">حفظ التقييم</button>
+    </div>
+  </div>
+
+  <script>
+    const recommendations = {
+        24: [
+          "ــ يجب أن تتوافر الأدوات اللازمة للنشاط العملي بالكميات المناسبة.",
+          "ــ يجب التأكد من صلاحية الأدوات وخلوها من الأعطال.",
+          "ــ يجب توفير الأدوات لكل مجموعة طلابية حسب الحاجة."
+        ],
+        25: [
+          "ــ يجب شرح إجراءات الأمن والسلامة قبل بدء النشاط.",
+          "ــ يجب متابعة تطبيق الإجراءات أثناء تنفيذ النشاط.",
+          "ــ يجب استخدام وسائل إرشادية واضحة داخل المختبر."
+        ],
+        26: [
+          "ــ يجب إعطاء تعليمات واضحة ومباشرة قبل البدء.",
+          "ــ يجب تكرار التعليمات عند الحاجة لضمان الفهم.",
+          "ــ يجب استخدام وسائل توضيحية لدعم التعليمات."
+        ],
+        27: [
+          "ــ يجب تخصيص وقت كافٍ للطلبة لتسجيل الملاحظات.",
+          "ــ يجب توجيه الطلبة لتسجيل النتائج بشكل علمي.",
+          "ــ يجب توفير نماذج ملاحظات مناسبة للأنشطة."
+        ],
+        28: [
+          "ــ يجب متابعة الأداء العملي لكل طالب بشكل فردي.",
+          "ــ يجب استخدام أدوات تقييم موضوعية واضحة.",
+          "ــ يجب توثيق أداء الطلبة أثناء النشاط بدقة."
+        ],
+        29: [
+          "ــ يجب تقديم تغذية راجعة مباشرة أثناء تنفيذ النشاط.",
+          "ــ يجب استخدام وسائل بصرية ولفظية لتعزيز الفهم.",
+          "ــ يجب تخصيص وقت لتعزيز المهارات العملية بناءً على الملاحظات."
+        ],
+        12: [
+          "ــ يجب أن يوفّر المعلم أنشطة تمكّن الطلبة من اقتراح البدائل وإنتاج أفكار بطرائق مبتكرة.",
+          "ــ يجب أن يوفّر المعلم أنشطة تنمّي مهارات الطلبة اللغوية لتوظيفها في التعبير عن الآراء والأفكار.",
+          "ــ يجب أن يوفّر المعلم أنشطة تنمّي مهارات الطلبة العددية لتوظيفها في مواقف متنوعة.",
+          "ــ يجب أن يوفّر المعلم أنشطة تمكّن الطلبة من التواصل استماعاً وتحدثاً وكتابة، وتوظيف ذلك لأغراض مختلفة.",
+          "ــ يجب أن يوفّر المعلم للطلبة أنشطة العمل التشاركي واحترام الذات، وتقبّل التغير الإيجابي.",
+          "ــ يجب أن يوفّر المعلم للطلبة أنشطة الاهتمام بالتقصي وتوظيف التكنولوجيا في إعداد البحوث ومشاركتها.",
+          "ــ يجب أن يوفّر المعلم للطلبة أنشطة تحديد المشكلات والتعاون مع الآخرين في اقتراح الحلول."
+        ],
+        13: [
+          "ــ يجب أن يوفّر المعلم أنشطة تساهم في اعتزاز الطلبة باللغة العربية والتاريخ والتقاليد القطرية.",
+          "ــ يجب أن يوفّر المعلم أنشطة احترام الطلبة للآخرين وتقديرهم لذواتهم.",
+          "ــ يجب أن يوفّر المعلم أنشطة تعزّز ثقة الطلبة بقدرتهم على التعلم وبذل الجهد.",
+          "ــ يجب أن يوفّر المعلم أنشطة تحث الطلبة على الالتزام بحقوقهم وواجباتهم.",
+          "ــ يجب أن يوفّر المعلم أنشطة لتطوير الطلبة أنماط حياتهم الصحّية."
+        ],
+        14: [
+          "ــ يجب أن يربط المعلّم بين محاور المادة ومهاراتها بصورة فاعلة.",
+          "ــ يجب أن يوظف المعلّم التكامل مع المواد الأخرى لتحقيق النمو المعرفي عند الطلاب."
+        ],
+        15: [
+          "ــ يجب توزيع الطلبة بطريقة مناسبة وفق مستوياتهم والنشاط المنفذ.",
+          "ــ يجب تقديم أنشطة وتدريبات تراعي الفروق الفردية.",
+          "ــ يجب تقديم أنشطة وتدريبات تراعي أنماط التعلم (سمعي، بصري، حركي...).",
+          "ــ يجب أن يتابع معلم الصف المواد التي يقدمها معلم الدعم للطلبة.",
+          "ــ يجب تقديم التسهيلات والترتيبات اللازمة لطلاب الدعم.",
+          "ــ يجب توظيف التكنولوجيا بما يراعي الفروق الفردية وطلاب الدعم."
+        ],
+        16: [
+          "ــ يجب أن يكون غلق الدرس مناسبا وشاملا.",
+          "ــ يجب أن يعكس الغلق تحقق أهداف الدرس.",
+          "ــ يجب أن يكون الدور الأكبر في الغلق للطلبة.",
+          "ــ يجب تنفيذ الغلق في الزمن المحدد له."
+        ],
+        17: [
+          "ــ يجب أن يشمل التقويم جميع الأهداف المخطط لتحقيقها.",
+          "ــ يجب التنويع في أساليب التقويم مراعاةً للفروق الفردية بين الطلبة.",
+          "ــ يجب التنويع في استخدام أدوات التقويم بما يناسب الموقف التعليمي (ملاحظة المعلم، تقييم الذات، اختبارات ذهنية وشفوية، الأسئلة الشفوية، تطبيق إلكتروني، مناقشة إلكترونية).",
+          "ــ يجب أن تكون عملية التقويم مستمرة قبل الدرس وأثناءه وبعده (قبلي– بنائي – ختامي).",
+          "ــ يجب التنوع في أنماط ومستويات الأسئلة المدرجة في التقييمات وأوراق العمل الإلكترونية."
+        ],
+        18: [
+          "ــ يجب تنويع أساليب التغذية الراجعة بما يناسب المتعلمين (فورية، مؤجلة، لفظية، مكتوبة...).",
+          "ــ يجب شمولية التغذية الراجعة واستمراريتها، بحيث تشمل جميع مراحل الدرس، وجميع المتعلمين على اختلاف مستوياتهم.",
+          "ــ يجب تقييم إجابات الطلبة (الصحيحة والخاطئة) ومناقشتها وربطها بمعارفهم السابقة.",
+          "ــ يجب تشجيع الطلبة على تقديم التفسيرات والشروح المنطقية، ودعم إجاباتهم بنصوص أو أمثلة أو بيانات.",
+          "ــ يجب تحفيز الطلبة على تقييم استجابات بعضهم لبعض."
+        ],
+        19: [
+          "ــ يجب تقديم التعليمات اللازمة لإنجاز الطلبة للأعمال الكتابية بدقة ووضوح.",
+          "ــ يجب متابعة أعمال الطلبة بشكل دوري وتقويمها، سواء أكانت ورقية أم إلكترونية.",
+          "ــ يجب تحري الدقة في تصحيح الأعمال التحريرية وتوجيه التغذية الراجعة المناسبة.",
+          "ــ يجب إعلان الواجبات والاختبارات الورقية أو الإلكترونية للطلاب وأولياء الأمور بشكل دوري."
+        ],
+        20: [
+          "ــ يجب أن يكون مكان الدرس جاهزًا للتعليم والتعلم (نظافة، ترتيب، تهوية، إضاءة...).",
+          "ــ يجب توجيه الطلبة إلى مراعاة قواعد الأمن والسلامة في الصف والمختبر ومعامل الحاسب.",
+          "ــ يجب أن تكون طريقة جلوس الطلاب منظمة وتسهل التواصل والتعلم داخل الصف.",
+          "ــ يجب أن تكون أعمال الطلبة معروضة ومحدثة داخل الصف.",
+          "ــ يجب أن تكون أعمال الطلبة معروضة ومحدثة على نظام قطر للتعليم.",
+          "ــ يجب بناء علاقات إيجابية وبناءة قائمة على الثقة والاحترام المتبادل بين الطالب والمعلم.",
+          "ــ يجب تشجيع بناء علاقات إيجابية قائمة على الاحترام المتبادل والتعاون بين الطلاب.",
+          "ــ يجب إثارة دافعية الطلبة للمشاركة في أنشطة التعلم بفاعلية."
+        ],
+        21: [
+          "ــ يجب تنظيم مشاركات الطلبة ومناقشاتهم الصفية.",
+          "ــ يجب توجيه تعليمات واضحة ومحددة قبل بدء النشاط وأثناء تنفيذه.",
+          "ــ يجب متابعة استجابة الطلبة للتوجيهات وتنفيذها.",
+          "ــ يجب أن تسهم حركة المعلم بين الطلبة أثناء تنفيذ الأنشطة في متابعة الطلبة وتقديم الدعم المناسب لهم.",
+          "ــ يجب إعطاء الفرصة للطلاب في التفكير في الحل."
+        ],
+        22: [
+          "ــ يجب أن تكون القوانين الصفية ثابتة وواضحة.",
+          "ــ يجب أن يعي الطلبة ما يترتب على مخالفة القوانين من إجراءات.",
+          "ــ يجب استخدام وسائل وأساليب تربوية متنوعة لتعزيز السلوكيات الإيجابية.",
+          "ــ يجب استخدام وسائل وأساليب تربوية متنوعة لتقويم السلوكيات غير المرغوبة."
+        ],
+        23: [
+          "ــ يجب مراعاة الوقت الكافي والمخصص لكل مراحل الدرس (التهيئة، العرض، الغلق).",
+          "ــ يجب استخدام وسائل مختلفة لضمان الالتزام بالزمن المحدد للأنشطة (مثل المؤقت أو العد التنازلي...)."
+        ],
+        11: [
+          "ــ يجب أن تكون المادة العلمية مرتبطة بأهداف الدرس.",
+          "ــ يجب أن تكون المادة العلمية متوافقة مع مصدر التعلم.",
+          "ــ يجب أن تكون المادة العلمية المقدمة صحيحة وسليمة وتخلو من الأخطاء العلمية واللغوية.",
+          "ــ يجب وضوح المادة العلمية ومناسبة مفرداتها للمرحلة الدراسية.",
+          "ــ يجب أن تكون المادة العلمية الإثرائية مستندة إلى مراجع موثوقة."
+        ],
+        1: [
+          "ــ يجب توفّر الخطّة على نظام قطر للتعليم.",
+          "ــ يجب اتساق الخطّة زمنيا مع الخطة الفصلية.",
+          "ــ يجب أن تكون الخطّة مكتوبة بلغة سليمة وتتسم بالدقة والوضوح.",
+          "ــ يجب أن تتوافر التهيئة في الخطّة وأن تكون مرتبطة بموضوع الدرس وأهدافه.",
+          "ــ يجب أن تتنوّع في الخطّة طرائق التدريس وإستراتيجياته.",
+          "ــ يجب أن يحدّد المعلم في الخطّة التكامل مع المواد الأخرى بشكل واضح ومناسب.",
+          "ــ يجب أن يكون غلق الدرس في الخطّة مناسبا للموضوع والأهداف.",
+          "ــ يجب اختيار طرائق تقييم مناسبة ومتنوعة في الخطّة.",
+          "يجب استخدام النموذج المحدث للخطة"
+        ],
+        2: [
+          "ــ يجب أن تكون الأهداف مرتبطة بموضوع الدرس بما يتضمنه من معارف ومهارات.",
+          "ــ يجب أن تكون الأهداف مصاغة بطريقة إجرائية سليمة وواضحة.",
+          "ــ يجب أن تراعي الأهداف التنوع بين المستويات المعرفية والمهارية.",
+          "ــ يجب أن تكون الأهداف قابلة للقياس."
+        ],
+        3: [
+          "ــ يجب أن تكون الأنشطة مرتبطة بأهداف الدرس وتساعد على تحقيقها.",
+          "ــ يجب أن تراعي الأنشطة التدرج والتسلسل في تحقيق أهداف الدرس.",
+          "ــ يجب أن توضّح الأنشطة الرئيسة دور كل من المعلم والطالب.",
+          "ــ يجب أن تعزّز الأنشطة الرئيسة الكفايات والقيم الأساسية ضمن السياق المعرفي.",
+          "ــ يجب أن تراعي الأنشطة بوضوح الفروق الفردية بين الطلبة.",
+          "ــ يجب أن يكون التوزيع الزمني محدد ومناسب للأنشطة.",
+          "ــ يجب توضيح آلية توظيف أدوات التكنولوجيا في دور المعلم والمتعلم."
+        ],
+        4: [
+          "ــ يجب أن يستعرض المعلم أهداف الدرس المخطط لها بداية درسه بصورة واضحة ومناسبة.",
+          "ــ يجب التحقق من وضوح أهداف الدرس لدى الطلبة.",
+          "يجب أن تكون الأهداف كما هي مدونة في الخطة."
+        ],
+        5: [
+          "ــ يجب تنفيذ أنشطة التمهيد بطريقة جاذبة وشائقة.",
+          "ــ يجب أن تكون أنشطة التمهيد ممهّدة للأنشطة الرئيسة وترتبط بها.",
+          "ــ يجب تنفيذ أنشطة التمهيد ضمن الزمن المحدد لها.",
+          "ــ يجب أن ترتبط أنشطة التمهيد بخبرات الطلبة الحياتية وتجاربهم السابقة."
+        ],
+        6: [
+          "ــ يجب أن يكون محتوى الدرس معروضا بطريقة واضحة.",
+          "ــ يجب أن يكون المحتوى مقدّما بصورة متدرجة ومنظمة وبأمثلة كافية.",
+          "ــ يجب أن تكون خطوات تنفيذ الدرس مترابطة ومتصلة بالأهداف.",
+          "ــ يجب ارتباط المحتوى بالبيئة والخبرات الحياتية."
+        ],
+        7: [
+          "ــ يجب تطبيق إستراتيجيات تدريس تناسب أهداف الدرس وتراعي المتعلمين.",
+          "ــ يجب تطبيق إستراتيجيات تدريس تراعي المتعلمين.",
+          "ــ يجب تنفيذ الإستراتيجية بطريقة صحيحة، ووفق ما ورد في خطة الدرس.",
+          "ــ يجب أن تكون الإستراتيجيات المنفذة متنوعة وتفعل دور الطالب في عملية التعلم."
+        ],
+        8: [
+          "ــ يجب توظيف مصدر التعلم الرئيس بصورة واضحة وسليمة.",
+          "ــ يجب توظيف مصادر مساندة ورقية تثري الدرس وتساعد على تحقيق أهدافه.",
+          "ــ يجب نشر مصادر تعلم مساندة إلكترونية للمادة على نظام قطر للتعليم.",
+          "ــ يجب الحرص على استخدام الطلبة مصادر التعلم أثناء الدرس.",
+          "ــ يجب استخدام المصادر المتنوعة لمراعاة الفروق الفردية بين الطلبة."
+        ],
+        9: [
+          "ــ يجب استخدام وسائل تعليمية متنوعة وفعالة.",
+          "ــ يجب توظيف التكنولوجيا بما يخدم الموقف التعليمي والأهداف.",
+          "ــ يجب تنظيم العرض السبوري.",
+          "ــ يجب تفعيل السبورة التفاعلية بما يخدم الموقف التعليمي."
+        ],
+        10: [
+          "ــ يجب أن تكون الأسئلة واضحة وصياغتها سليمة.",
+          "ــ يجب أن تكون الأسئلة متنوعة ومتدرجة في مستوياتها.",
+          "ــ يجب أن تكون الأسئلة مثيرة لاهتمام الطلبة وتحثهم على المشاركة.",
+          "ــ يجب أن تعزّز الأسئلة الحوار والمناقشة بين الطالب والمعلم.",
+          "ــ يجب أن تكون الأسئلة مثيرة للتفكير والتحدي لدى الطلبة."
+        ]
+      };
+
+      const indicators = [
+        "خطة الدرس متوفرة وبنودها مستكملة ومناسبة.",
+        "أهداف التعلم مناسبة ودقيقة الصياغة وقابلة للقياس.",
+        "أنشطة الدرس الرئيسة واضحة ومتدرجة ومرتبطة بالأهداف.",
+        "أهداف التعلم معروضة ويتم مناقشتها .",
+        "أنشطة التمهيد مفعلة بشكل مناسب.",
+        "محتوى الدرس واضح والعرض منظّم ومترابط.",
+        "طرائق التدريس وإستراتيجياته متنوعه وتتمحور حول الطالب.",
+        "مصادر التعلم الرئيسة والمساندة موظّفة بصورة واضحة وسليمة.",
+        "الوسائل التعليميّة والتكنولوجيا موظّفة بصورة مناسبة.",
+        "الأسئلة الصفية ذات صياغة سليمة ومتدرجة ومثيرة للتفكير .",
+        "المادة العلمية دقيقة و مناسبة.",
+        "الكفايات الأساسية متضمنة في السياق المعرفي للدرس.",
+        "القيم الأساسية متضمنة في السياق المعرفي للدرس.",
+        "التكامل بين محاور المادة ومع المواد الأخرى يتم بشكل مناسب.",
+        "الفروق الفردية بين الطلبة يتم مراعاتها.",
+        "غلق الدرس يتم بشكل مناسب.",
+        "أساليب التقويم ( القبلي والبنائي والختامي ) مناسبة ومتنوعة.",
+        "التغذية الراجعة متنوعة ومستمرة",
+        "أعمال الطلبة متابعة ومصححة بدقة ورقيًا وإلكترونيًا .",
+        "البيئة الصفية إيجابية وآمنة وداعمة للتعلّم.",
+        "إدارة أنشطة التعلّم والمشاركات الصّفيّة تتم بصورة منظمة.",
+        "قوانين إدارة الصف وإدارة السلوك مفعّلة.",
+        "الاستثمار الأمثل لزمن الحصة",
+        "مدى صلاحية وتوافر الأدوات اللازمة لتنفيذ النشاط العملي.",
+        "شرح إجراءات الأمن والسلامة المناسبة للتجربة ومتابعة تفعيلها.",
+        "إعطاء تعليمات واضحة وسليمة لأداء النشاط العملي قبل وأثناء التنفيذ.",
+        "تسجيل الطلبة للملاحظات والنتائج أثناء تنفيذ النشاط العملي.",
+        "تقويم مهارات الطلبة أثناء تنفيذ النشاط العملي.",
+        "تنويع أساليب تقديم التغذية الراجعة للطلبة لتنمية مهاراتهم."
+      ];
+      indicators.forEach((label, index) => {
+        document.getElementById(`block${index + 1}`).innerHTML = createEvaluationBlock(label, index + 1);
+      });
+  </script>
+</body>
+</html>
