@@ -298,4 +298,24 @@ function get_teacher_weakest_indicators($teacher_id, $threshold_score = 2.5, $li
     ";
     
     return query($sql, [$teacher_id, $threshold_score, $limit]);
+}
+
+/**
+ * الحصول على العام الدراسي النشط
+ *
+ * @return array|null بيانات العام الدراسي النشط أو null إذا لم يوجد
+ */
+function get_active_academic_year() {
+    return query_row("SELECT * FROM academic_years WHERE is_active = 1 LIMIT 1");
+}
+
+/**
+ * دالة للحصول على اسم العام الدراسي من معرفه
+ *
+ * @param int $year_id معرف العام الدراسي
+ * @return string اسم العام الدراسي
+ */
+function get_academic_year_name($year_id) {
+    $year = query_row("SELECT name FROM academic_years WHERE id = ?", [$year_id]);
+    return $year ? $year['name'] : '';
 } 

@@ -25,6 +25,10 @@ $options = [
 // إنشاء اتصال PDO
 try {
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+    // إعداد الترميز للاتصال
+    $pdo->exec("SET NAMES utf8mb4");
+    $pdo->exec("SET CHARACTER SET utf8mb4");
+    $pdo->exec("SET collation_connection = utf8mb4_unicode_ci");
 } catch (PDOException $e) {
     // رسالة خطأ للمطورين (يمكن تعديلها في بيئة الإنتاج)
     die("فشل الاتصال بقاعدة البيانات: " . $e->getMessage());

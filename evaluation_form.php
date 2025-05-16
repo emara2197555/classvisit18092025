@@ -39,16 +39,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
         $sql = "
             INSERT INTO visits (
                 school_id, teacher_id, subject_id, grade_id, section_id, level_id, 
-                visitor_type_id, visitor_person_id, visit_date, visit_type, attendance_type, has_lab, 
+                visitor_type_id, visitor_person_id, visit_date, academic_year_id, visit_type, attendance_type, has_lab, 
                 general_notes, recommendation_notes, appreciation_notes, total_score, created_at, updated_at
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
             )
         ";
         
+        // جلب العام الدراسي
+        $academic_year_id = $_POST['academic_year_id'] ?? null;
+        if (!$academic_year_id) {
+            // إذا لم يتم تحديد العام، نستخدم العام النشط
+            $active_year = get_active_academic_year();
+            $academic_year_id = $active_year ? $active_year['id'] : null;
+        }
+        
         execute($sql, [
             $school_id, $teacher_id, $subject_id, $grade_id, $section_id, $level_id,
-            $visitor_type_id, $visitor_person_id, $visit_date, $visit_type, $attendance_type, $has_lab,
+            $visitor_type_id, $visitor_person_id, $visit_date, $academic_year_id, $visit_type, $attendance_type, $has_lab,
             $general_notes, $recommendation_notes, $appreciation_notes, $total_score
         ]);
         
@@ -147,28 +155,36 @@ try {
     
     <form action="evaluation_form.php" method="post" id="visit-form">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <!-- سطر نوع الزائر وتقييم المعمل -->
-            <div class="flex items-center space-x-4 space-x-reverse col-span-2">
-                <div class="flex-1">
-                    <label class="block mb-2 font-semibold">نوع الزائر:</label>
-                    <select id="visitor-type" name="visitor_type_id" class="w-full border p-2 rounded" required onchange="updateVisitorName()">
-                        <option value="">اختر نوع الزائر...</option>
-                        <?php foreach ($visitor_types as $type): ?>
-                            <option value="<?= $type['id'] ?>"><?= htmlspecialchars($type['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div id="visitor-name" class="mt-2 text-sm text-gray-600"></div>
-                    <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
-                </div>
-                <div class="flex items-center mr-4 mt-8">
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="has-lab" name="has_lab" class="form-checkbox h-5 w-5 text-blue-600">
-                        <span class="mr-2 font-semibold">إضافة تقييم المعمل</span>
-                    </label>
-                </div>
+            <!-- نوع الزائر -->
+            <div>
+                <label class="block mb-2 font-semibold">نوع الزائر:</label>
+                <select id="visitor-type" name="visitor_type_id" class="w-full border p-2 rounded" required onchange="updateVisitorName()">
+                    <option value="">اختر نوع الزائر...</option>
+                    <?php foreach ($visitor_types as $type): ?>
+                        <option value="<?= $type['id'] ?>"><?= htmlspecialchars($type['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div id="visitor-name" class="mt-2 text-sm text-gray-600"></div>
+                <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
             </div>
 
-            <!-- نوع الزيارة وطريقة الحضور -->
+            <!-- العام الدراسي -->
+            <div>
+                <label class="block mb-2 font-semibold">العام الدراسي:</label>
+                <select id="academic-year" name="academic_year_id" class="w-full border p-2 rounded" required>
+                    <option value="">اختر العام الدراسي...</option>
+                    <?php 
+                    // جلب العام الدراسي النشط
+                    $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
+                    foreach ($academic_years as $year): 
+                        $is_selected = $year['is_active'] ? 'selected' : '';
+                    ?>
+                        <option value="<?= $year['id'] ?>" <?= $is_selected ?>><?= htmlspecialchars($year['name']) ?> <?= $year['is_active'] ? '(نشط)' : '' ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- نوع الزيارة -->
             <div>
                 <label class="block mb-2 font-semibold">نوع الزيارة:</label>
                 <select id="visit-type" name="visit_type" class="w-full border p-2 rounded" required>
@@ -177,6 +193,7 @@ try {
                 </select>
             </div>
 
+            <!-- طريقة الحضور -->
             <div>
                 <label class="block mb-2 font-semibold">طريقة الحضور:</label>
                 <select id="attendance-type" name="attendance_type" class="w-full border p-2 rounded" required>
@@ -186,35 +203,10 @@ try {
                 </select>
             </div>
 
-            <!-- حذف حقل المدرسة - سنستخدم المدرسة الافتراضية -->
-            <input type="hidden" id="school" name="school_id" value="<?= $school_id ?>">
-
-            <!-- حذف حقل المرحلة التعليمية -->
-
-            <!-- الصف (تحميل جميع الصفوف مباشرة) -->
-            <div>
-                <label class="block mb-2 font-semibold">الصف:</label>
-                <select id="grade" name="grade_id" class="w-full border p-2 rounded" required onchange="loadSections(this.value)">
-                    <option value="">اختر الصف...</option>
-                    <?php foreach ($grades as $grade): ?>
-                        <option value="<?= $grade['id'] ?>" data-level-id="<?= $grade['level_id'] ?>"><?= htmlspecialchars($grade['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <!-- الشعبة (الجديدة) -->
-            <div>
-                <label class="block mb-2 font-semibold">الشعبة:</label>
-                <select id="section" name="section_id" class="w-full border p-2 rounded" required>
-                    <option value="">اختر الشعبة...</option>
-                    <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على الصف المختار -->
-                </select>
-            </div>
-
             <!-- المادة -->
             <div>
                 <label class="block mb-2 font-semibold">المادة:</label>
-                <select id="subject" name="subject_id" class="w-full border p-2 rounded" required>
+                <select id="subject" name="subject_id" class="w-full border p-2 rounded" required onchange="loadTeachers()">
                     <option value="">اختر المادة...</option>
                     <?php foreach ($subjects as $subject): ?>
                         <option value="<?= $subject['id'] ?>"><?= htmlspecialchars($subject['name']) ?></option>
@@ -231,11 +223,42 @@ try {
                 </select>
             </div>
 
+            <!-- الصف -->
+            <div>
+                <label class="block mb-2 font-semibold">الصف:</label>
+                <select id="grade" name="grade_id" class="w-full border p-2 rounded" required onchange="loadSections(this.value)">
+                    <option value="">اختر الصف...</option>
+                    <?php foreach ($grades as $grade): ?>
+                        <option value="<?= $grade['id'] ?>" data-level-id="<?= $grade['level_id'] ?>"><?= htmlspecialchars($grade['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- الشعبة -->
+            <div>
+                <label class="block mb-2 font-semibold">الشعبة:</label>
+                <select id="section" name="section_id" class="w-full border p-2 rounded" required>
+                    <option value="">اختر الشعبة...</option>
+                    <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على الصف المختار -->
+                </select>
+            </div>
+
+            <!-- تقييم المعمل -->
+            <div class="flex items-center">
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="has-lab" name="has_lab" class="form-checkbox h-5 w-5 text-blue-600">
+                    <span class="mr-2 font-semibold">إضافة تقييم المعمل</span>
+                </label>
+            </div>
+
             <!-- تاريخ الزيارة -->
             <div>
                 <label class="block mb-2 font-semibold">تاريخ الزيارة:</label>
                 <input type="date" id="visit-date" name="visit_date" class="w-full border p-2 rounded" required>
             </div>
+
+            <!-- حذف حقل المدرسة - سنستخدم المدرسة الافتراضية -->
+            <input type="hidden" id="school" name="school_id" value="<?= $school_id ?>">
         </div>
 
         <button type="button" id="start-evaluation-btn" class="bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition">بدء التقييم</button>
@@ -337,10 +360,12 @@ try {
                     <div></div>
                 <?php endif; ?>
                 
+                <button type="button" class="go-to-notes bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600" data-notes-step="<?= count($domains) + 1 ?>">ملاحظات وتوصيات</button>
+                
                 <?php if ($step < count($domains)): ?>
                     <button type="button" class="next-step bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700" data-step="<?= $step ?>">التالي</button>
                 <?php else: ?>
-                    <button type="button" class="show-final-result bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700">عرض النتيجة النهائية</button>
+                    <button type="button" class="notes-to-final-result bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700">عرض النتيجة النهائية</button>
                 <?php endif; ?>
             </div>
         </div>
@@ -365,7 +390,7 @@ try {
         
         <div class="flex justify-between mt-6">
             <button type="button" class="prev-step bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600" data-step="<?= $step ?>">السابق</button>
-            <button type="button" class="show-final-result bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700">عرض النتيجة النهائية</button>
+            <button type="button" class="notes-to-final-result bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">عرض النتيجة النهائية وحفظ التقييم</button>
         </div>
     </div>
     <?php $step++; ?>
@@ -421,6 +446,7 @@ try {
     <input type="hidden" name="total_score" id="hidden-total-score">
     <input type="hidden" name="average_score" id="hidden-average-score">
     <input type="hidden" name="grade" id="hidden-grade">
+    <input type="hidden" name="academic_year_id" id="hidden-academic-year-id">
     </form>
 </div>
 
@@ -542,6 +568,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const visitDate = document.getElementById('visit-date').value;
             const visitType = document.getElementById('visit-type').value;
             const attendanceType = document.getElementById('attendance-type').value;
+            const academicYearId = document.getElementById('academic-year').value;
             
             // نقل القيم إلى الحقول المخفية
             document.getElementById('hidden-school-id').value = schoolId;
@@ -555,6 +582,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('hidden-visit-date').value = visitDate;
             document.getElementById('hidden-visit-type').value = visitType;
             document.getElementById('hidden-attendance-type').value = attendanceType;
+            document.getElementById('hidden-academic-year-id').value = academicYearId;
             
             // تحديث معلومات نوع التقييم
             isPartialEvaluation = (visitType === 'partial');
@@ -604,11 +632,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // زر عرض النتيجة النهائية
-    document.querySelectorAll('.show-final-result').forEach(button => {
+    // زر عرض النتيجة النهائية - تعديل ليعرض حقلي التوصيات والشكر قبل النتيجة النهائية
+    document.querySelectorAll('.notes-to-final-result').forEach(button => {
+        button.addEventListener('click', function() {
+            // هنا نعرض صفحة الملاحظات والتوصيات أولاً (قبل الأخيرة)
+            const totalSteps = document.querySelectorAll('.evaluation-section').length;
+            const notesStep = totalSteps - 1; // الخطوة قبل الأخيرة (ملاحظات وتوصيات)
+            showStep(notesStep);
+        });
+    });
+    
+    // إضافة زر لعرض النتيجة النهائية من صفحة الملاحظات والتوصيات
+    const finalResultButtons = document.querySelectorAll('.notes-to-final-result');
+    finalResultButtons.forEach(button => {
         button.addEventListener('click', function() {
             calculateAndShowFinalResult();
-            showStep(document.querySelectorAll('.evaluation-section').length);
+            const totalSteps = document.querySelectorAll('.evaluation-section').length;
+            showStep(totalSteps); // الخطوة الأخيرة (النتيجة النهائية)
         });
     });
     
@@ -617,17 +657,8 @@ document.addEventListener('DOMContentLoaded', function() {
         isPartialEvaluation = this.value === 'partial';
     });
     
-    // استدعاء وظيفة تحديث اسم الزائر عند تغيير نوع الزائر
-    document.getElementById('visitor-type').addEventListener('change', function() {
-        updateVisitorName();
-        
-        // إذا تم اختيار مادة، قم بتحديث قائمة المعلمين
-        const subjectId = document.getElementById('subject').value;
-        const schoolId = document.getElementById('school').value;
-        if (subjectId && schoolId) {
-            loadTeachers(schoolId, subjectId);
-        }
-    });
+    // تحديث اسم الزائر عند اختيار نوع الزائر
+    document.getElementById('visitor-type').addEventListener('change', updateVisitorName);
 
     // عند تغيير حالة اختيار المعمل
     document.getElementById('has-lab').addEventListener('change', function() {
@@ -638,164 +669,236 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleLabIndicators();
     });
 
-    // مستمع لتغيير المادة لتحديث قائمة الزائرين والمعلمين
-    document.getElementById('subject').addEventListener('change', function() {
-        const schoolId = document.getElementById('school').value;
-        const subjectId = this.value;
-        
-        // تحديث قائمة المعلمين
-        if (schoolId && subjectId) {
-            loadTeachers(schoolId, subjectId);
-        }
-        
-        // إذا كان نوع الزائر محدد، نقوم بتحديث قائمة الزائرين
-        if (document.getElementById('visitor-type').value) {
-            updateVisitorName();
-        }
+    // تحميل المعلمين عند اختيار المادة
+    document.getElementById('subject').addEventListener('change', loadTeachers);
+
+    // تحميل الشعب عند اختيار الصف
+    document.getElementById('grade').addEventListener('change', function() {
+        loadSections(this.value);
+    });
+
+    // إضافة مستمع أحداث للزر الملاحظات والتوصيات
+    document.querySelectorAll('.go-to-notes').forEach(button => {
+        button.addEventListener('click', function() {
+            const notesStep = parseInt(this.getAttribute('data-notes-step'));
+            showStep(notesStep);
+        });
     });
 });
 
-// دالة جلب الشعب حسب الصف
-function loadSections(gradeId) {
-    const sectionSelect = document.getElementById('section');
-    sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
-    
-    if (!gradeId) return;
-    
-    // نحدد المرحلة التعليمية من الصف المحدد
-    const gradeOption = document.querySelector(`#grade option[value="${gradeId}"]`);
-    const levelId = gradeOption ? gradeOption.getAttribute('data-level-id') : null;
-    
-    // استعلام AJAX لجلب الشعب
-    fetch(`api/get_sections.php?grade_id=${gradeId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.sections.length > 0) {
-                data.sections.forEach(section => {
-                    sectionSelect.add(new Option(section.name, section.id));
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error loading sections:', error);
-        });
-}
-
-// دالة تحديث اسم الزائر
+// تحديث اسم الزائر عند اختيار نوع الزائر
 function updateVisitorName() {
     const visitorTypeSelect = document.getElementById('visitor-type');
     const visitorNameDiv = document.getElementById('visitor-name');
     const visitorPersonIdInput = document.getElementById('visitor-person-id');
-    const schoolId = document.getElementById('school').value;
     const subjectSelect = document.getElementById('subject');
-    const subjectId = subjectSelect ? subjectSelect.value : '';
-    const visitorPersonId = visitorPersonIdInput.value; // حفظ قيمة الزائر الحالي
     
-    // تفريغ القيم الحالية
-    visitorNameDiv.innerHTML = '';
-    // لا نفرغ معرف الزائر لكي نحتفظ بالقيمة الحالية
-    
-    // لا نفعل شيئاً إذا كان نوع الزائر غير محدد
-    if (!visitorTypeSelect.value) return;
-    
-    // إظهار مؤشر التحميل
-    visitorNameDiv.innerHTML = '<span class="text-gray-500">جاري تحميل الأسماء...</span>';
-    
-    // طلب الحصول على أسماء الزائرين بناءً على النوع
-    fetch(`api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}&school_id=${schoolId}&subject_id=${subjectId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && data.visitors.length > 0) {
-                // إنشاء قائمة منسدلة للزائرين
-                const select = document.createElement('select');
-                select.id = 'visitor-person';
-                select.className = 'w-full border p-2 rounded mt-2';
-                select.required = true;
-                
-                // إضافة خيار فارغ
-                const emptyOption = document.createElement('option');
-                emptyOption.value = '';
-                emptyOption.textContent = 'اختر اسم الزائر...';
-                select.appendChild(emptyOption);
-                
-                // إضافة الزائرين إلى القائمة
-                data.visitors.forEach(visitor => {
-                    const option = document.createElement('option');
-                    option.value = visitor.id;
-                    option.textContent = visitor.name;
-                    select.appendChild(option);
-                });
-                
-                // إضافة القائمة إلى الصفحة
-                visitorNameDiv.innerHTML = '';
-                visitorNameDiv.appendChild(select);
-                
-                // استعادة الاختيار السابق إذا كان موجوداً
-                if (visitorPersonId) {
-                    select.value = visitorPersonId;
+    if (visitorTypeSelect.value) {
+        // إرسال طلب AJAX للحصول على قائمة الزوار حسب النوع المختار
+        fetch(`includes/get_visitors.php?type_id=${visitorTypeSelect.value}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length > 0) {
+                    // إنشاء قائمة منسدلة للزوار
+                    let select = document.createElement('select');
+                    select.id = 'visitor-person';
+                    select.className = 'w-full border p-2 rounded mt-2';
+                    select.required = true;
+                    
+                    let defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'اختر الزائر...';
+                    select.appendChild(defaultOption);
+                    
+                    // تحديد ما إذا كان نوع الزائر منسق أو موجه
+                    const visitorTypeName = visitorTypeSelect.options[visitorTypeSelect.selectedIndex].text;
+                    const isCoordinatorOrSupervisor = visitorTypeName === 'منسق المادة' || visitorTypeName === 'موجه المادة';
+                    
+                    data.forEach(visitor => {
+                        let option = document.createElement('option');
+                        option.value = visitor.id;
+                        option.textContent = visitor.name;
+                        
+                        // إضافة معلومات المواد كخاصية للعنصر
+                        if (isCoordinatorOrSupervisor && visitor.subjects) {
+                            option.dataset.subjects = JSON.stringify(visitor.subjects);
+                        }
+                        
+                        select.appendChild(option);
+                    });
+                    
+                    // تحديث عنصر اسم الزائر
+                    visitorNameDiv.innerHTML = '';
+                    visitorNameDiv.appendChild(select);
+                    
+                    // تحديث معرف الزائر وإظهار المادة المناسبة عند الاختيار
+                    select.addEventListener('change', function() {
+                        visitorPersonIdInput.value = this.value;
+                        
+                        // إذا كان منسق أو موجه مادة، نقوم بتحديث قائمة المواد
+                        if (isCoordinatorOrSupervisor && this.value) {
+                            const selectedOption = this.options[this.selectedIndex];
+                            if (selectedOption.dataset.subjects) {
+                                const subjects = JSON.parse(selectedOption.dataset.subjects);
+                                
+                                if (subjects.length > 0) {
+                                    // تعديل قائمة المواد لإظهار فقط المواد التي يشرف عليها المنسق/الموجه
+                                    subjectSelect.innerHTML = '<option value="">اختر المادة...</option>';
+                                    
+                                    subjects.forEach(subject => {
+                                        let option = document.createElement('option');
+                                        option.value = subject.id;
+                                        option.textContent = subject.name;
+                                        subjectSelect.appendChild(option);
+                                    });
+                                    
+                                    // إذا كان هناك مادة واحدة فقط، نختارها تلقائياً
+                                    if (subjects.length === 1) {
+                                        subjectSelect.value = subjects[0].id;
+                                        // تحميل المعلمين المتعلقين بهذه المادة
+                                        loadTeachers();
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    visitorNameDiv.innerHTML = '<p class="text-red-500">لا يوجد زوار من هذا النوع</p>';
+                    visitorPersonIdInput.value = '';
                 }
-                
-                // إضافة مستمع لحدث تغيير الزائر
-                select.addEventListener('change', function() {
-                    visitorPersonIdInput.value = this.value;
-                });
-            } else {
-                // إظهار رسالة في حالة عدم وجود زائرين
-                visitorNameDiv.innerHTML = '<span class="text-red-500">لم يتم العثور على زائرين من هذا النوع</span>';
-                
-                if (data.message) {
-                    // عرض رسالة الخطأ إن وجدت
-                    console.error(data.message);
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error loading visitor names:', error);
-            visitorNameDiv.innerHTML = '<span class="text-red-500">حدث خطأ أثناء تحميل البيانات</span>';
-        });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                visitorNameDiv.innerHTML = '<p class="text-red-500">حدث خطأ في تحميل بيانات الزوار</p>';
+                visitorPersonIdInput.value = '';
+            });
+    } else {
+        visitorNameDiv.innerHTML = '';
+        visitorPersonIdInput.value = '';
+    }
 }
 
-// دالة تحميل المعلمين المتوفرين
-function loadTeachers(schoolId, subjectId) {
+// تحميل المعلمين عند اختيار المادة
+function loadTeachers() {
+    const subjectSelect = document.getElementById('subject');
     const teacherSelect = document.getElementById('teacher');
+    const schoolId = document.getElementById('school').value;
+    const visitorTypeSelect = document.getElementById('visitor-type');
+    const visitorPersonSelect = document.getElementById('visitor-person');
     
-    // إذا لم يتم اختيار مدرسة أو مادة، إفراغ القائمة
-    if (!schoolId || !subjectId) {
+    if (!subjectSelect.value || !schoolId) {
         teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
         return;
     }
-
-    // الحصول على نوع الزائر ومعرف الشخص الزائر (إذا تم تحديدهما)
-    const visitorTypeId = document.getElementById('visitor-type').value || '';
-    const visitorPersonId = document.getElementById('visitor-person-id').value || '';
     
-    // استرجاع المعلمين من API
-    fetch(`api/get_teachers.php?subject_id=${subjectId}&school_id=${schoolId}&visitor_type_id=${visitorTypeId}&visitor_person_id=${visitorPersonId}`)
+    // تحديد نوع الزائر
+    const visitorTypeName = visitorTypeSelect.options[visitorTypeSelect.selectedIndex]?.text || '';
+    const isCoordinator = visitorTypeName === 'منسق المادة';
+    const isSupervisor = visitorTypeName === 'موجه المادة';
+    
+    // إرسال طلب AJAX للحصول على قائمة المعلمين حسب المادة والمدرسة
+    let url = `includes/get_teachers.php?subject_id=${subjectSelect.value}&school_id=${schoolId}`;
+    
+    // إذا كان الزائر منسق المادة أو موجه المادة، نضيف معلومات إضافية للتصفية
+    if (isCoordinator || isSupervisor) {
+        url += `&visitor_type=${encodeURIComponent(visitorTypeName)}`;
+        if (visitorPersonSelect && visitorPersonSelect.value) {
+            url += `&exclude_visitor=${visitorPersonSelect.value}`;
+        }
+    }
+    
+    fetch(url)
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.teachers && data.teachers.length > 0) {
-                // إنشاء خيارات القائمة المنسدلة
-                let options = '<option value="">اختر المعلم...</option>';
-                data.teachers.forEach(teacher => {
-                    options += `<option value="${teacher.id}">${teacher.name}</option>`;
-                });
-                
-                teacherSelect.innerHTML = options;
+            // إعادة تعيين قائمة المعلمين
+            teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
+            
+            // إذا كان الزائر موجه، نضيف منسق المادة في بداية القائمة
+            if (isSupervisor && subjectSelect.value) {
+                // جلب منسق المادة
+                fetch(`includes/get_subject_coordinator.php?subject_id=${subjectSelect.value}&school_id=${schoolId}`)
+                    .then(response => response.json())
+                    .then(coordinators => {
+                        if (coordinators.length > 0) {
+                            // إضافة منسقي المادة إلى القائمة
+                            coordinators.forEach(coord => {
+                                let option = document.createElement('option');
+                                option.value = coord.id;
+                                option.textContent = coord.name + ' (منسق المادة)';
+                                teacherSelect.appendChild(option);
+                            });
+                            
+                            // إضافة فاصل بين منسقي المادة والمعلمين العاديين
+                            if (data.length > 0) {
+                                let separator = document.createElement('option');
+                                separator.disabled = true;
+                                separator.textContent = '---------------------';
+                                teacherSelect.appendChild(separator);
+                            }
+                        }
+                        
+                        // إضافة المعلمين إلى القائمة
+                        data.forEach(teacher => {
+                            let option = document.createElement('option');
+                            option.value = teacher.id;
+                            option.textContent = teacher.name;
+                            teacherSelect.appendChild(option);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading coordinators:', error);
+                        // إضافة المعلمين فقط في حالة فشل جلب المنسقين
+                        data.forEach(teacher => {
+                            let option = document.createElement('option');
+                            option.value = teacher.id;
+                            option.textContent = teacher.name;
+                            teacherSelect.appendChild(option);
+                        });
+                    });
             } else {
-                teacherSelect.innerHTML = '<option value="">غير متاح</option>';
-                
-                // عرض رسالة الخطأ من API
-                if (data.message) {
-                    alert(data.message);
-                }
+                // إضافة المعلمين إلى القائمة
+                data.forEach(teacher => {
+                    let option = document.createElement('option');
+                    option.value = teacher.id;
+                    option.textContent = teacher.name;
+                    teacherSelect.appendChild(option);
+                });
             }
         })
         .catch(error => {
-            console.error('Error loading teachers:', error);
-            teacherSelect.innerHTML = '<option value="">حدث خطأ</option>';
+            console.error('Error:', error);
+            teacherSelect.innerHTML = '<option value="">حدث خطأ في تحميل المعلمين</option>';
         });
-        
+}
 
+// تحميل الشعب عند اختيار الصف
+function loadSections(gradeId) {
+    const sectionSelect = document.getElementById('section');
+    const schoolId = document.getElementById('school').value;
+    
+    if (gradeId && schoolId) {
+        // إرسال طلب AJAX للحصول على قائمة الشعب حسب الصف والمدرسة
+        fetch(`includes/get_sections.php?grade_id=${gradeId}&school_id=${schoolId}`)
+            .then(response => response.json())
+            .then(data => {
+                // إعادة تعيين قائمة الشعب
+                sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
+                
+                // إضافة الشعب إلى القائمة
+                data.forEach(section => {
+                    let option = document.createElement('option');
+                    option.value = section.id;
+                    option.textContent = section.name;
+                    sectionSelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                sectionSelect.innerHTML = '<option value="">حدث خطأ في تحميل الشعب</option>';
+            });
+    } else {
+        sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
+    }
 }
 
 // دالة عرض خطوة محددة من التقييم
@@ -821,122 +924,129 @@ function calculateAndShowFinalResult() {
     let totalScore = 0;
     let totalItems = 0;
     
-    // جمع نتائج التقييم
-    document.querySelectorAll('.indicator-block').forEach((block, index) => {
-        // لا نحسب المؤشرات المخفية (المعمل عندما يكون غير مُفعّل)
-        if (block.style.display === 'none') {
+    try {
+        // جمع نتائج التقييم
+        document.querySelectorAll('.indicator-block').forEach((block, index) => {
+            // لا نحسب المؤشرات المخفية (المعمل عندما يكون غير مُفعّل)
+            if (block.style.display === 'none') {
+                return;
+            }
+            
+            const scoreSelect = block.querySelector('select[name^="score_"]');
+            const score = parseInt(scoreSelect.value);
+            const indicatorLabel = block.querySelector('label').textContent;
+            
+            // إذا كان التقييم جزئياً، نحسب فقط العناصر التي تم تقييمها
+            // ونستثني مؤشرات "لم يتم قياسه" (score = 0) من الحساب
+            if (score > 0) {
+                // تصنيف نقاط القوة والتحسين
+                if (score >= 3) {
+                    strengths.push(indicatorLabel);
+                } else {
+                    improvements.push(indicatorLabel);
+                }
+                
+                // إضافة النقاط للمجموع
+                totalScore += score;
+                totalItems++;
+            }
+        });
+        
+        // حساب المتوسط
+        const average = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : 0;
+        
+        // تحديد التقدير
+        const grade = getGrade(average);
+        
+        // تحديث الحقول المخفية
+        document.getElementById('hidden-total-score').value = totalScore;
+        document.getElementById('hidden-average-score').value = average;
+        document.getElementById('hidden-grade').value = grade;
+        
+        // حساب النسبة المئوية
+        const percentage = (average * 25).toFixed(2);
+        
+        // عرض النتيجة الإجمالية
+        const evaluationType = isPartialEvaluation ? 'تقييم جزئي' : 'تقييم كلي';
+        document.getElementById('total-score').textContent = 
+            `${evaluationType}: النتيجة ${totalScore} من ${totalItems * 4} (المتوسط: ${average} - النسبة: ${percentage}%)`;
+        
+        // عرض نقاط القوة
+        const strengthsList = document.getElementById('strengths');
+        strengthsList.innerHTML = '';
+        if (strengths.length > 0) {
+            strengths.forEach(strength => {
+                strengthsList.innerHTML += `<li>${strength}</li>`;
+            });
+        } else {
+            strengthsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط قوة</li>';
+        }
+        
+        // عرض نقاط التحسين
+        const improvementsList = document.getElementById('improvements');
+        improvementsList.innerHTML = '';
+        if (improvements.length > 0) {
+            improvements.forEach(improvement => {
+                improvementsList.innerHTML += `<li>${improvement}</li>`;
+            });
+        } else {
+            improvementsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط تحتاج إلى تحسين</li>';
+        }
+        
+        // جمع التوصيات المختارة
+        const recommendationBoxes = document.querySelectorAll('input[type="checkbox"][name^="recommend_"]:checked');
+        let selectedRecommendations = [];
+        recommendationBoxes.forEach(box => {
+            const label = document.querySelector(`label[for="${box.id}"]`);
+            if (label) {
+                selectedRecommendations.push(label.textContent.trim());
+            }
+        });
+        
+        // إضافة التوصيات المخصصة
+        const customRecommendInputs = document.querySelectorAll('input[name^="custom_recommend_"]');
+        customRecommendInputs.forEach(input => {
+            if (input.value.trim()) {
+                selectedRecommendations.push(input.value.trim());
+            }
+        });
+        
+        // تحديث حقل التوصيات إذا كان فارغاً
+        const recommendationNotes = document.getElementById('recommendation-notes');
+        if (!recommendationNotes.value.trim() && selectedRecommendations.length > 0) {
+            recommendationNotes.value = selectedRecommendations.join('\n\n');
+        }
+        
+        // العثور على عناصر عرض التوصيات والشكر
+        const recommendationNotesDisplay = document.getElementById('recommendation-notes-display');
+        const appreciationNotesDisplay = document.getElementById('appreciation-notes-display');
+        
+        if (!recommendationNotesDisplay || !appreciationNotesDisplay) {
+            console.error('لم يتم العثور على عناصر عرض التوصيات أو الشكر');
             return;
         }
         
-        const scoreSelect = block.querySelector('select[name^="score_"]');
-        const score = parseInt(scoreSelect.value);
-        const indicatorLabel = block.querySelector('label').textContent;
+        // عرض التوصيات - دائماً نظهرها حتى لو كانت فارغة
+        const recommendationParagraph = recommendationNotesDisplay.querySelector('p');
+        if (recommendationParagraph) {
+            recommendationParagraph.textContent = recommendationNotes.value || 'لم يتم إضافة توصيات';
+            recommendationNotesDisplay.style.display = 'block';
+        } else {
+            console.error('لم يتم العثور على عنصر الفقرة لعرض التوصيات');
+        }
         
-        // إذا كان التقييم جزئياً، نحسب فقط العناصر التي تم تقييمها
-        // ونستثني مؤشرات "لم يتم قياسه" (score = 0) من الحساب
-        if (score > 0) {
-            // تصنيف نقاط القوة والتحسين
-            if (score >= 3) {
-                strengths.push(indicatorLabel);
-            } else {
-                improvements.push(indicatorLabel);
-            }
-            
-            // إضافة النقاط للمجموع
-            totalScore += score;
-            totalItems++;
+        // عرض نقاط الشكر - دائماً نظهرها حتى لو كانت فارغة
+        const appreciationNotes = document.getElementById('appreciation-notes');
+        const appreciationParagraph = appreciationNotesDisplay.querySelector('p');
+        if (appreciationParagraph && appreciationNotes) {
+            appreciationParagraph.textContent = appreciationNotes.value || 'لم يتم إضافة نقاط شكر';
+            appreciationNotesDisplay.style.display = 'block';
+        } else {
+            console.error('لم يتم العثور على عنصر الفقرة لعرض نقاط الشكر أو عنصر الإدخال');
         }
-    });
-    
-    // حساب المتوسط
-    const average = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : 0;
-    
-    // تحديد التقدير
-    const grade = getGrade(average);
-    
-    // تحديث الحقول المخفية
-    document.getElementById('hidden-total-score').value = totalScore;
-    document.getElementById('hidden-average-score').value = average;
-    document.getElementById('hidden-grade').value = grade;
-    
-    // حساب النسبة المئوية
-    const percentage = (average * 25).toFixed(2);
-    
-    // عرض النتيجة الإجمالية
-    const evaluationType = isPartialEvaluation ? 'تقييم جزئي' : 'تقييم كلي';
-    document.getElementById('total-score').textContent = 
-        `${evaluationType}: النتيجة ${totalScore} من ${totalItems * 4} (المتوسط: ${average} - النسبة: ${percentage}%)`;
-    
-    // عرض نقاط القوة
-    const strengthsList = document.getElementById('strengths');
-    strengthsList.innerHTML = '';
-    if (strengths.length > 0) {
-        strengths.forEach(strength => {
-            strengthsList.innerHTML += `<li>${strength}</li>`;
-        });
-    } else {
-        strengthsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط قوة</li>';
+    } catch (error) {
+        console.error('حدث خطأ أثناء حساب وعرض النتيجة النهائية:', error);
     }
-    
-    // عرض نقاط التحسين
-    const improvementsList = document.getElementById('improvements');
-    improvementsList.innerHTML = '';
-    if (improvements.length > 0) {
-        improvements.forEach(improvement => {
-            improvementsList.innerHTML += `<li>${improvement}</li>`;
-        });
-    } else {
-        improvementsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط تحتاج إلى تحسين</li>';
-    }
-    
-    // جمع التوصيات المختارة
-    const recommendationBoxes = document.querySelectorAll('input[type="checkbox"][name^="recommend_"]:checked');
-    let selectedRecommendations = [];
-    recommendationBoxes.forEach(box => {
-        const label = document.querySelector(`label[for="${box.id}"]`);
-        if (label) {
-            selectedRecommendations.push(label.textContent.trim());
-        }
-    });
-    
-    // إضافة التوصيات المخصصة
-    const customRecommendInputs = document.querySelectorAll('input[name^="custom_recommend_"]');
-    customRecommendInputs.forEach(input => {
-        if (input.value.trim()) {
-            selectedRecommendations.push(input.value.trim());
-        }
-    });
-    
-    // تحديث حقل التوصيات إذا كان فارغاً
-    const recommendationNotes = document.getElementById('recommendation-notes');
-    if (!recommendationNotes.value.trim() && selectedRecommendations.length > 0) {
-        recommendationNotes.value = selectedRecommendations.join('\n\n');
-    }
-    
-    // عرض التوصيات
-    const recommendationNotesValue = recommendationNotes.value;
-    const recommendationNotesDisplay = document.getElementById('recommendation-notes-display');
-    
-    if (recommendationNotesValue.trim()) {
-        recommendationNotesDisplay.querySelector('p').textContent = recommendationNotesValue;
-        recommendationNotesDisplay.style.display = 'block';
-    } else {
-        recommendationNotesDisplay.style.display = 'none';
-    }
-    
-    // عرض نقاط الشكر
-    const appreciationNotes = document.getElementById('appreciation-notes').value;
-    const appreciationNotesDisplay = document.getElementById('appreciation-notes-display');
-    
-    if (appreciationNotes.trim()) {
-        appreciationNotesDisplay.querySelector('p').textContent = appreciationNotes;
-        appreciationNotesDisplay.style.display = 'block';
-    } else {
-        appreciationNotesDisplay.style.display = 'none';
-    }
-    
-    // عرض قسم النتيجة النهائية
-    showStep(document.querySelectorAll('.evaluation-section').length);
 }
 
 // دالة الحصول على التقدير بناءً على المتوسط

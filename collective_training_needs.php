@@ -266,10 +266,11 @@ if ($subject_id) {
                 <div>
                     <label for="subject_id" class="block mb-1">المادة</label>
                     <select id="subject_id" name="subject_id" class="w-full rounded border-gray-300" required>
-                        <option value="">اختر المادة</option>
-                        <?php foreach ($subjects as $sub): ?>
-                            <option value="<?= $sub['id'] ?>" <?= $subject_id == $sub['id'] ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($sub['name']) ?>
+                        <option value="">اختر المادة...</option>
+                        <option value="0" <?= $subject_id === 0 ? 'selected' : '' ?>>كل المواد</option>
+                        <?php foreach ($subjects as $subject): ?>
+                            <option value="<?= $subject['id'] ?>" <?= $subject_id == $subject['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($subject['name']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -307,11 +308,13 @@ if ($subject_id) {
         <?php if ($subject_id): ?>
             <?php 
             // الحصول على اسم المادة المختارة
-            $subject_name = '';
-            foreach ($subjects as $sub) {
-                if ($sub['id'] == $subject_id) {
-                    $subject_name = $sub['name'];
-                    break;
+            $subject_name = 'كل المواد';
+            if ($subject_id > 0) {
+                foreach ($subjects as $sub) {
+                    if ($sub['id'] == $subject_id) {
+                        $subject_name = $sub['name'];
+                        break;
+                    }
                 }
             }
             

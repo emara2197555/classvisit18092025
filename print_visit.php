@@ -27,7 +27,8 @@ try {
             sec.name as section_name,
             el.name as level_name,
             vt.name as visitor_type_name,
-            vp.name as visitor_person_name
+            vp.name as visitor_person_name,
+            ay.name as academic_year_name
         FROM 
             visits v
         LEFT JOIN 
@@ -46,6 +47,8 @@ try {
             visitor_types vt ON v.visitor_type_id = vt.id
         LEFT JOIN 
             teachers vp ON v.visitor_person_id = vp.id
+        LEFT JOIN
+            academic_years ay ON v.academic_year_id = ay.id
         WHERE 
             v.id = ?
     ";
@@ -75,7 +78,7 @@ try {
         WHERE 
             ve.visit_id = ?
         ORDER BY
-            ei.domain_id, ei.id
+            ed.id, ei.id
     ";
     
     $evaluations = query($evaluation_sql, [$visit_id]);
@@ -111,6 +114,15 @@ if ($visit['attendance_type'] == 'remote') {
     $attendance_type_text = 'مدمج';
 }
 
+// مزيج نوع الزيارة والحضور
+$visit_attendance_type = $visit_type_text . '/' . $attendance_type_text;
+
+// استخراج التاريخ واليوم
+$date_obj = new DateTime($visit['visit_date']);
+$day_names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+$day_name = $day_names[$date_obj->format('w')];
+$date_formatted = $date_obj->format('Y/m/d');
+
 // حساب متوسط الدرجات
 $average_score = round($visit['total_score'], 2);
 $grade = get_grade($average_score);
@@ -120,7 +132,7 @@ $grade = get_grade($average_score);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تقرير الزيارة الصفية - <?= htmlspecialchars($visit['teacher_name']) ?></title>
+    <title>استمارة ملاحظة صفية لأداء معلم - <?= htmlspecialchars($visit['teacher_name']) ?></title>
     
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
     
@@ -134,7 +146,7 @@ $grade = get_grade($average_score);
             body {
                 margin: 0;
                 font-family: 'Cairo', sans-serif;
-                font-size: 12pt;
+                font-size: 10pt;
                 color: #333;
                 line-height: 1.5;
             }
@@ -150,146 +162,103 @@ $grade = get_grade($average_score);
             }
             
             table, th, td {
-                border: 1px solid #ddd;
+                border: 1px solid #000;
             }
             
             th, td {
-                padding: 8px;
+                padding: 6px;
                 text-align: right;
             }
             
             th {
                 background-color: #f2f2f2;
+                color: #000;
             }
             
             .print-header {
                 text-align: center;
-                margin-bottom: 20px;
-                border-bottom: 2px solid #333;
-                padding-bottom: 10px;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #000;
             }
             
             .print-section {
-                margin-bottom: 20px;
+                margin-bottom: 15px;
             }
             
             .print-footer {
-                margin-top: 30px;
+                margin-top: 20px;
                 text-align: center;
-                border-top: 1px solid #ddd;
+                border-top: 1px solid #000;
                 padding-top: 10px;
-                font-size: 10pt;
+                font-size: 9pt;
             }
             
             .score-box {
                 display: inline-block;
-                padding: 5px 10px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            
-            .score-4 {
-                background-color: #d1fae5;
-                color: #065f46;
-            }
-            
-            .score-3 {
-                background-color: #dbeafe;
-                color: #1e40af;
-            }
-            
-            .score-2 {
-                background-color: #fef3c7;
-                color: #92400e;
-            }
-            
-            .score-1 {
-                background-color: #fee2e2;
-                color: #b91c1c;
-            }
-            
-            .score-0 {
-                background-color: #f3f4f6;
-                color: #1f2937;
-            }
-            
-            .notes-box {
-                border: 1px solid #ddd;
-                padding: 10px;
-                margin-bottom: 15px;
-                background-color: #f9f9f9;
-                min-height: 50px;
+                width: 15px;
+                height: 15px;
+                border: 1px solid #000;
+                text-align: center;
+                line-height: 15px;
             }
             
             .text-center {
                 text-align: center;
             }
             
+            .text-right {
+                text-align: right;
+            }
+            
             .hidden-print {
                 display: none;
+            }
+            
+            .main-heading {
+                font-size: 14pt;
+                font-weight: bold;
+                margin-bottom: 5px;
+                text-align: center;
+            }
+            
+            .info-table th, .info-table td {
+                padding: 3px 5px;
+            }
+            
+            .indicator-table th {
+                text-align: center;
+                font-weight: bold;
+            }
+            
+            .domain-heading {
+                background-color: #ddd;
+                font-weight: bold;
+                padding: 5px;
+                text-align: center;
             }
             
             .page-break {
                 page-break-after: always;
             }
             
-            .main-heading {
-                font-size: 24pt;
-                margin-bottom: 5px;
+            .watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(-45deg);
+                font-size: 100pt;
+                color: rgba(200, 200, 200, 0.2);
+                z-index: -1;
             }
             
-            .sub-heading {
-                font-size: 16pt;
-                color: #666;
-                margin-bottom: 20px;
-            }
-            
-            .info-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-                margin-bottom: 20px;
-            }
-            
-            .info-item {
-                margin-bottom: 10px;
-            }
-            
-            .info-label {
-                font-weight: bold;
-                color: #555;
-                display: block;
-                margin-bottom: 2px;
-            }
-            
-            .info-value {
-                font-weight: normal;
-            }
-            
-            .indicator-table th {
-                font-weight: bold;
-                text-align: center;
-            }
-            
-            .indicator-table td:nth-child(2) {
-                text-align: center;
-            }
-            
-            .final-score {
-                font-size: 32pt;
-                font-weight: bold;
-                color: #0284c7;
-                margin: 10px 0;
-            }
-            
-            .final-grade {
+            .checkbox {
+                width: 15px;
+                height: 15px;
+                border: 1px solid #000;
+                margin: 2px;
                 display: inline-block;
-                padding: 5px 15px;
-                border-radius: 20px;
-                background-color: #dbeafe;
-                color: #1e40af;
-                font-weight: bold;
-                margin-bottom: 20px;
+                text-align: center;
             }
         }
 
@@ -322,79 +291,53 @@ $grade = get_grade($average_score);
             }
             
             table, th, td {
-                border: 1px solid #ddd;
+                border: 1px solid #000;
             }
             
             th, td {
-                padding: 8px;
+                padding: 6px;
                 text-align: right;
             }
             
             th {
                 background-color: #f2f2f2;
+                color: #000;
             }
             
             .print-header {
                 text-align: center;
-                margin-bottom: 20px;
-                border-bottom: 2px solid #333;
-                padding-bottom: 10px;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #000;
             }
             
             .print-section {
-                margin-bottom: 20px;
+                margin-bottom: 15px;
             }
             
             .print-footer {
-                margin-top: 30px;
+                margin-top: 20px;
                 text-align: center;
-                border-top: 1px solid #ddd;
+                border-top: 1px solid #000;
                 padding-top: 10px;
-                font-size: 10pt;
+                font-size: 9pt;
             }
             
             .score-box {
                 display: inline-block;
-                padding: 5px 10px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            
-            .score-4 {
-                background-color: #d1fae5;
-                color: #065f46;
-            }
-            
-            .score-3 {
-                background-color: #dbeafe;
-                color: #1e40af;
-            }
-            
-            .score-2 {
-                background-color: #fef3c7;
-                color: #92400e;
-            }
-            
-            .score-1 {
-                background-color: #fee2e2;
-                color: #b91c1c;
-            }
-            
-            .score-0 {
-                background-color: #f3f4f6;
-                color: #1f2937;
-            }
-            
-            .notes-box {
-                border: 1px solid #ddd;
-                padding: 10px;
-                margin-bottom: 15px;
-                background-color: #f9f9f9;
-                min-height: 50px;
+                width: 15px;
+                height: 15px;
+                border: 1px solid #000;
+                text-align: center;
+                line-height: 15px;
             }
             
             .text-center {
                 text-align: center;
+            }
+            
+            .text-right {
+                text-align: right;
             }
             
             .hidden-print {
@@ -412,6 +355,7 @@ $grade = get_grade($average_score);
                 cursor: pointer;
                 font-family: 'Cairo', sans-serif;
                 font-size: 14px;
+                margin: 0 5px;
             }
             
             .hidden-print button:hover {
@@ -419,247 +363,202 @@ $grade = get_grade($average_score);
             }
             
             .main-heading {
-                font-size: 24pt;
-                margin-bottom: 5px;
-            }
-            
-            .sub-heading {
-                font-size: 16pt;
-                color: #666;
-                margin-bottom: 20px;
-            }
-            
-            .info-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-                margin-bottom: 20px;
-            }
-            
-            .info-item {
-                margin-bottom: 10px;
-            }
-            
-            .info-label {
+                font-size: 18pt;
                 font-weight: bold;
-                color: #555;
-                display: block;
-                margin-bottom: 2px;
+                margin-bottom: 5px;
+                text-align: center;
             }
             
-            .info-value {
-                font-weight: normal;
+            .info-table th, .info-table td {
+                padding: 3px 5px;
             }
             
             .indicator-table th {
+                text-align: center;
                 font-weight: bold;
+            }
+            
+            .domain-heading {
+                background-color: #ddd;
+                font-weight: bold;
+                padding: 5px;
                 text-align: center;
             }
             
-            .indicator-table td:nth-child(2) {
-                text-align: center;
+            .watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(-45deg);
+                font-size: 100pt;
+                color: rgba(200, 200, 200, 0.2);
+                z-index: -1;
             }
             
-            .final-score {
-                font-size: 32pt;
-                font-weight: bold;
-                color: #0284c7;
-                margin: 10px 0;
-            }
-            
-            .final-grade {
+            .checkbox {
+                width: 15px;
+                height: 15px;
+                border: 1px solid #000;
+                margin: 2px;
                 display: inline-block;
-                padding: 5px 15px;
-                border-radius: 20px;
-                background-color: #dbeafe;
-                color: #1e40af;
-                font-weight: bold;
-                margin-bottom: 20px;
+                text-align: center;
             }
         }
     </style>
 </head>
 <body>
     <div class="hidden-print">
-        <button onclick="window.print()">طباعة التقرير</button>
+        <button onclick="window.print()">طباعة الاستمارة</button>
         <button onclick="window.location.href='visits.php'">العودة للزيارات</button>
     </div>
     
     <div class="print-container">
+        <div class="watermark">Page</div>
+        
         <div class="print-header">
-            <h1 class="main-heading">تقرير زيارة صفية</h1>
-            <p class="sub-heading">نظام الزيارات الصفية</p>
+            <h1 class="main-heading">استمارة ملاحظة صفية لأداء معلم للعام الأكاديمي <?= htmlspecialchars($visit['academic_year_name']) ?></h1>
         </div>
         
         <div class="print-section">
-            <h2>المعلومات الأساسية</h2>
-            
-            <div class="info-grid">
-                <div class="info-item">
-                    <span class="info-label">المدرسة:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['school_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">المعلم:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['teacher_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">المادة:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['subject_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">الصف:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['grade_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">الشعبة:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['section_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">المرحلة:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['level_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">نوع الزائر:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['visitor_type_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">اسم الزائر:</span>
-                    <span class="info-value"><?= htmlspecialchars($visit['visitor_person_name']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">تاريخ الزيارة:</span>
-                    <span class="info-value"><?= format_date_ar($visit['visit_date']) ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">نوع الزيارة:</span>
-                    <span class="info-value"><?= $visit_type_text ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">نوع الحضور:</span>
-                    <span class="info-value"><?= $attendance_type_text ?></span>
-                </div>
-                
-                <div class="info-item">
-                    <span class="info-label">استخدام المعمل:</span>
-                    <span class="info-value"><?= bool_to_ar($visit['has_lab']) ?></span>
-                </div>
-            </div>
+            <table class="info-table">
+                <tr>
+                    <th colspan="7" style="text-align: center; background-color: #ddd;">أولاً : المعلومات الأساسية</th>
+                </tr>
+                <tr>
+                    <th style="width: 15%;">المدرسة</th>
+                    <td style="width: 35%;"><?= htmlspecialchars($visit['school_name']) ?></td>
+                    <th style="width: 15%;">اليوم</th>
+                    <td style="width: 15%;"><?= $day_name ?></td>
+                    <th style="width: 10%;">التاريخ</th>
+                    <td style="width: 10%;"><?= $date_formatted ?></td>
+                </tr>
+                <tr>
+                    <th>المادة</th>
+                    <td><?= htmlspecialchars($visit['subject_name']) ?></td>
+                    <th>رقم الشعبة</th>
+                    <td><?= htmlspecialchars($visit['section_name']) ?></td>
+                    <th>الصف</th>
+                    <td><?= htmlspecialchars($visit['grade_name']) ?></td>
+                </tr>
+                <tr>
+                    <th>المعلم</th>
+                    <td><?= htmlspecialchars($visit['teacher_name']) ?></td>
+                    <th>الزائر</th>
+                    <td><?= htmlspecialchars($visit['visitor_person_name']) ?></td>
+                    <th>الحصة</th>
+                    <td><?= $visit['period_number'] ?? '-' ?></td>
+                </tr>
+                <tr>
+                    <th>نوع الزيارة</th>
+                    <td><?= $visit_attendance_type ?></td>
+                    <th>الموضوع</th>
+                    <td colspan="3"><?= htmlspecialchars($visit['topic'] ?? '0') ?></td>
+                </tr>
+                <tr>
+                    <th colspan="6">متابعة توصية من الزيارة السابقة</th>
+                </tr>
+            </table>
         </div>
         
         <div class="print-section">
-            <h2>نتيجة التقييم</h2>
-            
-            <div class="text-center">
-                <div class="final-score"><?= number_format($average_score, 2) ?></div>
-                <div class="final-grade"><?= $grade ?></div>
-            </div>
-        </div>
-        
-        <div class="print-section">
-            <h2>تفاصيل التقييم</h2>
-            
-            <?php foreach ($evaluations_by_domain as $domain_id => $domain_evaluations): ?>
-            <div class="domain-section">
-                <h3><?= htmlspecialchars($domains[$domain_id]) ?></h3>
+            <table class="indicator-table">
+                <tr>
+                    <th colspan="8" style="text-align: center; background-color: #ddd;">ثانياً : مجالات تقييم الأداء</th>
+                </tr>
+                <tr>
+                    <th rowspan="2" style="width: 20%;">المجال</th>
+                    <th rowspan="2" style="width: 45%;">مؤشرات الأداء</th>
+                    <th colspan="5" style="width: 35%;">الدرجة التقييمية</th>
+                </tr>
+                <tr>
+                    <th>الأدلة مستكملة وفاعلة</th>
+                    <th>تتوفر معظم الأدلة</th>
+                    <th>تتوفر بعض الأدلة</th>
+                    <th>الأدلة غير متوفرة أو محدودة</th>
+                    <th>لم يتم قياسه</th>
+                </tr>
                 
-                <table class="indicator-table">
-                    <thead>
-                        <tr>
-                            <th>المؤشر</th>
-                            <th>التقييم</th>
-                            <th>التوصية</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($domain_evaluations as $eval): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
-                            <td>
-                                <?php
-                                $score = (int)$eval['score'];
-                                $score_text = '';
-                                $score_class = '';
-                                
-                                switch ($score) {
-                                    case 4:
-                                        $score_text = 'ممتاز';
-                                        $score_class = 'score-4';
-                                        break;
-                                    case 3:
-                                        $score_text = 'جيد جداً';
-                                        $score_class = 'score-3';
-                                        break;
-                                    case 2:
-                                        $score_text = 'جيد';
-                                        $score_class = 'score-2';
-                                        break;
-                                    case 1:
-                                        $score_text = 'مقبول';
-                                        $score_class = 'score-1';
-                                        break;
-                                    case 0:
-                                        $score_text = 'ضعيف';
-                                        $score_class = 'score-0';
-                                        break;
-                                }
-                                ?>
-                                <span class="score-box <?= $score_class ?>">
-                                    <?= $score ?> - <?= $score_text ?>
-                                </span>
-                            </td>
-                            <td>
-                                <?php if (!empty($eval['recommendation_text'])): ?>
-                                    <?= htmlspecialchars($eval['recommendation_text']) ?>
-                                <?php elseif (!empty($eval['custom_recommendation'])): ?>
-                                    <?= htmlspecialchars($eval['custom_recommendation']) ?>
-                                <?php else: ?>
-                                    <em>لا توجد توصية</em>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <?php endforeach; ?>
+                <?php 
+                $current_domain = '';
+                $previous_domain = '';
+                $domain_count = 0;
+                
+                foreach ($evaluations as $index => $eval): 
+                    $current_domain = $eval['domain_name'];
+                    
+                    // إذا تغير المجال، نعرض صف جديد للمجال
+                    if ($current_domain != $previous_domain):
+                        $domain_count++;
+                        $domain_rowspan = 0;
+                        
+                        // حساب عدد المؤشرات في هذا المجال
+                        foreach ($evaluations as $count_eval) {
+                            if ($count_eval['domain_name'] == $current_domain) {
+                                $domain_rowspan++;
+                            }
+                        }
+                ?>
+                <tr>
+                    <td rowspan="<?= $domain_rowspan ?>" class="domain-heading"><?= htmlspecialchars($current_domain) ?></td>
+                    <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
+                    <td class="text-center"><?= $eval['score'] == 4 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 3 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                </tr>
+                <?php else: ?>
+                <tr>
+                    <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
+                    <td class="text-center"><?= $eval['score'] == 4 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 3 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                </tr>
+                <?php 
+                    endif;
+                    $previous_domain = $current_domain;
+                endforeach; 
+                ?>
+            </table>
         </div>
         
         <div class="print-section">
-            <h2>ملاحظات عامة</h2>
-            <div class="notes-box">
-                <?= nl2br(htmlspecialchars($visit['general_notes'] ?: 'لا توجد ملاحظات')) ?>
-            </div>
-        </div>
-        
-        <div class="print-section">
-            <h2>توصيات الزيارة</h2>
-            <div class="notes-box">
-                <?= nl2br(htmlspecialchars($visit['recommendation_notes'] ?: 'لا توجد توصيات')) ?>
-            </div>
-        </div>
-        
-        <div class="print-section">
-            <h2>ملاحظات التقدير</h2>
-            <div class="notes-box">
-                <?= nl2br(htmlspecialchars($visit['appreciation_notes'] ?: 'لا توجد ملاحظات')) ?>
-            </div>
+            <table>
+                <tr>
+                    <th colspan="2" style="background-color: #ddd;">ملاحظات وتوصيات عامة</th>
+                </tr>
+                <tr>
+                    <td colspan="2" style="height: 60px;"><?= nl2br(htmlspecialchars($visit['general_notes'] ?: '')) ?></td>
+                </tr>
+                <tr>
+                    <td style="height: 30px;">أشكر المعلم على: <?= nl2br(htmlspecialchars($visit['appreciation_notes'] ?: '')) ?></td>
+                </tr>
+                <tr>
+                    <td style="height: 60px;">وأوصي بما يلي: <?= nl2br(htmlspecialchars($visit['recommendation_notes'] ?: '')) ?></td>
+                </tr>
+            </table>
         </div>
         
         <div class="print-footer">
-            <p>تم إنشاء هذا التقرير بواسطة نظام الزيارات الصفية &copy; <?= date('Y') ?></p>
-            <p>تاريخ الطباعة: <?= date('d/m/Y H:i') ?></p>
+            <table style="border: none;">
+                <tr>
+                    <td style="border: none; text-align: center; width: 50%;">توقيع المعلم</td>
+                    <td style="border: none; text-align: center; width: 50%;">توقيع المنسق</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #000; height: 40px;"></td>
+                    <td style="border: 1px solid #000; height: 40px;"></td>
+                </tr>
+            </table>
+            
+            <div style="margin-top: 10px; font-size: 8pt; text-align: center;">
+                <p>رؤية وزارة التعليم والتعليم العالي: الريادة في توفير فرص تعلّم دائمة ومستمرة وذات جودة عالية للمجتمع القطري.</p>
+                <p>الرسالة: تنظيم ودعم فُرَص تعلّم ذات جودة عالية لكافة المراحل والمستويات، وذلك بهدف تنمية المعارف والمهارات والاتجاهات اللازمة لأفراد المجتمع القطري، بما يناسب احتياجاتهم المختلفة.</p>
+            </div>
         </div>
+        
     </div>
 </body>
 </html> 

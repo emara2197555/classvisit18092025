@@ -128,42 +128,51 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
     <div class="container mx-auto px-4">
         <div class="flex items-center justify-between h-16">
             <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <a href="index.php" class="text-white font-bold text-xl">نظام الزيارات الصفية</a>
-                </div>
+                <a href="index.php" class="text-white font-bold text-xl">نظام الزيارات الصفية</a>
             </div>
-            <div class="hidden md:block">
+            <div class="block">
                 <div class="flex items-center space-x-4 space-x-reverse">
-                    <a href="index.php" class="<?= $current_page === 'index.php' ? 'bg-primary-800' : 'hover:bg-primary-600' ?> text-white px-3 py-2 rounded-md text-sm font-medium">الرئيسية</a>
-                    <a href="visits.php" class="<?= $current_page === 'visits.php' ? 'bg-primary-800' : 'hover:bg-primary-600' ?> text-white px-3 py-2 rounded-md text-sm font-medium">الزيارات</a>
-                    <a href="evaluation_form.php" class="<?= $current_page === 'evaluation_form.php' ? 'bg-primary-800' : 'hover:bg-primary-600' ?> text-white px-3 py-2 rounded-md text-sm font-medium">نموذج تقييم</a>
+                    <!-- روابط ثابتة -->
+                    <a href="index.php" class="<?= $current_page == 'index.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
+                        الرئيسية
+                    </a>
+
+                    <a href="visits.php" class="<?= $current_page == 'visits.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
+                        الزيارات الصفية
+                    </a>
+
+                    <a href="evaluation_form.php" class="<?= $current_page == 'evaluation_form.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
+                        زيارة جديدة
+                    </a>
 
                     <div class="relative group">
-                        <button class="hover:bg-primary-600 text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
-                            الإدارة
-                            <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                        </button>
-                        <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
-                            <a href="teachers_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">المعلمين</a>
-                            <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">المواد</a>
-                            <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الشعب</a>
-                            <a href="school_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إعدادات المدرسة</a>
-                            <div class="border-t my-1"></div>
-                            <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير المعلمين</a>
-                            <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير الصفوف</a>
-                        </div>
-                    </div>
+    <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
+        الإدارة
+        <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+        </svg>
+    </button>
+    <div class="absolute right-0 top-full w-56 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
+        <a href="teachers_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المعلمين</a>
+        <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المواد</a>
+        <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الفصول</a>
+        <a href="academic_years_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الأعوام الدراسية</a>
+        <div class="border-t my-1"></div>
+        <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المعلمين</a>
+        <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء الصفوف</a>
+        <a href="subject_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المواد</a>
+    </div>
+</div>
 
+                    <!-- قائمة منسدلة: الاحتياجات التدريبية -->
                     <div class="relative group">
-                        <button class="hover:bg-primary-600 <?= in_array($current_page, ['training_needs.php', 'collective_training_needs.php']) ? 'bg-primary-800' : '' ?> text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                        <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
                             الاحتياجات التدريبية
                             <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                             </svg>
                         </button>
-                        <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
+                        <div class="absolute right-0 top-full w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
                             <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الفردية</a>
                             <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
                         </div>

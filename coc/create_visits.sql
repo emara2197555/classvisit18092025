@@ -1,0 +1,40 @@
+-- حذف الجدول إذا كان موجوداً
+DROP TABLE IF EXISTS `visits`;
+
+-- إنشاء جدول visits
+CREATE TABLE `visits` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `school_id` int NOT NULL,
+  `teacher_id` int NOT NULL,
+  `subject_id` int NOT NULL,
+  `visitor_type_id` int NOT NULL,
+  `visitor_person_id` int NOT NULL,
+  `grade_id` int NOT NULL,
+  `section_id` int NOT NULL,
+  `level_id` int NOT NULL,
+  `academic_year_id` int NOT NULL,
+  `visit_date` date NOT NULL,
+  `period_number` int NOT NULL,
+  `lesson_title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `school_id` (`school_id`),
+  KEY `teacher_id` (`teacher_id`),
+  KEY `subject_id` (`subject_id`),
+  KEY `visitor_type_id` (`visitor_type_id`),
+  KEY `visitor_person_id` (`visitor_person_id`),
+  KEY `grade_id` (`grade_id`),
+  KEY `section_id` (`section_id`),
+  KEY `level_id` (`level_id`),
+  KEY `academic_year_id` (`academic_year_id`),
+  CONSTRAINT `visits_school_id_foreign` FOREIGN KEY (`school_id`) REFERENCES `schools` (`id`),
+  CONSTRAINT `visits_teacher_id_foreign` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`),
+  CONSTRAINT `visits_subject_id_foreign` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`),
+  CONSTRAINT `visits_visitor_type_id_foreign` FOREIGN KEY (`visitor_type_id`) REFERENCES `visitor_types` (`id`),
+  CONSTRAINT `visits_grade_id_foreign` FOREIGN KEY (`grade_id`) REFERENCES `grades` (`id`),
+  CONSTRAINT `visits_section_id_foreign` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`),
+  CONSTRAINT `visits_level_id_foreign` FOREIGN KEY (`level_id`) REFERENCES `educational_levels` (`id`),
+  CONSTRAINT `visits_academic_year_id_foreign` FOREIGN KEY (`academic_year_id`) REFERENCES `academic_years` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; 
