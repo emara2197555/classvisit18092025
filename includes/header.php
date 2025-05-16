@@ -21,6 +21,9 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <!-- خط Cairo من Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -123,8 +126,8 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
         .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #075985; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
-<nav class="bg-primary-700">
+<body class="bg-gray-50 text-gray-800" x-data="{ reportsOpen: false }">
+<nav class="bg-primary-700 fixed top-0 left-0 right-0 z-50 shadow-md">
     <div class="container mx-auto px-4">
         <div class="flex items-center justify-between h-16">
             <div class="flex items-center">
@@ -157,10 +160,7 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
         <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المواد</a>
         <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الفصول</a>
         <a href="academic_years_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الأعوام الدراسية</a>
-        <div class="border-t my-1"></div>
-        <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المعلمين</a>
-        <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء الصفوف</a>
-        <a href="subject_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المواد</a>
+        <a href="school_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إعدادات المدرسة</a>
     </div>
 </div>
 
@@ -175,6 +175,23 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
                         <div class="absolute right-0 top-full w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
                             <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الفردية</a>
                             <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
+                        </div>
+                    </div>
+
+                    <!-- قائمة منسدلة: التقارير -->
+                    <div class="relative group">
+                        <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
+                            التقارير
+                            <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                        <div class="absolute right-0 top-full w-56 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
+                            <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء المعلمين</a>
+                            <a href="subject_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء المواد الدراسية</a>
+                            <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء الصفوف والشعب</a>
+                            <a href="sections_reports.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقارير الشعب</a>
+                            <a href="teacher_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير معلم</a>
                         </div>
                     </div>
                 </div>
