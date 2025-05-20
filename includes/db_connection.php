@@ -6,11 +6,10 @@
  */
 
 // إعدادات الاتصال بقاعدة البيانات
-define('DB_HOST', 'localhost');
+define('DB_HOST', 'mysql-database-ls04wkcc8g88w8gcgscs88o8');
 define('DB_NAME', 'classvisit_db');
 define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_CHARSET', 'utf8mb4');
+define('DB_PASS', 'mM1jP9YqQOz4hYixoGL5m3N6Ru91dJZG6KIdcVs1xNiXgk2Won4IsKVGswNWlrZU');
 
 // تكوين DSN
 $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
