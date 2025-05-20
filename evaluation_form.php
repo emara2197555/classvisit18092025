@@ -275,21 +275,70 @@ try {
     <div id="evaluation-header" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6"></div>
     
     <!-- معلومات الزيارات السابقة -->
-    <div id="previous-visits-info" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6" style="display: none;">
-        <h2 class="text-lg font-bold text-blue-700 mb-3">معلومات الزيارات السابقة</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <p class="font-semibold">عدد الزيارات السابقة: <span id="visits-count" class="font-normal">-</span></p>
-                <p class="font-semibold">تاريخ آخر زيارة: <span id="last-visit-date" class="font-normal">-</span></p>
-                <p class="font-semibold">نسبة آخر زيارة: <span id="last-visit-percentage" class="font-normal">-</span></p>
-            </div>
-            <div>
-                <p class="font-semibold">الصف والشعبة: <span id="last-visit-class" class="font-normal">-</span></p>
-            </div>
+    <div id="previous-visits-info" class="mb-6 border border-gray-200 rounded-lg p-4">
+        <h2 class="text-xl font-bold text-primary-700 mb-2 pb-2 border-b border-gray-200">معلومات الزيارات السابقة</h2>
+        
+        <div class="mb-4 text-sm bg-blue-50 p-3 rounded-lg text-blue-800 border border-blue-100">
+            <p>هذه المعلومات تساعدك على متابعة تقدم المعلم ومعرفة التوصيات السابقة قبل إجراء التقييم الجديد</p>
         </div>
-        <div class="mt-3">
-            <p class="font-semibold">ملاحظات الزيارة السابقة:</p>
-            <div id="last-visit-notes" class="mt-2 p-3 bg-white rounded border border-blue-200 text-sm max-h-32 overflow-y-auto">-</div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <!-- عدد الزيارات ومتوسط الأداء -->
+            <div class="bg-white border border-blue-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                <h3 class="text-lg font-bold text-blue-800 mb-2">الزيارات السابقة</h3>
+                <div class="mt-2">
+                    <p class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-700">عدد الزيارات:</span>
+                        <span id="visits-count" class="text-lg font-bold text-primary-700">-</span>
+                    </p>
+                    <p class="flex justify-between items-center mt-2">
+                        <span class="font-semibold text-gray-700">متوسط الأداء (لكل الزائرين):</span>
+                        <span id="average-performance-all" class="text-lg font-bold text-primary-700">-</span>
+                    </p>
+                    <p class="flex justify-between items-center mt-2">
+                        <span class="font-semibold text-gray-700">متوسط الأداء (الزائر الحالي):</span>
+                        <span id="average-performance-current" class="text-lg font-bold text-primary-700">-</span>
+                    </p>
+                </div>
+            </div>
+            
+            <!-- تفاصيل آخر زيارة -->
+            <div class="bg-white border border-green-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                <h3 class="text-lg font-bold text-green-800 mb-2">آخر زيارة</h3>
+                <div class="mt-2">
+                    <p class="flex justify-between items-center">
+                        <span class="font-semibold text-gray-700">التاريخ:</span>
+                        <span id="last-visit-date" class="text-primary-700 font-bold">-</span>
+                    </p>
+                    <p class="flex justify-between items-center mt-2">
+                        <span class="font-semibold text-gray-700">نسبة التقييم (الزائر الحالي):</span>
+                        <span id="last-visit-current-percentage" class="text-lg font-bold text-primary-700">-</span>
+                    </p>
+                    <p class="flex justify-between items-center mt-2">
+                        <span class="font-semibold text-gray-700">نسبة التقييم (آخر زائر):</span>
+                        <span id="last-visit-any-percentage" class="text-lg font-bold text-primary-700">-</span>
+                    </p>
+                    <p class="flex justify-between items-center mt-2">
+                        <span class="font-semibold text-gray-700">الصف/الشعبة:</span>
+                        <span id="last-visit-class" class="text-primary-700">-</span>
+                    </p>
+                </div>
+            </div>
+            
+            <!-- توصيات آخر زيارة -->
+            <div class="bg-white border border-yellow-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                <h3 class="text-lg font-bold text-yellow-800 mb-2">توصيات آخر زيارة</h3>
+                <div id="last-visit-recommendations" class="mt-2 max-h-32 overflow-y-auto">
+                    <div id="last-recommendation-notes" class="p-2 bg-gray-50 rounded-lg text-sm mb-2">
+                        <span class="font-semibold text-gray-700 block mb-1">أنصح المعلم:</span>
+                        <p class="text-gray-800">-</p>
+                    </div>
+                    <div id="last-appreciation-notes" class="p-2 bg-gray-50 rounded-lg text-sm">
+                        <span class="font-semibold text-gray-700 block mb-1">أشكر المعلم على:</span>
+                        <p class="text-gray-800">-</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -531,6 +580,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // وضع التاريخ الحالي كقيمة افتراضية
     document.getElementById('visit-date').value = new Date().toISOString().split('T')[0];
     
+    // عرض إشعار تلميحي للمستخدم
+    const infoElement = document.createElement('div');
+    infoElement.className = 'bg-blue-50 text-blue-800 p-4 rounded-lg border border-blue-200 mb-4';
+    infoElement.innerHTML = `
+        <p class="mb-2 font-semibold">ملاحظة هامة:</p>
+        <ul class="list-disc list-inside text-sm">
+            <li>ستظهر معلومات الزيارات السابقة للمعلم بعد بدء التقييم.</li>
+            <li>يمكنك الاطلاع على توصيات الزيارات السابقة ونقاط التقدير قبل إجراء التقييم الجديد.</li>
+        </ul>
+    `;
+    
+    const selectionForm = document.getElementById('selection-form');
+    selectionForm.insertBefore(infoElement, selectionForm.firstChild.nextSibling);
+    
     // أزرار التنقل بين خطوات التقييم
     document.querySelectorAll('.next-step').forEach(button => {
         button.addEventListener('click', function() {
@@ -548,8 +611,28 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // زر العودة إلى اختيار المعلم والمدرسة
     document.getElementById('back-to-selection').addEventListener('click', function() {
+        // عند العودة إلى نموذج الاختيار، نخفي نموذج التقييم ونظهر نموذج الاختيار
         document.getElementById('selection-form').style.display = 'block';
         document.getElementById('evaluation-form').style.display = 'none';
+        
+        // تفريغ معلومات الزيارات السابقة
+        document.getElementById('visits-count').textContent = '-';
+        document.getElementById('average-performance-all').textContent = '-';
+        document.getElementById('average-performance-current').textContent = '-';
+        document.getElementById('last-visit-date').textContent = '-';
+        document.getElementById('last-visit-class').textContent = '-';
+        document.getElementById('last-visit-current-percentage').textContent = '-';
+        document.getElementById('last-visit-any-percentage').textContent = '-';
+        
+        const recommendationElement = document.querySelector('#last-recommendation-notes p');
+        if (recommendationElement) {
+            recommendationElement.textContent = '-';
+        }
+        
+        const appreciationElement = document.querySelector('#last-appreciation-notes p');
+        if (appreciationElement) {
+            appreciationElement.textContent = '-';
+        }
     });
     
     // عند ضغط زر بدء التقييم
@@ -629,6 +712,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // إظهار الخطوة الأولى
             showStep(1);
+            
+            // تأكد من أن قسم معلومات الزيارات السابقة ظاهر
+            const previousVisitsDiv = document.getElementById('previous-visits-info');
+            if (previousVisitsDiv) {
+                previousVisitsDiv.style.display = 'block';
+            }
         }
     });
     
@@ -912,6 +1001,12 @@ function showStep(step) {
         }
     }
     
+    // تأكد من أن قسم معلومات الزيارات السابقة ظاهر دائمًا
+    const previousVisitsDiv = document.getElementById('previous-visits-info');
+    if (previousVisitsDiv) {
+        previousVisitsDiv.style.display = 'block';
+    }
+    
     currentStep = step;
     window.scrollTo(0, 0);
 }
@@ -1062,60 +1157,185 @@ function getGrade(average) {
 function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
     if (!teacherId || !visitorPersonId) return;
     
+    console.log('جاري تحميل معلومات الزيارات السابقة للمعلم ' + teacherId + ' والزائر ' + visitorPersonId);
+    
+    // إظهار قسم معلومات الزيارات السابقة بشكل افتراضي
+    const previousVisitsDiv = document.getElementById('previous-visits-info');
+    if (previousVisitsDiv) {
+        previousVisitsDiv.style.display = 'block';
+    }
+    
     // جلب معلومات الزيارات السابقة من خلال API
     fetch(`api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`)
-        .then(response => response.json())
+        .then(response => {
+            console.log('تم استلام الرد من API');
+            return response.json();
+        })
         .then(data => {
+            console.log('البيانات المستلمة من API:', data);
+            
             if (data.success) {
                 const visitsInfo = data.data;
-                const previousVisitsDiv = document.getElementById('previous-visits-info');
                 
                 // تحديث عدد الزيارات
-                document.getElementById('visits-count').textContent = visitsInfo.visits_count;
-                
-                // إذا كان هناك زيارة سابقة، نعرض تفاصيلها
-                if (visitsInfo.last_visit) {
-                    const lastVisit = visitsInfo.last_visit;
-                    const visitDate = new Date(lastVisit.date).toLocaleDateString('ar-EG');
-                    document.getElementById('last-visit-date').textContent = visitDate;
-                    document.getElementById('last-visit-class').textContent = 
-                        `${lastVisit.grade || '-'} / ${lastVisit.section || '-'}`;
-                    
-                    // إضافة نسبة الزيارة السابقة
-                    if (lastVisit.average_score !== undefined) {
-                        const percentage = lastVisit.average_score * 25; // تحويل المتوسط إلى نسبة مئوية (4=100%)
-                        document.getElementById('last-visit-percentage').textContent = `${percentage.toFixed(2)}%`;
-                    } else {
-                        document.getElementById('last-visit-percentage').textContent = 'غير متوفر';
-                    }
-                    
-                    // عرض الملاحظات العامة من الزيارة السابقة
-                    const notesElement = document.getElementById('last-visit-notes');
-                    if (lastVisit.notes) {
-                        notesElement.textContent = lastVisit.notes;
-                    } else {
-                        notesElement.textContent = 'لا توجد ملاحظات مسجلة';
-                    }
-                    
-                    // إظهار قسم معلومات الزيارات السابقة
-                    previousVisitsDiv.style.display = 'block';
-                } else if (visitsInfo.visits_count > 0) {
-                    // إذا كان هناك زيارات سابقة لكن بدون تفاصيل
-                    document.getElementById('last-visit-date').textContent = 'غير متوفر';
-                    document.getElementById('last-visit-class').textContent = 'غير متوفر';
-                    document.getElementById('last-visit-percentage').textContent = 'غير متوفر';
-                    document.getElementById('last-visit-notes').textContent = 'غير متوفر';
-                    previousVisitsDiv.style.display = 'block';
-                } else {
-                    // لا توجد زيارات سابقة
-                    previousVisitsDiv.style.display = 'none';
+                const visitsCountElement = document.getElementById('visits-count');
+                if (visitsCountElement) {
+                    visitsCountElement.textContent = visitsInfo.visits_count || '0';
                 }
+                
+                // تحديث متوسط الأداء العام لكل الزائرين
+                const averagePerformanceAllElement = document.getElementById('average-performance-all');
+                if (averagePerformanceAllElement) {
+                    if (visitsInfo.average_performance_all !== undefined && visitsInfo.average_performance_all !== null) {
+                        // تحويل المتوسط إلى نسبة مئوية - المتوسط هو بالفعل نسبة (0-1)
+                        const avgPercentage = parseFloat((visitsInfo.average_performance_all * 100).toFixed(2));
+                        console.log("متوسط الأداء لكل الزائرين (قيمة):", visitsInfo.average_performance_all);
+                        console.log("متوسط الأداء لكل الزائرين (نسبة):", avgPercentage);
+                        
+                        averagePerformanceAllElement.textContent = `${avgPercentage}%`;
+                    } else {
+                        averagePerformanceAllElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // تحديث متوسط الأداء للزائر الحالي
+                const averagePerformanceCurrentElement = document.getElementById('average-performance-current');
+                if (averagePerformanceCurrentElement) {
+                    if (visitsInfo.average_performance_current_visitor !== undefined && visitsInfo.average_performance_current_visitor !== null) {
+                        // تحويل المتوسط إلى نسبة مئوية - المتوسط هو بالفعل نسبة (0-1)
+                        const avgPercentage = parseFloat((visitsInfo.average_performance_current_visitor * 100).toFixed(2));
+                        console.log("متوسط الأداء للزائر الحالي (قيمة):", visitsInfo.average_performance_current_visitor);
+                        console.log("متوسط الأداء للزائر الحالي (نسبة):", avgPercentage);
+                        
+                        averagePerformanceCurrentElement.textContent = `${avgPercentage}%`;
+                    } else {
+                        averagePerformanceCurrentElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // إذا كان هناك زيارة سابقة للزائر الحالي، نعرض تفاصيلها
+                const lastVisitCurrentVisitor = visitsInfo.last_visit_current_visitor;
+                
+                // تحديث تاريخ آخر زيارة
+                const lastVisitDateElement = document.getElementById('last-visit-date');
+                if (lastVisitDateElement) {
+                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.date) {
+                        const visitDate = new Date(lastVisitCurrentVisitor.date).toLocaleDateString('ar-EG');
+                        lastVisitDateElement.textContent = visitDate;
+                    } else {
+                        lastVisitDateElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // تحديث الصف والشعبة
+                const lastVisitClassElement = document.getElementById('last-visit-class');
+                if (lastVisitClassElement) {
+                    if (lastVisitCurrentVisitor) {
+                        lastVisitClassElement.textContent = 
+                            `${lastVisitCurrentVisitor.grade || '-'} / ${lastVisitCurrentVisitor.section || '-'}`;
+                    } else {
+                        lastVisitClassElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // تحديث نسبة تقييم آخر زيارة للزائر الحالي
+                const lastVisitCurrentPercentageElement = document.getElementById('last-visit-current-percentage');
+                if (lastVisitCurrentPercentageElement) {
+                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.average_score !== undefined && lastVisitCurrentVisitor.average_score !== null) {
+                        // تحويل المتوسط إلى نسبة مئوية
+                        const percentage = parseFloat((lastVisitCurrentVisitor.average_score * 25).toFixed(2));
+                        console.log("نسبة آخر زيارة للزائر الحالي (قيمة):", lastVisitCurrentVisitor.average_score);
+                        console.log("نسبة آخر زيارة للزائر الحالي (نسبة):", percentage);
+                        
+                        lastVisitCurrentPercentageElement.textContent = `${percentage}%`;
+                    } else {
+                        lastVisitCurrentPercentageElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // تحديث نسبة تقييم آخر زيارة لأي زائر
+                const lastVisitAnyPercentageElement = document.getElementById('last-visit-any-percentage');
+                if (lastVisitAnyPercentageElement) {
+                    const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
+                    if (lastVisitAnyVisitor && lastVisitAnyVisitor.average_score !== undefined && lastVisitAnyVisitor.average_score !== null) {
+                        // تحويل المتوسط إلى نسبة مئوية
+                        const percentage = parseFloat((lastVisitAnyVisitor.average_score * 25).toFixed(2));
+                        console.log("نسبة آخر زيارة لأي زائر (قيمة):", lastVisitAnyVisitor.average_score);
+                        console.log("نسبة آخر زيارة لأي زائر (نسبة):", percentage);
+                        
+                        lastVisitAnyPercentageElement.textContent = `${percentage}%`;
+                        
+                        // إضافة معلومات الزائر في tooltip
+                        lastVisitAnyPercentageElement.title = `بواسطة: الزائر رقم ${lastVisitAnyVisitor.visitor_person_id || '-'} (${lastVisitAnyVisitor.visitor_type || '-'})`;
+                    } else {
+                        lastVisitAnyPercentageElement.textContent = 'غير متوفر';
+                    }
+                }
+                
+                // عرض توصيات المعلم من الزيارة السابقة
+                const recommendationElement = document.querySelector('#last-recommendation-notes p');
+                if (recommendationElement) {
+                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.recommendation_notes) {
+                        recommendationElement.textContent = lastVisitCurrentVisitor.recommendation_notes;
+                    } else {
+                        recommendationElement.textContent = 'لا توجد توصيات مسجلة';
+                    }
+                }
+                
+                // عرض نقاط الشكر من الزيارة السابقة
+                const appreciationElement = document.querySelector('#last-appreciation-notes p');
+                if (appreciationElement) {
+                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.appreciation_notes) {
+                        appreciationElement.textContent = lastVisitCurrentVisitor.appreciation_notes;
+                    } else {
+                        appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
+                    }
+                }
+                
             } else {
-                console.error('Error loading previous visits:', data.message);
+                console.error('خطأ في تحميل معلومات الزيارات السابقة:', data.message);
+                
+                // تعيين رسائل افتراضية في حالة حدوث خطأ
+                document.getElementById('visits-count').textContent = '0';
+                document.getElementById('average-performance-all').textContent = 'غير متوفر';
+                document.getElementById('average-performance-current').textContent = 'غير متوفر';
+                document.getElementById('last-visit-date').textContent = 'غير متوفر';
+                document.getElementById('last-visit-class').textContent = 'غير متوفر';
+                document.getElementById('last-visit-current-percentage').textContent = 'غير متوفر';
+                document.getElementById('last-visit-any-percentage').textContent = 'غير متوفر';
+                
+                const recommendationElement = document.querySelector('#last-recommendation-notes p');
+                if (recommendationElement) {
+                    recommendationElement.textContent = 'لا توجد توصيات مسجلة';
+                }
+                
+                const appreciationElement = document.querySelector('#last-appreciation-notes p');
+                if (appreciationElement) {
+                    appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
+                }
             }
         })
         .catch(error => {
-            console.error('Error loading previous visits:', error);
+            console.error('خطأ في تحميل معلومات الزيارات السابقة:', error);
+            
+            // تعيين رسائل افتراضية في حالة حدوث خطأ
+            document.getElementById('visits-count').textContent = '0';
+            document.getElementById('average-performance-all').textContent = 'غير متوفر';
+            document.getElementById('average-performance-current').textContent = 'غير متوفر';
+            document.getElementById('last-visit-date').textContent = 'غير متوفر';
+            document.getElementById('last-visit-class').textContent = 'غير متوفر';
+            document.getElementById('last-visit-current-percentage').textContent = 'غير متوفر';
+            document.getElementById('last-visit-any-percentage').textContent = 'غير متوفر';
+            
+            const recommendationElement = document.querySelector('#last-recommendation-notes p');
+            if (recommendationElement) {
+                recommendationElement.textContent = 'لا توجد توصيات مسجلة';
+            }
+            
+            const appreciationElement = document.querySelector('#last-appreciation-notes p');
+            if (appreciationElement) {
+                appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
+            }
         });
 }
 

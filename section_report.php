@@ -65,8 +65,7 @@ $subjects = query("
     [$section_id, $grade_id]
 );
 
-// جلب تقييمات الشعبة حسب المواد الدراسية
-// للتبسيط، سنستخدم كود لإنشاء استعلام منفصل لكل حالة (مع العام الدراسي وبدونه)
+// جلب تقييمات الشعبة حسب المواد الدراسية - نركز فقط على مجالي تنفيذ الدرس والإدارة الصفية
 
 if ($academic_year_id > 0) {
     // استعلام مع فلتر العام الدراسي
@@ -76,18 +75,6 @@ if ($academic_year_id > 0) {
             s.name AS subject_name,
             COUNT(DISTINCT v.id) AS visits_count,
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
-            
-            -- متوسط التخطيط (مجال رقم 1)
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND vs.academic_year_id = ?
-               AND ei.domain_id = 1
-               AND ve.score > 0) AS planning_avg,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
             (SELECT AVG(ve.score) * 25
@@ -113,7 +100,7 @@ if ($academic_year_id > 0) {
                AND ei.domain_id = 3
                AND ve.score > 0) AS classroom_management_avg,
                
-            -- متوسط التقويم (مجال رقم 4)
+            -- المتوسط العام للمجالين
             (SELECT AVG(ve.score) * 25
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
@@ -122,29 +109,7 @@ if ($academic_year_id > 0) {
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
                AND vs.academic_year_id = ?
-               AND ei.domain_id = 4
-               AND ve.score > 0) AS evaluation_avg,
-               
-            -- متوسط النشاط العملي (مجال رقم 5)
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND vs.academic_year_id = ?
-               AND ei.domain_id = 5
-               AND ve.score > 0) AS practical_avg,
-               
-            -- المتوسط العام
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND vs.academic_year_id = ?
+               AND (ei.domain_id = 2 OR ei.domain_id = 3)
                AND ve.score > 0) AS overall_avg
         FROM 
             subjects s
@@ -160,14 +125,11 @@ if ($academic_year_id > 0) {
             overall_avg DESC, s.name
     ";
     
-    // تحضير المعلمات للاستعلام - نلاحظ وجود معلمة العام الدراسي في كل مكان
+    // تحضير المعلمات للاستعلام
     $query_params = [
-        $section_id, $grade_id, $academic_year_id,  // التخطيط
         $section_id, $grade_id, $academic_year_id,  // تنفيذ الدرس
         $section_id, $grade_id, $academic_year_id,  // الإدارة الصفية
-        $section_id, $grade_id, $academic_year_id,  // التقويم
-        $section_id, $grade_id, $academic_year_id,  // النشاط العملي
-        $section_id, $grade_id, $academic_year_id,  // المتوسط العام
+        $section_id, $grade_id, $academic_year_id,  // المتوسط العام للمجالين
         $section_id, $grade_id, $academic_year_id   // شرط WHERE الرئيسي
     ];
 } else {
@@ -178,17 +140,6 @@ if ($academic_year_id > 0) {
             s.name AS subject_name,
             COUNT(DISTINCT v.id) AS visits_count,
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
-            
-            -- متوسط التخطيط (مجال رقم 1)
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND ei.domain_id = 1
-               AND ve.score > 0) AS planning_avg,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
             (SELECT AVG(ve.score) * 25
@@ -212,7 +163,7 @@ if ($academic_year_id > 0) {
                AND ei.domain_id = 3
                AND ve.score > 0) AS classroom_management_avg,
                
-            -- متوسط التقويم (مجال رقم 4)
+            -- المتوسط العام للمجالين
             (SELECT AVG(ve.score) * 25
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
@@ -220,27 +171,7 @@ if ($academic_year_id > 0) {
              WHERE vs.section_id = ?
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
-               AND ei.domain_id = 4
-               AND ve.score > 0) AS evaluation_avg,
-               
-            -- متوسط النشاط العملي (مجال رقم 5)
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND ei.domain_id = 5
-               AND ve.score > 0) AS practical_avg,
-               
-            -- المتوسط العام
-            (SELECT AVG(ve.score) * 25
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
+               AND (ei.domain_id = 2 OR ei.domain_id = 3)
                AND ve.score > 0) AS overall_avg
         FROM 
             subjects s
@@ -257,12 +188,9 @@ if ($academic_year_id > 0) {
     
     // تحضير المعلمات للاستعلام - بدون معلمة العام الدراسي
     $query_params = [
-        $section_id, $grade_id,  // التخطيط
         $section_id, $grade_id,  // تنفيذ الدرس
         $section_id, $grade_id,  // الإدارة الصفية
-        $section_id, $grade_id,  // التقويم
-        $section_id, $grade_id,  // النشاط العملي
-        $section_id, $grade_id,  // المتوسط العام
+        $section_id, $grade_id,  // المتوسط العام للمجالين
         $section_id, $grade_id   // شرط WHERE الرئيسي
     ];
 }
@@ -270,38 +198,29 @@ if ($academic_year_id > 0) {
 $subjects_data = query($sql, $query_params);
 
 // حساب المتوسطات العامة لجميع المواد
-$total_planning = 0;
 $total_lesson_execution = 0;
 $total_classroom_management = 0;
-$total_evaluation = 0;
-$total_practical = 0;
 $total_overall = 0;
 
 $valid_subjects_count = 0;
 foreach ($subjects_data as $subject) {
     if ($subject['overall_avg'] !== null) {
         $valid_subjects_count++;
-        $total_planning += $subject['planning_avg'] ?? 0;
         $total_lesson_execution += $subject['lesson_execution_avg'] ?? 0;
         $total_classroom_management += $subject['classroom_management_avg'] ?? 0;
-        $total_evaluation += $subject['evaluation_avg'] ?? 0;
-        $total_practical += $subject['practical_avg'] ?? 0;
         $total_overall += $subject['overall_avg'] ?? 0;
     }
 }
 
-$avg_planning = $valid_subjects_count > 0 ? ($total_planning / $valid_subjects_count) : 0;
 $avg_lesson_execution = $valid_subjects_count > 0 ? ($total_lesson_execution / $valid_subjects_count) : 0;
 $avg_classroom_management = $valid_subjects_count > 0 ? ($total_classroom_management / $valid_subjects_count) : 0;
-$avg_evaluation = $valid_subjects_count > 0 ? ($total_evaluation / $valid_subjects_count) : 0;
-$avg_practical = $valid_subjects_count > 0 ? ($total_practical / $valid_subjects_count) : 0;
 $avg_overall = $valid_subjects_count > 0 ? ($total_overall / $valid_subjects_count) : 0;
 
 // حساب أفضل وأضعف أداء للمواد
 $best_subject = $valid_subjects_count > 0 ? $subjects_data[0]['subject_name'] : '';
 $worst_subject = $valid_subjects_count > 0 ? $subjects_data[count($subjects_data)-1]['subject_name'] : '';
 
-// جلب أضعف المؤشرات أداءً في الشعبة
+// جلب أضعف المؤشرات أداءً في الشعبة (فقط من المجالين 2 و 3)
 $weakest_query = "
     SELECT 
         i.id,
@@ -320,6 +239,7 @@ $weakest_query = "
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.score > 0
+        AND (i.domain_id = 2 OR i.domain_id = 3)
     GROUP BY 
         i.id, i.name
     HAVING 
@@ -335,7 +255,7 @@ if ($academic_year_id > 0) {
 }
 $weakest_indicators = query($weakest_query, $weakest_params);
 
-// جلب أقوى المؤشرات أداءً
+// جلب أقوى المؤشرات أداءً (فقط من المجالين 2 و 3)
 $strongest_query = "
     SELECT 
         i.id,
@@ -354,6 +274,7 @@ $strongest_query = "
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.score > 0
+        AND (i.domain_id = 2 OR i.domain_id = 3)
     GROUP BY 
         i.id, i.name
     HAVING 
@@ -369,7 +290,7 @@ if ($academic_year_id > 0) {
 }
 $strongest_indicators = query($strongest_query, $strongest_params);
 
-// جلب أكثر التوصيات تكراراً
+// جلب أكثر التوصيات تكراراً (فقط من المجالين 2 و 3)
 $recommendations_query = "
     SELECT 
         r.text,
@@ -380,11 +301,14 @@ $recommendations_query = "
         visits v ON ve.visit_id = v.id
     JOIN 
         recommendations r ON ve.recommendation_id = r.id
+    JOIN
+        evaluation_indicators i ON ve.indicator_id = i.id
     WHERE 
         v.section_id = ?
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.recommendation_id IS NOT NULL
+        AND (i.domain_id = 2 OR i.domain_id = 3)
     GROUP BY 
         r.text
     ORDER BY 
@@ -474,18 +398,15 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المادة</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">عدد الزيارات</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">عدد المعلمين</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">التخطيط</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تنفيذ الدرس</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإدارة الصفية</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">التقويم</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">النشاط العملي</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المتوسط العام</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         <?php if (empty($subjects_data)): ?>
                             <tr>
-                                <td colspan="9" class="px-4 py-3 text-center text-gray-500">لا توجد بيانات</td>
+                                <td colspan="6" class="px-4 py-3 text-center text-gray-500">لا توجد بيانات</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($subjects_data as $subject): ?>
@@ -493,11 +414,8 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
                                     <td class="px-4 py-2"><?= htmlspecialchars($subject['subject_name']) ?></td>
                                     <td class="px-4 py-2"><?= $subject['visits_count'] ?></td>
                                     <td class="px-4 py-2"><?= $subject['teachers_count'] ?></td>
-                                    <td class="px-4 py-2"><?= $subject['planning_avg'] ? number_format($subject['planning_avg'], 1) . '%' : '-' ?></td>
                                     <td class="px-4 py-2"><?= $subject['lesson_execution_avg'] ? number_format($subject['lesson_execution_avg'], 1) . '%' : '-' ?></td>
                                     <td class="px-4 py-2"><?= $subject['classroom_management_avg'] ? number_format($subject['classroom_management_avg'], 1) . '%' : '-' ?></td>
-                                    <td class="px-4 py-2"><?= $subject['evaluation_avg'] ? number_format($subject['evaluation_avg'], 1) . '%' : '-' ?></td>
-                                    <td class="px-4 py-2"><?= $subject['practical_avg'] ? number_format($subject['practical_avg'], 1) . '%' : '-' ?></td>
                                     <td class="px-4 py-2 font-semibold">
                                         <?= $subject['overall_avg'] ? number_format($subject['overall_avg'], 1) . '%' : '-' ?>
                                     </td>
@@ -506,11 +424,8 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
                             <tr class="bg-gray-100 font-semibold">
                                 <td class="px-4 py-2">المتوسط العام</td>
                                 <td colspan="2" class="px-4 py-2"></td>
-                                <td class="px-4 py-2"><?= number_format($avg_planning, 1) ?>%</td>
                                 <td class="px-4 py-2"><?= number_format($avg_lesson_execution, 1) ?>%</td>
                                 <td class="px-4 py-2"><?= number_format($avg_classroom_management, 1) ?>%</td>
-                                <td class="px-4 py-2"><?= number_format($avg_evaluation, 1) ?>%</td>
-                                <td class="px-4 py-2"><?= number_format($avg_practical, 1) ?>%</td>
                                 <td class="px-4 py-2"><?= number_format($avg_overall, 1) ?>%</td>
                             </tr>
                         <?php endif; ?>
@@ -602,29 +517,20 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
     new Chart(domainsCtx, {
         type: 'bar',
         data: {
-            labels: ['التخطيط', 'تنفيذ الدرس', 'الإدارة الصفية', 'التقويم', 'النشاط العملي'],
+            labels: ['تنفيذ الدرس', 'الإدارة الصفية'],
             datasets: [{
                 label: 'متوسط الأداء (%)',
                 data: [
-                    <?= number_format($avg_planning, 1) ?>,
                     <?= number_format($avg_lesson_execution, 1) ?>,
-                    <?= number_format($avg_classroom_management, 1) ?>,
-                    <?= number_format($avg_evaluation, 1) ?>,
-                    <?= number_format($avg_practical, 1) ?>
+                    <?= number_format($avg_classroom_management, 1) ?>
                 ],
                 backgroundColor: [
-                    'rgba(54, 162, 235, 0.5)',
                     'rgba(75, 192, 192, 0.5)',
-                    'rgba(255, 159, 64, 0.5)',
-                    'rgba(255, 99, 132, 0.5)',
-                    'rgba(153, 102, 255, 0.5)'
+                    'rgba(255, 159, 64, 0.5)'
                 ],
                 borderColor: [
-                    'rgba(54, 162, 235, 1)',
                     'rgba(75, 192, 192, 1)',
-                    'rgba(255, 159, 64, 1)',
-                    'rgba(255, 99, 132, 1)',
-                    'rgba(153, 102, 255, 1)'
+                    'rgba(255, 159, 64, 1)'
                 ],
                 borderWidth: 1
             }]
@@ -647,7 +553,7 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
         }
     });
     
-    // مخطط مقارنة المواد
+    // مخطط مقارنة المواد - تم تعديله ليكون طوليًا
     const subjectsCtx = document.getElementById('subjectsChart').getContext('2d');
     new Chart(subjectsCtx, {
         type: 'bar',
@@ -670,7 +576,7 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
             }]
         },
         options: {
-            indexAxis: 'y',
+            indexAxis: 'y', // هذا يجعل المخطط طوليًا بدلاً من عرضي
             scales: {
                 x: {
                     beginAtZero: true,

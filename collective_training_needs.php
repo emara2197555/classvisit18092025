@@ -77,13 +77,40 @@ $additional_workshops = [
 // المستويات المطلوبة لتحديد الاحتياج التدريبي
 $threshold_score = 2.5; // إذا كان متوسط الدرجات أقل من هذا الرقم يكون هناك احتياج تدريبي
 
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+if (!isset($_SESSION['selected_academic_year'])) {
+    // ابحث عن العام الأكاديمي النشط
+    $active_year = get_active_academic_year();
+    $_SESSION['selected_academic_year'] = $active_year['id'] ?? null;
+}
+
 // جلب المعلومات من النموذج
+$academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : $_SESSION['selected_academic_year'];
+$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 $semester = isset($_GET['semester']) ? $_GET['semester'] : null;
 $visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id'] : 0;
 
-// جلب قائمة المواد
+// جلب قائمة الأعوام الأكاديمية
+$academic_years = query("SELECT * FROM academic_years ORDER BY is_current DESC, name DESC");
+
+// جلب قائمة المدارس
+$schools = query("SELECT * FROM schools ORDER BY name");
+
+// جلب قائمة المواد حسب المدرسة
+$subjects = [];
+if ($school_id > 0) {
+    $subjects = query("
+        SELECT DISTINCT s.* 
+        FROM subjects s
+        JOIN teacher_subjects ts ON s.id = ts.subject_id
+        JOIN teachers t ON ts.teacher_id = t.id
+        WHERE t.school_id = ?
+        ORDER BY s.name
+    ", [$school_id]);
+} else {
 $subjects = query("SELECT * FROM subjects ORDER BY name");
+}
 
 // جلب قائمة أنواع الزائرين
 $visitor_types = query("SELECT * FROM visitor_types ORDER BY id");
@@ -217,7 +244,8 @@ if ($subject_id) {
                 ei.id AS indicator_id,
                 ei.name AS indicator_name,
                 AVG(ve.score) AS avg_score,
-                (AVG(ve.score) * 25) AS percentage_score
+                (AVG(ve.score) * 25) AS percentage_score,
+                COUNT(DISTINCT v.id) as visit_count
             FROM 
                 visit_evaluations ve
             JOIN 
@@ -243,15 +271,13 @@ if ($subject_id) {
         foreach ($visitor_data as $item) {
             $metrics[$item['indicator_id']] = [
                 'avg_score' => $item['avg_score'],
-                'percentage_score' => $item['percentage_score']
+                'percentage_score' => $item['percentage_score'],
+                'visit_count' => $item['visit_count']
             ];
         }
         
         if (!empty($metrics)) {
-            $visitor_metrics[$visitor_type['id']] = [
-                'name' => $visitor_type['name'],
-                'metrics' => $metrics
-            ];
+            $visitor_metrics[$visitor_type['id']] = $metrics;
         }
     }
 }
@@ -262,12 +288,37 @@ if ($subject_id) {
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+                <!-- العام الأكاديمي -->
+                <div>
+                    <label for="academic_year_id" class="block mb-1">العام الأكاديمي</label>
+                    <select id="academic_year_id" name="academic_year_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" required>
+                        <?php foreach ($academic_years as $year): ?>
+                            <option value="<?= $year['id'] ?>" <?= $academic_year_id == $year['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($year['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- المدرسة -->
+                <div>
+                    <label for="school_id" class="block mb-1">المدرسة</label>
+                    <select id="school_id" name="school_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="">اختر المدرسة...</option>
+                        <?php foreach ($schools as $school): ?>
+                            <option value="<?= $school['id'] ?>" <?= $school_id == $school['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($school['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- المادة -->
                 <div>
                     <label for="subject_id" class="block mb-1">المادة</label>
-                    <select id="subject_id" name="subject_id" class="w-full rounded border-gray-300" required>
+                    <select id="subject_id" name="subject_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" required>
                         <option value="">اختر المادة...</option>
-                        <option value="0" <?= $subject_id === 0 ? 'selected' : '' ?>>كل المواد</option>
                         <?php foreach ($subjects as $subject): ?>
                             <option value="<?= $subject['id'] ?>" <?= $subject_id == $subject['id'] ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($subject['name']) ?>
@@ -276,9 +327,10 @@ if ($subject_id) {
                     </select>
                 </div>
                 
+                <!-- نوع الزائر -->
                 <div>
                     <label for="visitor_type_id" class="block mb-1">نوع الزائر</label>
-                    <select id="visitor_type_id" name="visitor_type_id" class="w-full rounded border-gray-300">
+                    <select id="visitor_type_id" name="visitor_type_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="">جميع الزائرين</option>
                         <?php foreach ($visitor_types as $type): ?>
                             <option value="<?= $type['id'] ?>" <?= $visitor_type_id == $type['id'] ? 'selected' : '' ?>>
@@ -288,17 +340,19 @@ if ($subject_id) {
                     </select>
                 </div>
                 
+                <!-- الفصل الدراسي -->
                 <div>
                     <label for="semester" class="block mb-1">الفصل الدراسي</label>
-                    <select id="semester" name="semester" class="w-full rounded border-gray-300">
+                    <select id="semester" name="semester" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="">جميع الفصول</option>
                         <option value="first" <?= $semester == 'first' ? 'selected' : '' ?>>الفصل الأول</option>
                         <option value="second" <?= $semester == 'second' ? 'selected' : '' ?>>الفصل الثاني</option>
                     </select>
                 </div>
                 
+                <!-- زر البحث -->
                 <div class="flex items-end">
-                    <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+                    <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors w-full">
                         عرض الاحتياجات التدريبية
                     </button>
                 </div>
@@ -412,21 +466,16 @@ if ($subject_id) {
                                 <thead class="bg-gray-100">
                                     <tr>
                                         <th class="py-3 px-4 border-b text-right">المؤشر</th>
-                                        <?php foreach ($visitor_metrics as $id => $visitor): ?>
-                                            <th class="py-3 px-4 border-b text-center"><?= htmlspecialchars($visitor['name']) ?></th>
-                                        <?php endforeach; ?>
+                                        <th class="py-3 px-4 border-b text-center">منسق المادة</th>
+                                        <th class="py-3 px-4 border-b text-center">موجه المادة</th>
+                                        <th class="py-3 px-4 border-b text-center">النائب الأكاديمي</th>
+                                        <th class="py-3 px-4 border-b text-center">مدير المدرسة</th>
+                                        <th class="py-3 px-4 border-b text-center">متوسط الدرجة</th>
+                                        <th class="py-3 px-4 border-b text-center">النسبة المئوية</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php 
-                                    // بناء قائمة بجميع المؤشرات التي تم تقييمها
-                                    $all_indicators = [];
-                                    foreach ($visitor_metrics as $visitor) {
-                                        foreach ($visitor['metrics'] as $indicator_id => $data) {
-                                            $all_indicators[$indicator_id] = true;
-                                        }
-                                    }
-                                    
                                     // جلب أسماء المؤشرات
                                     $indicators_names = [];
                                     $indicators_list = query("SELECT id, name FROM evaluation_indicators ORDER BY id");
@@ -435,36 +484,109 @@ if ($subject_id) {
                                     }
                                     
                                     // عرض البيانات لكل مؤشر
-                                    foreach ($all_indicators as $indicator_id => $dummy):
-                                        $indicator_name = isset($indicators_names[$indicator_id]) ? $indicators_names[$indicator_id] : "مؤشر #".$indicator_id;
+                                    foreach ($indicators_names as $indicator_id => $indicator_name):
+                                        // حساب المتوسط الكلي للمؤشر
+                                        $total_score = 0;
+                                        $total_visits = 0;
+                                        $visitor_count = 0;
+                                        
+                                        foreach ([15, 16, 17, 18] as $visitor_id) {
+                                            if (isset($visitor_metrics[$visitor_id][$indicator_id])) {
+                                                $score = $visitor_metrics[$visitor_id][$indicator_id];
+                                                $total_score += ($score['avg_score'] * $score['visit_count']);
+                                                $total_visits += $score['visit_count'];
+                                                $visitor_count++;
+                                            }
+                                        }
+                                        
+                                        $avg_score = $total_visits > 0 ? $total_score / $total_visits : 0;
+                                        $percentage_score = $avg_score * 25;
                                     ?>
                                         <tr>
                                             <td class="py-2 px-4 border-b"><?= htmlspecialchars($indicator_name) ?></td>
-                                            <?php foreach ($visitor_metrics as $id => $visitor): ?>
+                                            <!-- منسق المادة -->
+                                            <td class="py-2 px-4 border-b text-center">
+                                                <?php
+                                                if (isset($visitor_metrics[15][$indicator_id])) {
+                                                    $score = $visitor_metrics[15][$indicator_id];
+                                                    echo number_format($score['percentage_score'], 1) . '%';
+                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- موجه المادة -->
+                                            <td class="py-2 px-4 border-b text-center">
+                                                <?php
+                                                if (isset($visitor_metrics[16][$indicator_id])) {
+                                                    $score = $visitor_metrics[16][$indicator_id];
+                                                    echo number_format($score['percentage_score'], 1) . '%';
+                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- النائب الأكاديمي -->
+                                            <td class="py-2 px-4 border-b text-center">
+                                                <?php
+                                                if (isset($visitor_metrics[17][$indicator_id])) {
+                                                    $score = $visitor_metrics[17][$indicator_id];
+                                                    echo number_format($score['percentage_score'], 1) . '%';
+                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- مدير المدرسة -->
+                                            <td class="py-2 px-4 border-b text-center">
+                                                <?php
+                                                if (isset($visitor_metrics[18][$indicator_id])) {
+                                                    $score = $visitor_metrics[18][$indicator_id];
+                                                    echo number_format($score['percentage_score'], 1) . '%';
+                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- متوسط الدرجة -->
+                                            <td class="py-2 px-4 border-b text-center">
+                                                <?php
+                                                if ($total_visits > 0) {
+                                                    echo number_format($avg_score, 2);
+                                                    echo '<br><small class="text-muted">(' . $total_visits . ' زيارة)</small>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- النسبة المئوية -->
                                                 <td class="py-2 px-4 border-b text-center">
-                                                    <?php if (isset($visitor['metrics'][$indicator_id])): 
-                                                        $score = $visitor['metrics'][$indicator_id]['percentage_score'];
+                                                <?php
+                                                if ($total_visits > 0) {
                                                         $score_class = '';
-                                                        if ($score < 50) {
+                                                    if ($percentage_score < 50) {
                                                             $score_class = 'text-red-700';
-                                                        } elseif ($score < 60) {
+                                                    } elseif ($percentage_score < 60) {
                                                             $score_class = 'text-orange-700';
-                                                        } elseif ($score < 70) {
+                                                    } elseif ($percentage_score < 70) {
                                                             $score_class = 'text-yellow-700';
-                                                        } elseif ($score < 80) {
+                                                    } elseif ($percentage_score < 80) {
                                                             $score_class = 'text-blue-700';
                                                         } else {
                                                             $score_class = 'text-green-700';
-                                                        }
-                                                    ?>
-                                                        <span class="<?= $score_class ?>">
-                                                            <?= number_format($score, 2) ?>%
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="text-gray-400">-</span>
-                                                    <?php endif; ?>
+                                                    }
+                                                    echo '<span class="' . $score_class . '">';
+                                                    echo number_format($percentage_score, 1) . '%';
+                                                    echo '</span>';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
                                                 </td>
-                                            <?php endforeach; ?>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -514,6 +636,112 @@ if ($subject_id) {
         <?php endif; ?>
     </div>
 </div>
+
+<!-- عرض جدول المقارنة -->
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead>
+            <tr>
+                <th>المؤشر</th>
+                <th>منسق المادة</th>
+                <th>موجه المادة</th>
+                <th>النائب الأكاديمي</th>
+                <th>مدير المدرسة</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($collective_needs as $indicator_id => $need): ?>
+                <tr>
+                    <td>
+                        <?php echo htmlspecialchars($need['indicator_name']); ?>
+                    </td>
+                    <!-- منسق المادة -->
+                    <td>
+                        <?php
+                        if (isset($visitor_metrics[15][$indicator_id])) {
+                            $score = $visitor_metrics[15][$indicator_id];
+                            echo number_format($score['percentage_score'], 1) . '%';
+                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                        } else {
+                            echo '-';
+                        }
+                        ?>
+                    </td>
+                    <!-- موجه المادة -->
+                    <td>
+                        <?php
+                        if (isset($visitor_metrics[16][$indicator_id])) {
+                            $score = $visitor_metrics[16][$indicator_id];
+                            echo number_format($score['percentage_score'], 1) . '%';
+                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                        } else {
+                            echo '-';
+                        }
+                        ?>
+                    </td>
+                    <!-- النائب الأكاديمي -->
+                    <td>
+                        <?php
+                        if (isset($visitor_metrics[17][$indicator_id])) {
+                            $score = $visitor_metrics[17][$indicator_id];
+                            echo number_format($score['percentage_score'], 1) . '%';
+                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                        } else {
+                            echo '-';
+                        }
+                        ?>
+                    </td>
+                    <!-- مدير المدرسة -->
+                    <td>
+                        <?php
+                        if (isset($visitor_metrics[18][$indicator_id])) {
+                            $score = $visitor_metrics[18][$indicator_id];
+                            echo number_format($score['percentage_score'], 1) . '%';
+                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                        } else {
+                            echo '-';
+                        }
+                        ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+
+<!-- إضافة سكريبت JavaScript في نهاية الملف -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const schoolSelect = document.getElementById('school_id');
+    const subjectSelect = document.getElementById('subject_id');
+    
+    // دالة لتحديث قائمة المواد
+    function updateSubjects(schoolId) {
+        // تفريغ قائمة المواد
+        subjectSelect.innerHTML = '<option value="">اختر المادة...</option>';
+        
+        if (schoolId) {
+            // جلب المواد من الخادم
+            fetch(`api/get_subjects.php?school_id=${schoolId}`)
+                .then(response => response.json())
+                .then(subjects => {
+                    subjects.forEach(subject => {
+                        const option = document.createElement('option');
+                        option.value = subject.id;
+                        option.textContent = subject.name;
+                        subjectSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+    }
+    
+    // تحديث المواد عند تغيير المدرسة
+    schoolSelect.addEventListener('change', function() {
+        updateSubjects(this.value);
+    });
+});
+</script>
 
 <?php
 // تضمين ملف ذيل الصفحة

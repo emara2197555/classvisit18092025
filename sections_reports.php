@@ -17,15 +17,36 @@ require_once 'includes/header.php';
 $level_id = isset($_GET['level_id']) ? (int)$_GET['level_id'] : 0;
 $grade_id = isset($_GET['grade_id']) ? (int)$_GET['grade_id'] : 0;
 $academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : 0;
+$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
+$term = isset($_GET['term']) ? $_GET['term'] : 'all';
 
-// جلب العام الدراسي النشط إذا لم يتم تحديد عام
+// تحديد العام الدراسي النشط إذا لم يتم تحديد عام
+$year = null;
+$academic_year_name = '';
+
 if (!$academic_year_id) {
     $active_year = get_active_academic_year();
     $academic_year_id = $active_year ? $active_year['id'] : 0;
     $academic_year_name = $active_year ? $active_year['name'] : '';
 } else {
-    $year = query_row("SELECT name FROM academic_years WHERE id = ?", [$academic_year_id]);
+    $year = query_row("SELECT name, first_term_start, first_term_end, second_term_start, second_term_end FROM academic_years WHERE id = ?", [$academic_year_id]);
     $academic_year_name = $year ? $year['name'] : '';
+}
+
+// تحديد معلومات الفلتر للفصل الدراسي
+$date_filter = "";
+$date_params = [];
+
+if ($academic_year_id > 0 && $term != 'all' && $year) {
+    if ($term == 'first' && !empty($year['first_term_start']) && !empty($year['first_term_end'])) {
+        $date_filter = " AND v.visit_date BETWEEN ? AND ?";
+        $date_params[] = $year['first_term_start'];
+        $date_params[] = $year['first_term_end'];
+    } elseif ($term == 'second' && !empty($year['second_term_start']) && !empty($year['second_term_end'])) {
+        $date_filter = " AND v.visit_date BETWEEN ? AND ?";
+        $date_params[] = $year['second_term_start'];
+        $date_params[] = $year['second_term_end'];
+    }
 }
 
 // جلب جميع المراحل التعليمية
@@ -33,6 +54,9 @@ $educational_levels = query("SELECT * FROM educational_levels ORDER BY id");
 
 // جلب الأعوام الدراسية للاختيار
 $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
+
+// جلب قائمة المدارس للاختيار
+$schools = query("SELECT id, name FROM schools ORDER BY name");
 
 // إذا تم تحديد مرحلة، جلب الصفوف الخاصة بها
 $grades = [];
@@ -49,12 +73,15 @@ $sql = "
         g.name AS grade_name, 
         e.id AS level_id,
         e.name AS level_name,
+        sch.id AS school_id,
         sch.name AS school_name,
         (SELECT COUNT(DISTINCT v.id) 
          FROM visits v 
          WHERE v.section_id = s.id 
          AND v.grade_id = g.id
          " . ($academic_year_id > 0 ? " AND v.academic_year_id = ?" : "") . "
+         " . ($school_id > 0 ? " AND v.school_id = ?" : "") . "
+         " . $date_filter . "
         ) AS visits_count
     FROM 
         sections s
@@ -68,6 +95,7 @@ $sql = "
         1=1
         " . ($level_id > 0 ? " AND e.id = ?" : "") . "
         " . ($grade_id > 0 ? " AND g.id = ?" : "") . "
+        " . ($school_id > 0 ? " AND sch.id = ?" : "") . "
     ORDER BY 
         e.id, g.id, s.name
 ";
@@ -77,11 +105,20 @@ $query_params = [];
 if ($academic_year_id > 0) {
     $query_params[] = $academic_year_id;
 }
+if ($school_id > 0) {
+    $query_params[] = $school_id;
+}
+if (!empty($date_filter)) {
+    $query_params = array_merge($query_params, $date_params);
+}
 if ($level_id > 0) {
     $query_params[] = $level_id;
 }
 if ($grade_id > 0) {
     $query_params[] = $grade_id;
+}
+if ($school_id > 0) {
+    $query_params[] = $school_id;
 }
 
 $sections = query($sql, $query_params);
@@ -105,6 +142,17 @@ foreach ($sections as $section) {
     $organized_sections[$current_level][$current_grade][] = $section;
 }
 
+// تحديد معلومات المدرسة المحددة
+$school_name = '';
+if ($school_id > 0) {
+    foreach ($schools as $school) {
+        if ($school['id'] == $school_id) {
+            $school_name = $school['name'];
+            break;
+        }
+    }
+}
+
 ?>
 
 <div class="container mx-auto py-6 px-4">
@@ -113,10 +161,10 @@ foreach ($sections as $section) {
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج التصفية -->
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                     <label for="level_id" class="block mb-1">المرحلة التعليمية</label>
-                    <select id="level_id" name="level_id" class="w-full rounded border-gray-300" onchange="this.form.submit()">
+                    <select id="level_id" name="level_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" onchange="this.form.submit()">
                         <option value="0">جميع المراحل</option>
                         <?php foreach ($educational_levels as $level): ?>
                             <option value="<?= $level['id'] ?>" <?= $level_id == $level['id'] ? 'selected' : '' ?>>
@@ -128,7 +176,7 @@ foreach ($sections as $section) {
                 
                 <div>
                     <label for="grade_id" class="block mb-1">الصف الدراسي</label>
-                    <select id="grade_id" name="grade_id" class="w-full rounded border-gray-300" onchange="this.form.submit()" <?= $level_id == 0 ? 'disabled' : '' ?>>
+                    <select id="grade_id" name="grade_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" onchange="this.form.submit()" <?= $level_id == 0 ? 'disabled' : '' ?>>
                         <option value="0">جميع الصفوف</option>
                         <?php foreach ($grades as $grade): ?>
                             <option value="<?= $grade['id'] ?>" <?= $grade_id == $grade['id'] ? 'selected' : '' ?>>
@@ -140,11 +188,32 @@ foreach ($sections as $section) {
                 
                 <div>
                     <label for="academic_year_id" class="block mb-1">العام الدراسي</label>
-                    <select id="academic_year_id" name="academic_year_id" class="w-full rounded border-gray-300" onchange="this.form.submit()">
+                    <select id="academic_year_id" name="academic_year_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" onchange="this.form.submit()">
                         <option value="0">جميع الأعوام الدراسية</option>
                         <?php foreach ($academic_years as $year): ?>
                             <option value="<?= $year['id'] ?>" <?= $academic_year_id == $year['id'] ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($year['name']) ?> <?= $year['is_active'] ? '(نشط)' : '' ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="term" class="block mb-1">الفصل الدراسي</label>
+                    <select id="term" name="term" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" onchange="this.form.submit()">
+                        <option value="all" <?= $term == 'all' ? 'selected' : '' ?>>الكل</option>
+                        <option value="first" <?= $term == 'first' ? 'selected' : '' ?>>الفصل الأول</option>
+                        <option value="second" <?= $term == 'second' ? 'selected' : '' ?>>الفصل الثاني</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="school_id" class="block mb-1">المدرسة</label>
+                    <select id="school_id" name="school_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" onchange="this.form.submit()">
+                        <option value="0">جميع المدارس</option>
+                        <?php foreach ($schools as $school): ?>
+                            <option value="<?= $school['id'] ?>" <?= $school_id == $school['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($school['name']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -157,11 +226,20 @@ foreach ($sections as $section) {
                 لا توجد شعب دراسية متاحة ضمن المعايير المحددة. يرجى تعديل معايير التصفية.
             </div>
         <?php else: ?>
-            <?php if ($academic_year_id > 0): ?>
-                <div class="mb-4 text-center text-lg font-semibold">
-                    <span>تقارير الشعب للعام الدراسي: <?= htmlspecialchars($academic_year_name) ?></span>
-                </div>
-            <?php endif; ?>
+            <div class="mb-4 text-center text-lg font-semibold">
+                <span>
+                    تقارير الشعب
+                    <?php if ($academic_year_id > 0): ?>
+                        للعام الدراسي: <?= htmlspecialchars($academic_year_name) ?>
+                    <?php endif; ?>
+                    <?php if ($term != 'all'): ?>
+                        (<?= $term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)
+                    <?php endif; ?>
+                    <?php if ($school_id > 0): ?>
+                        - مدرسة: <?= htmlspecialchars($school_name) ?>
+                    <?php endif; ?>
+                </span>
+            </div>
             
             <!-- عرض الشعب حسب المرحلة والصف -->
             <?php foreach ($organized_sections as $level_name => $level_grades): ?>

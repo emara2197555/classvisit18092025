@@ -12,17 +12,67 @@ $page_title = 'تقرير مقارنة أداء الصفوف والشعب';
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
 
-// تحديد العام الدراسي (يمكن جعلها متغيرة وأخذها من النموذج)
-$academic_year = isset($_GET['academic_year']) ? $_GET['academic_year'] : '2024/2025';
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+if (!isset($_SESSION['selected_academic_year'])) {
+    // ابحث عن العام الأكاديمي النشط
+    $active_year = get_active_academic_year();
+    $_SESSION['selected_academic_year'] = $active_year['id'] ?? null;
+    $_SESSION['selected_term'] = 'all';
+}
 
-// تحديد نوع الزائر (النائب الأكاديمي)
-$visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id'] : 2; // النائب الأكاديمي هو 2
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم أو من النموذج
+$academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : ($_SESSION['selected_academic_year'] ?? 0);
+$selected_term = isset($_GET['term']) ? $_GET['term'] : ($_SESSION['selected_term'] ?? 'all');
 
-// جلب معرف المدرسة الافتراضية
-$school_id = query_row("SELECT id FROM schools LIMIT 1");
-$school_id = $school_id ? $school_id['id'] : 0;
+// الحصول على تفاصيل العام الأكاديمي المحدد
+$current_year_query = "SELECT * FROM academic_years WHERE id = ?";
+$current_year_data = query_row($current_year_query, [$academic_year_id]);
+$academic_year = $current_year_data ? $current_year_data['name'] : '2024/2025';
 
-// استعلام لجلب جميع الصفوف والشعب مع عدد الزيارات ومتوسط درجات تنفيذ الدرس والإدارة الصفية
+// تحديد تواريخ الفصول الدراسية
+$first_term_start = $current_year_data['first_term_start'] ?? null;
+$first_term_end = $current_year_data['first_term_end'] ?? null;
+$second_term_start = $current_year_data['second_term_start'] ?? null;
+$second_term_end = $current_year_data['second_term_end'] ?? null;
+
+// تحديد معلومات الفلتر للفصل الدراسي 
+$date_filter = "";
+$date_params = [];
+
+if ($selected_term == 'first' && $first_term_start && $first_term_end) {
+    $date_filter = " AND v.visit_date BETWEEN ? AND ?";
+    $date_params[] = $first_term_start;
+    $date_params[] = $first_term_end;
+} elseif ($selected_term == 'second' && $second_term_start && $second_term_end) {
+    $date_filter = " AND v.visit_date BETWEEN ? AND ?";
+    $date_params[] = $second_term_start;
+    $date_params[] = $second_term_end;
+}
+
+// تحديد نوع الزائر
+$visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id'] : 0;
+
+// تحديد المدرسة
+$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
+if (!$school_id) {
+    $default_school = query_row("SELECT id FROM schools LIMIT 1");
+    $school_id = $default_school ? $default_school['id'] : 0;
+}
+
+// تحديد المادة الدراسية
+$subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
+
+// تحديد المعلم
+$teacher_id = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
+
+// جلب قوائم الخيارات للنماذج
+$academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
+$schools = query("SELECT id, name FROM schools ORDER BY name");
+$subjects = query("SELECT id, name FROM subjects ORDER BY name");
+$teachers = query("SELECT id, name FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+$visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
+
+// تعديل استعلام جلب البيانات ليشمل جميع الفلاتر
 $sql = "
     SELECT 
         g.id AS grade_id,
@@ -37,7 +87,11 @@ $sql = "
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
          WHERE vs.grade_id = g.id 
            AND vs.section_id = s.id
+           AND vs.school_id = ?
            " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
+           " . ($subject_id > 0 ? "AND vs.subject_id = ?" : "") . "
+           " . ($teacher_id > 0 ? "AND vs.teacher_id = ?" : "") . "
+           " . (!empty($date_filter) ? str_replace('v.', 'vs.', $date_filter) : "") . "
            AND ei.domain_id = 2
            AND ve.score > 0) AS lesson_execution_avg,
            
@@ -48,7 +102,11 @@ $sql = "
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
          WHERE vs.grade_id = g.id 
            AND vs.section_id = s.id
+           AND vs.school_id = ?
            " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
+           " . ($subject_id > 0 ? "AND vs.subject_id = ?" : "") . "
+           " . ($teacher_id > 0 ? "AND vs.teacher_id = ?" : "") . "
+           " . (!empty($date_filter) ? str_replace('v.', 'vs.', $date_filter) : "") . "
            AND ei.domain_id = 3
            AND ve.score > 0) AS classroom_management_avg
     FROM 
@@ -56,7 +114,12 @@ $sql = "
     CROSS JOIN
         sections s
     LEFT JOIN 
-        visits v ON g.id = v.grade_id AND s.id = v.section_id " . ($visitor_type_id > 0 ? "AND v.visitor_type_id = ?" : "") . "
+        visits v ON g.id = v.grade_id AND s.id = v.section_id 
+            AND v.school_id = ?
+            " . ($visitor_type_id > 0 ? "AND v.visitor_type_id = ?" : "") . "
+            " . ($subject_id > 0 ? "AND v.subject_id = ?" : "") . "
+            " . ($teacher_id > 0 ? "AND v.teacher_id = ?" : "") . "
+            " . (!empty($date_filter) ? $date_filter : "") . "
     WHERE
         EXISTS (
             SELECT 1 
@@ -64,6 +127,10 @@ $sql = "
             WHERE vs.grade_id = g.id 
             AND vs.section_id = s.id
             AND vs.school_id = ?
+            " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
+            " . ($subject_id > 0 ? "AND vs.subject_id = ?" : "") . "
+            " . ($teacher_id > 0 ? "AND vs.teacher_id = ?" : "") . "
+            " . (!empty($date_filter) ? str_replace('v.', 'vs.', $date_filter) : "") . "
         )
     GROUP BY 
         g.id, s.id, g.name, s.name
@@ -72,11 +139,64 @@ $sql = "
 ";
 
 // تحضير المعلمات للاستعلام
-$query_params = [];
+$query_params = [$school_id];
 if ($visitor_type_id > 0) {
-    $query_params = [$visitor_type_id, $visitor_type_id, $visitor_type_id];
+    $query_params[] = $visitor_type_id;
 }
+if ($subject_id > 0) {
+    $query_params[] = $subject_id;
+}
+if ($teacher_id > 0) {
+    $query_params[] = $teacher_id;
+}
+if (!empty($date_filter)) {
+    $query_params = array_merge($query_params, $date_params);
+}
+
+// تكرار المعلمات للاستعلام الفرعي الثاني
 $query_params[] = $school_id;
+if ($visitor_type_id > 0) {
+    $query_params[] = $visitor_type_id;
+}
+if ($subject_id > 0) {
+    $query_params[] = $subject_id;
+}
+if ($teacher_id > 0) {
+    $query_params[] = $teacher_id;
+}
+if (!empty($date_filter)) {
+    $query_params = array_merge($query_params, $date_params);
+}
+
+// تكرار المعلمات للاستعلام LEFT JOIN
+$query_params[] = $school_id;
+if ($visitor_type_id > 0) {
+    $query_params[] = $visitor_type_id;
+}
+if ($subject_id > 0) {
+    $query_params[] = $subject_id;
+}
+if ($teacher_id > 0) {
+    $query_params[] = $teacher_id;
+}
+if (!empty($date_filter)) {
+    $query_params = array_merge($query_params, $date_params);
+}
+
+// تكرار المعلمات للاستعلام EXISTS
+$query_params[] = $school_id;
+if ($visitor_type_id > 0) {
+    $query_params[] = $visitor_type_id;
+}
+if ($subject_id > 0) {
+    $query_params[] = $subject_id;
+}
+if ($teacher_id > 0) {
+    $query_params[] = $teacher_id;
+}
+if (!empty($date_filter)) {
+    $query_params = array_merge($query_params, $date_params);
+}
 
 $classes_data = query($sql, $query_params);
 
@@ -149,9 +269,6 @@ if ($visitor_type_id > 0) {
     $visitor_type = query_row("SELECT name FROM visitor_types WHERE id = ?", [$visitor_type_id]);
     $visitor_type_name = $visitor_type ? $visitor_type['name'] : 'النائب الأكاديمي';
 }
-
-// جلب جميع أنواع الزائرين للاختيار
-$visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
 ?>
 
 <div class="mb-6">
@@ -162,17 +279,68 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
         <form action="" method="get" class="mb-6">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <label for="academic_year" class="block mb-1">العام الدراسي</label>
-                    <input type="text" id="academic_year" name="academic_year" class="w-full rounded border-gray-300" value="<?= htmlspecialchars($academic_year) ?>">
+                    <label for="academic_year_id" class="block mb-1">العام الدراسي</label>
+                    <select id="academic_year_id" name="academic_year_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <?php foreach ($academic_years as $year): ?>
+                            <option value="<?= $year['id'] ?>" <?= $academic_year_id == $year['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($year['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="term" class="block mb-1">الفصل الدراسي</label>
+                    <select id="term" name="term" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="all" <?= $selected_term == 'all' ? 'selected' : '' ?>>الكل</option>
+                        <option value="first" <?= $selected_term == 'first' ? 'selected' : '' ?>>الفصل الأول</option>
+                        <option value="second" <?= $selected_term == 'second' ? 'selected' : '' ?>>الفصل الثاني</option>
+                    </select>
                 </div>
                 
                 <div>
                     <label for="visitor_type_id" class="block mb-1">نوع الزائر</label>
-                    <select id="visitor_type_id" name="visitor_type_id" class="w-full rounded border-gray-300">
+                    <select id="visitor_type_id" name="visitor_type_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="0" <?= $visitor_type_id == 0 ? 'selected' : '' ?>>الكل</option>
                         <?php foreach ($visitor_types as $type): ?>
                             <option value="<?= $type['id'] ?>" <?= $visitor_type_id == $type['id'] ? 'selected' : '' ?>>
                                 <?= htmlspecialchars($type['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="school_id" class="block mb-1">المدرسة</label>
+                    <select id="school_id" name="school_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="0" <?= $school_id == 0 ? 'selected' : '' ?>>الكل</option>
+                        <?php foreach ($schools as $school): ?>
+                            <option value="<?= $school['id'] ?>" <?= $school_id == $school['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($school['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="subject_id" class="block mb-1">المادة</label>
+                    <select id="subject_id" name="subject_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="0" <?= $subject_id == 0 ? 'selected' : '' ?>>الكل</option>
+                        <?php foreach ($subjects as $subject): ?>
+                            <option value="<?= $subject['id'] ?>" <?= $subject_id == $subject['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($subject['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="teacher_id" class="block mb-1">المعلم</label>
+                    <select id="teacher_id" name="teacher_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="0" <?= $teacher_id == 0 ? 'selected' : '' ?>>الكل</option>
+                        <?php foreach ($teachers as $teacher): ?>
+                            <option value="<?= $teacher['id'] ?>" <?= $teacher_id == $teacher['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($teacher['name']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -188,6 +356,33 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
         
         <h2 class="text-xl font-semibold mb-4 text-center">
             تقرير مقارنة أداء الصفوف والشعب بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($academic_year) ?>
+            <?php if ($selected_term != 'all'): ?>
+                (<?= $selected_term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)
+            <?php endif; ?>
+            <?php if ($subject_id > 0): ?>
+                <?php 
+                $subject_name = '';
+                foreach ($subjects as $subject) { 
+                    if ($subject['id'] == $subject_id) { 
+                        $subject_name = $subject['name']; 
+                        break; 
+                    } 
+                } 
+                ?>
+                - مادة: <?= htmlspecialchars($subject_name) ?>
+            <?php endif; ?>
+            <?php if ($teacher_id > 0): ?>
+                <?php 
+                $teacher_name = '';
+                foreach ($teachers as $teacher) { 
+                    if ($teacher['id'] == $teacher_id) { 
+                        $teacher_name = $teacher['name']; 
+                        break; 
+                    } 
+                } 
+                ?>
+                - معلم: <?= htmlspecialchars($teacher_name) ?>
+            <?php endif; ?>
         </h2>
         
         <!-- جدول التقرير -->

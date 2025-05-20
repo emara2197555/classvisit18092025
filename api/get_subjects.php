@@ -3,34 +3,30 @@
  * API لجلب المواد الدراسية
  */
 
-// تضمين ملف الاتصال بقاعدة البيانات
+// تضمين ملفات قاعدة البيانات والوظائف
 require_once '../includes/db_connection.php';
+require_once '../includes/functions.php';
 
-// التحقق من وجود معرف المدرسة (اختياري)
-$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : null;
+// التأكد من وجود معرف المدرسة
+$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 
-try {
-    if ($school_id) {
-        // جلب المواد المرتبطة بالمدرسة
-        $sql = "SELECT id, name FROM subjects WHERE school_id = ? OR school_id IS NULL ORDER BY name";
-        $subjects = query($sql, [$school_id]);
-    } else {
-        // جلب جميع المواد
-        $sql = "SELECT id, name FROM subjects ORDER BY name";
-        $subjects = query($sql);
-    }
-
+// التحقق من صحة المعرف
+if ($school_id <= 0) {
     header('Content-Type: application/json');
-    echo json_encode([
-        'success' => true,
-        'message' => '',
-        'subjects' => $subjects
-    ]);
-} catch (PDOException $e) {
-    header('Content-Type: application/json');
-    echo json_encode([
-        'success' => false,
-        'message' => 'حدث خطأ أثناء جلب البيانات',
-        'subjects' => []
-    ]);
-} 
+    echo json_encode([]);
+    exit;
+}
+
+// جلب المواد المرتبطة بالمدرسة
+$subjects = query("
+    SELECT DISTINCT s.* 
+    FROM subjects s
+    JOIN teacher_subjects ts ON s.id = ts.subject_id
+    JOIN teachers t ON ts.teacher_id = t.id
+    WHERE t.school_id = ?
+    ORDER BY s.name
+", [$school_id]);
+
+// إرجاع النتائج بتنسيق JSON
+header('Content-Type: application/json');
+echo json_encode($subjects); 

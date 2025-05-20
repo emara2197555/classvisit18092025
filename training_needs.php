@@ -49,14 +49,77 @@ $workshops_mapping = [
 // المستويات المطلوبة لتحديد الاحتياج التدريبي
 $threshold_score = 2.5; // إذا كان متوسط الدرجات أقل من هذا الرقم يكون هناك احتياج تدريبي
 
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+if (!isset($_SESSION['selected_academic_year'])) {
+    // ابحث عن العام الأكاديمي النشط
+    $active_year = get_active_academic_year();
+    $_SESSION['selected_academic_year'] = $active_year['id'] ?? null;
+    $_SESSION['selected_term'] = 'all';
+}
+
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+$academic_year_id = $_SESSION['selected_academic_year'];
+$selected_term = $_SESSION['selected_term'] ?? 'all';
+
 // التحقق من وجود معلم محدد
 $teacher_id = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
+
+// اختيار المادة
+$subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
+
+// اختيار المدرسة
+$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 
 // الفصل الدراسي (اختياري)
 $semester = isset($_GET['semester']) ? $_GET['semester'] : null;
 
-// جلب قائمة المعلمين
-$teachers = query("SELECT * FROM teachers ORDER BY name");
+// جلب قائمة المدارس
+$schools = query("SELECT * FROM schools ORDER BY name");
+
+// جلب جميع المواد للاختيار الأولي (سيتم تحديثها بالجافاسكريبت)
+$subjects = [];
+if ($school_id > 0) {
+    // جلب المواد حسب المدرسة المختارة
+    $subjects = query("
+        SELECT DISTINCT s.* 
+        FROM subjects s
+        JOIN teacher_subjects ts ON s.id = ts.subject_id
+        JOIN teachers t ON ts.teacher_id = t.id
+        WHERE t.school_id = ?
+        ORDER BY s.name
+    ", [$school_id]);
+} else {
+    // جلب كل المواد إذا لم تختر مدرسة
+    $subjects = query("SELECT * FROM subjects ORDER BY name");
+}
+
+// جلب المعلمين حسب المدرسة والمادة المختارة
+$teachers = [];
+if ($school_id > 0) {
+    if ($subject_id > 0) {
+        // جلب المعلمين حسب المدرسة والمادة
+        $teachers = query("
+            SELECT t.* 
+            FROM teachers t
+            JOIN teacher_subjects ts ON t.id = ts.teacher_id
+            WHERE t.job_title = 'معلم' 
+            AND t.school_id = ? 
+            AND ts.subject_id = ?
+            ORDER BY t.name
+        ", [$school_id, $subject_id]);
+    } else {
+        // جلب كل المعلمين في المدرسة
+        $teachers = query("
+            SELECT * FROM teachers 
+            WHERE job_title = 'معلم' 
+            AND school_id = ? 
+            ORDER BY name
+        ", [$school_id]);
+    }
+} else {
+    // جلب كل المعلمين إذا لم تختر مدرسة
+    $teachers = query("SELECT * FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+}
 
 // جلب بيانات المعلم المحدد إن وجد
 $teacher = null;
@@ -69,6 +132,7 @@ $training_needs = [];
 if ($teacher) {
     // بناء شرط الفصل الدراسي اختيارياً
     $semester_condition = '';
+    $subject_condition = '';
     $params = [$teacher_id];
     
     if ($semester) {
@@ -79,6 +143,12 @@ if ($teacher) {
         } else if ($semester == 'second') {
             $semester_condition = "AND MONTH(v.visit_date) BETWEEN 3 AND 8";
         }
+    }
+    
+    // شرط المادة
+    if ($subject_id > 0) {
+        $subject_condition = "AND v.subject_id = ?";
+        $params[] = $subject_id;
     }
     
     // استعلام لجلب متوسط التقييمات لكل مؤشر لهذا المعلم
@@ -103,7 +173,10 @@ if ($teacher) {
         LEFT JOIN
             visitor_types vt ON v.visitor_type_id = vt.id
         WHERE 
-            v.teacher_id = ? {$semester_condition}
+            v.teacher_id = ? 
+            {$semester_condition}
+            {$subject_condition}
+            AND v.academic_year_id = ?
             AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
         GROUP BY 
             ei.id, ei.name, ed.id, ed.name
@@ -111,19 +184,115 @@ if ($teacher) {
             ed.id, ei.id
     ";
     
+    // إضافة العام الأكاديمي للمعلمات
+    $params[] = $academic_year_id;
+    
     $indicators_data = query($sql, $params);
     
+    // جلب متوسطات الدرجات لكل نوع زائر على حدة
+    $visitor_types = [
+        18 => 'مدير', 
+        17 => 'النائب الأكاديمي', 
+        15 => 'منسق المادة',
+        16 => 'موجه المادة'
+    ];
+    $visitor_scores = [];
+    
+    // جلب بيانات تقييمات كل نوع زائر بشكل منفصل
+    $indicator_visitor_sql = "
+        WITH visit_scores AS (
+            SELECT 
+                ve.indicator_id,
+                v.visitor_type_id,
+                ve.score,
+                v.id as visit_id
+            FROM 
+                visits v
+                JOIN visit_evaluations ve ON v.id = ve.visit_id
+            WHERE 
+                v.teacher_id = ?
+                AND v.academic_year_id = ?
+                " . ($semester_condition ? $semester_condition : "") . "
+                " . ($subject_condition ? $subject_condition : "") . "
+                AND ve.score > 0
+        )
+        SELECT 
+            ei.id AS indicator_id,
+            ei.name AS indicator_name,
+            ed.id AS domain_id,
+            ed.name AS domain_name,
+            vs.visitor_type_id,
+            ROUND(AVG(vs.score), 2) AS avg_score,
+            COUNT(DISTINCT vs.visit_id) AS visit_count
+        FROM 
+            evaluation_indicators ei
+            JOIN evaluation_domains ed ON ei.domain_id = ed.id
+            LEFT JOIN visit_scores vs ON ei.id = vs.indicator_id
+        WHERE 
+            ei.id IN (
+                SELECT DISTINCT indicator_id 
+                FROM visit_scores
+            )
+        GROUP BY 
+            ei.id, ei.name, ed.id, ed.name, vs.visitor_type_id
+        ORDER BY 
+            ed.id, ei.id, vs.visitor_type_id
+    ";
+    
+    // إعداد المعلمات للاستعلام
+    $visitor_params = [
+        $teacher_id,
+        $academic_year_id
+    ];
+    
+    // إضافة معلمة المادة الدراسية إذا كانت محددة
+    if ($subject_id > 0) {
+        $visitor_params[] = $subject_id;
+    }
+    
+    $visitor_overall_data = query($indicator_visitor_sql, $visitor_params);
+    
+    // تنظيم البيانات في مصفوفة
+    foreach ($visitor_overall_data as $data) {
+        if ($data['visitor_type_id'] === null) continue;
+        
+        $indicator_id = $data['indicator_id'];
+        $visitor_type_id = $data['visitor_type_id'];
+        
+        if (!isset($visitor_scores[$indicator_id])) {
+            $visitor_scores[$indicator_id] = [];
+        }
+        
+        $visitor_scores[$indicator_id][$visitor_type_id] = [
+            'avg_score' => $data['avg_score'],
+            'visit_count' => $data['visit_count']
+        ];
+    }
+
     // تجهيز بيانات الاحتياجات التدريبية
     foreach ($indicators_data as $indicator) {
-        $needs_training = $indicator['avg_score'] < $threshold_score;
+        // حساب متوسط الدرجات من تقييمات الزائرين
+        $total_score = 0;
+        $total_visits = 0;
+        
+        foreach ($visitor_types as $visitor_type_id => $visitor_type_name) {
+            if (isset($visitor_scores[$indicator['indicator_id']][$visitor_type_id])) {
+                $score_data = $visitor_scores[$indicator['indicator_id']][$visitor_type_id];
+                $total_score += ($score_data['avg_score'] * $score_data['visit_count']);
+                $total_visits += $score_data['visit_count'];
+            }
+        }
+        
+        $avg_score = $total_visits > 0 ? round($total_score / $total_visits, 2) : 0;
+        $needs_training = $avg_score < $threshold_score;
         
         $training_needs[] = [
             'indicator_id' => $indicator['indicator_id'],
             'indicator_name' => $indicator['indicator_name'],
             'domain_id' => $indicator['domain_id'],
             'domain_name' => $indicator['domain_name'],
-            'avg_score' => $indicator['avg_score'],
-            'percentage_score' => $indicator['percentage_score'],
+            'avg_score' => $avg_score,
+            'percentage_score' => round($avg_score * 25, 2),
             'visitor_types' => $indicator['visitor_types'],
             'visitor_types_count' => $indicator['visitor_types_count'],
             'needs_training' => $needs_training,
@@ -131,7 +300,7 @@ if ($teacher) {
         ];
     }
     
-    // إحصائية عامة
+    // إحصائية عامة - مع التحقق من أن النتيجة ليست خالية
     $overall_stats = query_row("
         SELECT 
             AVG(ve.score) AS overall_avg,
@@ -141,50 +310,19 @@ if ($teacher) {
         JOIN 
             visits v ON ve.visit_id = v.id
         WHERE 
-            v.teacher_id = ? {$semester_condition}
+            v.teacher_id = ? 
+            {$semester_condition}
+            {$subject_condition}
+            AND v.academic_year_id = ?
             AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
     ", $params);
     
-    // جلب متوسطات الدرجات لكل نوع زائر على حدة
-    $visitor_types = [1 => 'المدير', 2 => 'النائب الأكاديمي', 3 => 'منسق المادة', 4 => 'موجه المادة'];
-    $visitor_scores = [];
-    
-    foreach ($visitor_types as $visitor_type_id => $visitor_type_name) {
-        $visitor_condition = "AND v.visitor_type_id = ?";
-        $visitor_params = [$teacher_id, $visitor_type_id];
-        
-        // إضافة شرط الفصل الدراسي إذا تم تحديده
-        if (!empty($semester_condition)) {
-            $visitor_params = array_merge([$teacher_id, $visitor_type_id], array_slice($params, 1));
-        }
-        
-        $visitor_sql = "
-            SELECT 
-                ei.id AS indicator_id,
-                AVG(ve.score) AS avg_score
-            FROM 
-                visit_evaluations ve
-            JOIN 
-                visits v ON ve.visit_id = v.id
-            JOIN 
-                evaluation_indicators ei ON ve.indicator_id = ei.id
-            WHERE 
-                v.teacher_id = ? {$visitor_condition} {$semester_condition}
-                AND ve.score > 0
-            GROUP BY 
-                ei.id
-            ORDER BY 
-                ei.id
-        ";
-        
-        $visitor_data = query($visitor_sql, $visitor_params);
-        
-        foreach ($visitor_data as $data) {
-            if (!isset($visitor_scores[$data['indicator_id']])) {
-                $visitor_scores[$data['indicator_id']] = [];
-            }
-            $visitor_scores[$data['indicator_id']][$visitor_type_id] = $data['avg_score'];
-        }
+    // التحقق من وجود نتائج وتعيين قيم افتراضية إذا لم تكن هناك نتائج
+    if (!$overall_stats || $overall_stats['overall_avg'] === null) {
+        $overall_stats = [
+            'overall_avg' => 0,
+            'overall_percentage' => 0
+        ];
     }
 }
 
@@ -205,6 +343,10 @@ foreach ($training_needs as $need) {
 usort($required_workshops, function($a, $b) {
     return $a['score'] <=> $b['score'];
 });
+
+// جلب قائمة الأعوام الأكاديمية
+$academic_years_query = "SELECT * FROM academic_years ORDER BY id DESC";
+$academic_years = query($academic_years_query);
 ?>
 
 <div class="mb-6">
@@ -212,25 +354,60 @@ usort($required_workshops, function($a, $b) {
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                 <div>
-                    <label for="teacher_id" class="block mb-1">المعلم</label>
-                    <select id="teacher_id" name="teacher_id" class="w-full rounded border-gray-300" required>
-                        <option value="">اختر المعلم</option>
-                        <?php foreach ($teachers as $t): ?>
-                            <option value="<?= $t['id'] ?>" <?= $teacher_id == $t['id'] ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($t['name']) ?>
-                            </option>
+                    <label for="school_id" class="block mb-1">المدرسة</label>
+                    <select id="school_id" name="school_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="">اختر المدرسة</option>
+                        <?php foreach ($schools as $school): ?>
+                        <option value="<?= $school['id'] ?>" <?= $school_id == $school['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($school['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="academic_year_id" class="block mb-1">العام الدراسي</label>
+                    <select id="academic_year_id" name="academic_year_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <?php foreach ($academic_years as $year): ?>
+                        <option value="<?= $year['id'] ?>" <?= $year['id'] == $academic_year_id ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($year['name']) ?>
+                        </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 
                 <div>
                     <label for="semester" class="block mb-1">الفصل الدراسي</label>
-                    <select id="semester" name="semester" class="w-full rounded border-gray-300">
+                    <select id="semester" name="semester" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="">جميع الفصول</option>
                         <option value="first" <?= $semester == 'first' ? 'selected' : '' ?>>الفصل الأول</option>
                         <option value="second" <?= $semester == 'second' ? 'selected' : '' ?>>الفصل الثاني</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="subject_id" class="block mb-1">المادة الدراسية</label>
+                    <select id="subject_id" name="subject_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
+                        <option value="0">جميع المواد</option>
+                        <?php foreach ($subjects as $subject): ?>
+                            <option value="<?= $subject['id'] ?>" <?= $subject_id == $subject['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($subject['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="teacher_id" class="block mb-1">المعلم</label>
+                    <select id="teacher_id" name="teacher_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200" required>
+                        <option value="">اختر المعلم</option>
+                        <?php foreach ($teachers as $t): ?>
+                            <option value="<?= $t['id'] ?>" <?= $teacher_id == $t['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($t['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 
@@ -244,19 +421,25 @@ usort($required_workshops, function($a, $b) {
         
         <?php if ($teacher): ?>
             <div class="mb-6">
-                <h2 class="text-xl font-semibold mb-3">
-                    الاحتياجات التدريبية للمعلم: <?= htmlspecialchars($teacher['name']) ?>
-                </h2>
-                
-                <?php if (!empty($overall_stats)): ?>
-                    <div class="mb-4 p-4 bg-gray-50 rounded-lg">
-                        <p class="text-md">
-                            متوسط الدرجات العام: 
-                            <strong><?= number_format($overall_stats['overall_avg'], 2) ?></strong>
-                            (<?= number_format($overall_stats['overall_percentage'], 2) ?>%)
-                        </p>
-                    </div>
-                <?php endif; ?>
+                <div class="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg p-6 text-white mb-6 shadow-lg">
+                    <h2 class="text-xl font-semibold mb-3">
+                        الاحتياجات التدريبية للمعلم: <?= htmlspecialchars($teacher['name']) ?>
+                    </h2>
+                    
+                    <?php if (isset($overall_stats)): ?>
+                        <div class="flex flex-col md:flex-row items-center justify-between">
+                            <div class="text-lg">متوسط الدرجات العام:</div>
+                            <div class="flex items-center">
+                                <div class="text-4xl font-bold ml-3">
+                                    <?= number_format((float)$overall_stats['overall_avg'], 2) ?>
+                                </div>
+                                <div class="text-xl opacity-80">
+                                    (<?= number_format((float)$overall_stats['overall_percentage'], 2) ?>%)
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </div>
                 
                 <?php if (!empty($required_workshops)): ?>
                     <h3 class="text-lg font-medium mb-3">الورش التدريبية المقترحة</h3>
@@ -291,7 +474,7 @@ usort($required_workshops, function($a, $b) {
                                             }
                                             ?>
                                             <span class="px-2 py-1 rounded <?= $score_class ?>">
-                                                <?= number_format($workshop['score'], 2) ?>%
+                                                <?= number_format((float)$workshop['score'], 2) ?>%
                                             </span>
                                         </td>
                                     </tr>
@@ -324,8 +507,8 @@ usort($required_workshops, function($a, $b) {
                                     <th class="py-3 px-4 border-b text-right">النسبة المئوية</th>
                                     <th class="py-3 px-4 border-b text-center">مدير</th>
                                     <th class="py-3 px-4 border-b text-center">أكاديمي</th>
-                                    <th class="py-3 px-4 border-b text-center">موجه</th>
                                     <th class="py-3 px-4 border-b text-center">منسق</th>
+                                    <th class="py-3 px-4 border-b text-center">موجه</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -346,7 +529,7 @@ usort($required_workshops, function($a, $b) {
                                         <td class="py-2 px-4 border-b"></td>
                                         <td class="py-2 px-4 border-b"><?= htmlspecialchars($need['indicator_name']) ?></td>
                                         <td class="py-2 px-4 border-b text-center">
-                                            <?= number_format($need['avg_score'], 2) ?>
+                                            <?= number_format((float)$need['avg_score'], 2) ?>
                                         </td>
                                         <td class="py-2 px-4 border-b">
                                             <?php
@@ -364,16 +547,18 @@ usort($required_workshops, function($a, $b) {
                                             }
                                             ?>
                                             <span class="<?= $score_class ?>">
-                                                <?= number_format($need['percentage_score'], 2) ?>%
+                                                <?= number_format((float)$need['percentage_score'], 2) ?>%
                                             </span>
                                         </td>
                                         <?php
                                         // عرض درجات أنواع الزائرين الأربعة
-                                        $visitor_types = [1 => 'المدير', 2 => 'النائب الأكاديمي', 3 => 'منسق المادة', 4 => 'موجه المادة'];
+                                        $visitor_types = [18 => 'مدير', 17 => 'النائب الأكاديمي', 15 => 'منسق المادة', 16 => 'موجه المادة'];
                                         foreach ($visitor_types as $visitor_type_id => $visitor_type_name):
-                                            $score = isset($visitor_scores[$need['indicator_id']][$visitor_type_id]) 
-                                                ? $visitor_scores[$need['indicator_id']][$visitor_type_id] 
+                                            $visitor_data = isset($visitor_scores[$need['indicator_id']][$visitor_type_id]) 
+                                                ? $visitor_scores[$need['indicator_id']][$visitor_type_id]
                                                 : null;
+                                            $score = $visitor_data ? $visitor_data['avg_score'] : null;
+                                            $count = $visitor_data ? $visitor_data['visit_count'] : 0;
                                         ?>
                                         <td class="py-2 px-4 border-b text-center">
                                             <?php if ($score !== null): ?>
@@ -395,8 +580,8 @@ usort($required_workshops, function($a, $b) {
                                                     $score_class = 'text-green-700';
                                                 }
                                                 ?>
-                                                <span class="<?= $score_class ?>">
-                                                    <?= number_format($score_percentage, 2) ?>%
+                                                <span class="<?= $score_class ?>" title="عدد الزيارات: <?= $count ?>">
+                                                    <?= number_format((float)$score_percentage, 2) ?>%
                                                 </span>
                                             <?php else: ?>
                                                 -
@@ -419,7 +604,92 @@ usort($required_workshops, function($a, $b) {
 </div>
 
 <script>
-    // يمكن إضافة أي تفاعلات جافاسكريبت هنا إذا لزم الأمر
+    // حفظ قيم الفلتر للاستخدام اللاحق
+    document.getElementById('academic_year_id').addEventListener('change', function() {
+        localStorage.setItem('training_academic_year_id', this.value);
+    });
+    
+    // تحديث المواد عند اختيار مدرسة
+    document.getElementById('school_id').addEventListener('change', function() {
+        const schoolId = this.value;
+        if (schoolId) {
+            fetch(`api/get_school_subjects.php?school_id=${schoolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateSubjects(data);
+                    // تفريغ قائمة المعلمين عند تغيير المدرسة
+                    updateTeachers([]);
+                })
+                .catch(error => console.error('خطأ في جلب المواد:', error));
+        } else {
+            // إذا لم يتم اختيار مدرسة، جلب كل المواد
+            fetch('api/get_all_subjects.php')
+                .then(response => response.json())
+                .then(data => {
+                    updateSubjects(data);
+                    // تفريغ قائمة المعلمين
+                    updateTeachers([]);
+                })
+                .catch(error => console.error('خطأ في جلب المواد:', error));
+        }
+    });
+    
+    // تحديث المعلمين عند اختيار مادة
+    document.getElementById('subject_id').addEventListener('change', function() {
+        const subjectId = this.value;
+        const schoolId = document.getElementById('school_id').value;
+        
+        if (schoolId && subjectId) {
+            fetch(`api/get_teachers.php?school_id=${schoolId}&subject_id=${subjectId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateTeachers(data);
+                })
+                .catch(error => console.error('خطأ في جلب المعلمين:', error));
+        } else if (schoolId) {
+            // إذا تم اختيار مدرسة فقط
+            fetch(`api/get_teachers.php?school_id=${schoolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateTeachers(data);
+                })
+                .catch(error => console.error('خطأ في جلب المعلمين:', error));
+        } else {
+            // جلب كل المعلمين إذا لم يتم اختيار مدرسة أو مادة
+            fetch('api/get_all_teachers.php')
+                .then(response => response.json())
+                .then(data => {
+                    updateTeachers(data);
+                })
+                .catch(error => console.error('خطأ في جلب المعلمين:', error));
+        }
+    });
+    
+    // دالة لتحديث قائمة المواد
+    function updateSubjects(subjects) {
+        const subjectSelect = document.getElementById('subject_id');
+        subjectSelect.innerHTML = '<option value="0">جميع المواد</option>';
+        
+        subjects.forEach(subject => {
+            const option = document.createElement('option');
+            option.value = subject.id;
+            option.textContent = subject.name;
+            subjectSelect.appendChild(option);
+        });
+    }
+    
+    // دالة لتحديث قائمة المعلمين
+    function updateTeachers(teachers) {
+        const teacherSelect = document.getElementById('teacher_id');
+        teacherSelect.innerHTML = '<option value="">اختر المعلم</option>';
+        
+        teachers.forEach(teacher => {
+            const option = document.createElement('option');
+            option.value = teacher.id;
+            option.textContent = teacher.name;
+            teacherSelect.appendChild(option);
+        });
+    }
 </script>
 
 <?php

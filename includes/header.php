@@ -11,6 +11,9 @@ session_start();
 
 // عنوان الصفحة الافتراضي
 $page_title = $page_title ?? 'نظام الزيارات الصفية';
+
+// اسم التطبيق الافتراضي
+$app_name = $app_name ?? 'نظام الزيارات الصفية';
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -75,7 +78,7 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
             background-color: #f9fafb;
             margin: 0;
             padding: 0;
-            margin-top: 65px; /* لإفساح المجال للناف بار الثابت */
+            margin-top: 100px; /* تعديل الهامش العلوي ليكون أكبر لتجنب اختفاء المحتوى */
         }
         
         /* قواعد نمط إضافية للقوائم المنسدلة - تعديل لمشكلة الاختفاء السريع */
@@ -115,6 +118,12 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
             box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
         }
         
+        /* تعديل لمشكلة القائمة المنسدلة للتقارير */
+        .reports-dropdown .dropdown-menu {
+            right: auto;
+            left: 0;
+        }
+        
         .score-4 { background-color: rgba(5, 150, 105, 0.1); border-color: #059669; }
         .score-3 { background-color: rgba(2, 132, 199, 0.1); border-color: #0284c7; }
         .score-2 { background-color: rgba(245, 158, 11, 0.1); border-color: #f59e0b; }
@@ -126,81 +135,95 @@ $page_title = $page_title ?? 'نظام الزيارات الصفية';
         .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #075985; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800" x-data="{ reportsOpen: false }">
-<nav class="bg-primary-700 fixed top-0 left-0 right-0 z-50 shadow-md">
-    <div class="container mx-auto px-4">
-        <div class="flex items-center justify-between h-16">
-            <div class="flex items-center">
-                <a href="index.php" class="text-white font-bold text-xl">نظام الزيارات الصفية</a>
-            </div>
-            <div class="block">
-                <div class="flex items-center space-x-4 space-x-reverse">
-                    <!-- روابط ثابتة -->
-                    <a href="index.php" class="<?= $current_page == 'index.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
-                        الرئيسية
-                    </a>
-
-                    <a href="visits.php" class="<?= $current_page == 'visits.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
-                        الزيارات الصفية
-                    </a>
-
-                    <a href="evaluation_form.php" class="<?= $current_page == 'evaluation_form.php' ? 'bg-primary-800 text-white' : 'hover:bg-primary-600 text-white' ?> px-4 py-2 rounded-md">
-                        زيارة جديدة
-                    </a>
-
-                    <div class="relative group">
-    <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
-        الإدارة
-        <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-        </svg>
-    </button>
-    <div class="absolute right-0 top-full w-56 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
-        <a href="teachers_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المعلمين</a>
-        <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المواد</a>
-        <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الفصول</a>
-        <a href="academic_years_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الأعوام الدراسية</a>
-        <a href="school_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إعدادات المدرسة</a>
-    </div>
-</div>
-
-                    <!-- قائمة منسدلة: الاحتياجات التدريبية -->
-                    <div class="relative group">
-                        <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
-                            الاحتياجات التدريبية
-                            <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                        </button>
-                        <div class="absolute right-0 top-full w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
-                            <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الفردية</a>
-                            <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
-                        </div>
-                    </div>
-
-                    <!-- قائمة منسدلة: التقارير -->
-                    <div class="relative group">
-                        <button class="text-white px-4 py-2 rounded-md flex items-center hover:bg-primary-600">
-                            التقارير
-                            <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                            </svg>
-                        </button>
-                        <div class="absolute right-0 top-full w-56 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-150 ease-in-out z-10">
-                            <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء المعلمين</a>
-                            <a href="subject_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء المواد الدراسية</a>
-                            <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">أداء الصفوف والشعب</a>
-                            <a href="sections_reports.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقارير الشعب</a>
-                            <a href="teacher_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير معلم</a>
-                        </div>
+<body dir="rtl" class="bg-gray-100 font-sans">
+    <header class="bg-primary-600 text-white shadow-md fixed w-full top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex flex-wrap justify-between items-center">
+            <h1 class="text-xl font-bold"><?= $app_name ?></h1>
+            <nav class="hidden md:flex space-x-6 space-x-reverse">
+                <a href="index.php" class="hover:text-primary-200 <?= $current_page == 'index.php' ? 'border-b-2 border-white' : '' ?>">الرئيسية</a>
+                <a href="visits.php" class="hover:text-primary-200 <?= $current_page == 'visits.php' ? 'border-b-2 border-white' : '' ?>">الزيارات الصفية</a>
+                <a href="evaluation_form.php" class="hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'border-b-2 border-white' : '' ?>">زيارة جديدة</a>
+                
+                <!-- قائمة الإدارة -->
+                <div class="relative group">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['teachers_management.php', 'subjects_management.php', 'sections_management.php', 'school_settings.php']) ? 'border-b-2 border-white' : '' ?>">
+                        الإدارة
+                        <i class="fas fa-caret-down mr-1"></i>
+                    </button>
+                    <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
+                        <a href="teachers_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المعلمين</a>
+                        <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المواد الدراسية</a>
+                        <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الشعب</a>
+                        <a href="school_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إعدادات المدرسة</a>
+                        <a href="academic_years_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الأعوام الدراسية</a>
+                        <a href="add_recommendations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إضافة توصيات</a>
                     </div>
                 </div>
+                
+                <!-- قائمة الاحتياجات التدريبية -->
+                <div class="relative group">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['training_needs.php', 'collective_training_needs.php']) ? 'border-b-2 border-white' : '' ?>">
+                        الاحتياجات التدريبية
+                        <i class="fas fa-caret-down mr-1"></i>
+                    </button>
+                    <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
+                        <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">احتياجات المعلمين</a>
+                        <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
+                    </div>
+                </div>
+                
+                <!-- قائمة التقارير -->
+                <div class="relative group reports-dropdown">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['class_performance_report.php', 'grades_performance_report.php', 'teacher_report.php', 'subject_performance_report.php']) ? 'border-b-2 border-white' : '' ?>">
+                        التقارير
+                        <i class="fas fa-caret-down mr-1"></i>
+                    </button>
+                    <div class="absolute mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
+                        <a href="class_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المعلمين</a>
+                        <a href="grades_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء الصفوف</a>
+                        <a href="subject_performance_report.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء المواد</a>
+                        <a href="sections_reports.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء الشعب</a>
+                    </div>
+                </div>
+            </nav>
+            <button id="mobile-menu-button" class="md:hidden">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="mobile-menu" class="hidden md:hidden bg-primary-700 pb-4 px-4">
+            <a href="index.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'index.php' ? 'font-bold' : '' ?>">الرئيسية</a>
+            <a href="visits.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'visits.php' ? 'font-bold' : '' ?>">الزيارات الصفية</a>
+            <a href="evaluation_form.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'font-bold' : '' ?>">زيارة جديدة</a>
+            <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">الإدارة <i class="fas fa-caret-down mr-1"></i></a>
+            <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
+                <a href="teachers_management.php" class="block py-1 hover:text-primary-200">إدارة المعلمين</a>
+                <a href="subjects_management.php" class="block py-1 hover:text-primary-200">إدارة المواد الدراسية</a>
+                <a href="sections_management.php" class="block py-1 hover:text-primary-200">إدارة الشعب</a>
+                <a href="school_settings.php" class="block py-1 hover:text-primary-200">إعدادات المدرسة</a>
+                <a href="academic_years_management.php" class="block py-1 hover:text-primary-200">إدارة الأعوام الدراسية</a>
+                <a href="add_recommendations.php" class="block py-1 hover:text-primary-200">إضافة توصيات</a>
+            </div>
+            <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">الاحتياجات التدريبية <i class="fas fa-caret-down mr-1"></i></a>
+            <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
+                <a href="training_needs.php" class="block py-1 hover:text-primary-200">احتياجات المعلمين</a>
+                <a href="collective_training_needs.php" class="block py-1 hover:text-primary-200">الاحتياجات الجماعية</a>
+            </div>
+            <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">التقارير <i class="fas fa-caret-down mr-1"></i></a>
+            <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
+                <a href="class_performance_report.php" class="block py-1 hover:text-primary-200">تقرير أداء المعلمين</a>
+                <a href="grades_performance_report.php" class="block py-1 hover:text-primary-200">تقرير أداء الصفوف</a>
+                <a href="subject_performance_report.php" class="block py-1 hover:text-primary-200">تقرير أداء المواد</a>
+                <a href="sections_reports.php" class="block py-1 hover:text-primary-200">تقرير أداء الشعب</a>
             </div>
         </div>
-    </div>
-</nav>
+    </header>
 
-<main class="container mx-auto py-6 px-4">
+    <!-- إضافة هامش علوي لحل مشكلة اختفاء المحتوى تحت القائمة -->
+    <div class="pt-28"></div> <!-- هامش علوي للمحتوى الرئيسي -->
+    
+    <main class="container mx-auto px-4 pb-8">
 <?php
 // نهاية رأس الصفحة
 ?>

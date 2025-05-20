@@ -146,19 +146,22 @@ $grade = get_grade($average_score);
             body {
                 margin: 0;
                 font-family: 'Cairo', sans-serif;
-                font-size: 10pt;
+                font-size: 6pt;
                 color: #333;
-                line-height: 1.5;
+                line-height: 1.1;
             }
             
             h1, h2, h3, h4 {
                 margin-top: 0;
+                margin-bottom: 0;
+                margin-right: 0;
+
             }
             
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 20px;
+                margin-bottom: 0px;
             }
             
             table, th, td {
@@ -166,7 +169,7 @@ $grade = get_grade($average_score);
             }
             
             th, td {
-                padding: 6px;
+                padding: 2px;
                 text-align: right;
             }
             
@@ -177,13 +180,13 @@ $grade = get_grade($average_score);
             
             .print-header {
                 text-align: center;
-                margin-bottom: 10px;
+                margin-bottom: 5px;
                 padding-bottom: 5px;
                 border-bottom: 1px solid #000;
             }
             
             .print-section {
-                margin-bottom: 15px;
+                margin-bottom: 5px;
             }
             
             .print-footer {
@@ -191,7 +194,7 @@ $grade = get_grade($average_score);
                 text-align: center;
                 border-top: 1px solid #000;
                 padding-top: 10px;
-                font-size: 9pt;
+                font-size: 6pt;
             }
             
             .score-box {
@@ -216,14 +219,14 @@ $grade = get_grade($average_score);
             }
             
             .main-heading {
-                font-size: 14pt;
+                font-size: 10pt;
                 font-weight: bold;
                 margin-bottom: 5px;
                 text-align: center;
             }
             
             .info-table th, .info-table td {
-                padding: 3px 5px;
+                padding: 2px 3px;
             }
             
             .indicator-table th {
@@ -234,7 +237,7 @@ $grade = get_grade($average_score);
             .domain-heading {
                 background-color: #ddd;
                 font-weight: bold;
-                padding: 5px;
+                padding: 0px;
                 text-align: center;
             }
             
@@ -247,18 +250,22 @@ $grade = get_grade($average_score);
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%) rotate(-45deg);
-                font-size: 100pt;
+                font-size: 70pt;
                 color: rgba(200, 200, 200, 0.2);
                 z-index: -1;
             }
             
             .checkbox {
-                width: 15px;
-                height: 15px;
+                width: 5px;
+                height: 5px;
                 border: 1px solid #000;
-                margin: 2px;
+                margin: 0px;
                 display: inline-block;
                 text-align: center;
+            }
+            
+            div[style*="font-size: 6pt"] {
+                font-size: 4pt !important;
             }
         }
 
@@ -266,8 +273,9 @@ $grade = get_grade($average_score);
         @media screen {
             body {
                 font-family: 'Cairo', sans-serif;
+                font-size: 10pt;
                 color: #333;
-                line-height: 1.5;
+                line-height: 1.3;
                 max-width: 800px;
                 margin: 0 auto;
                 padding: 20px;
@@ -354,7 +362,7 @@ $grade = get_grade($average_score);
                 border-radius: 5px;
                 cursor: pointer;
                 font-family: 'Cairo', sans-serif;
-                font-size: 14px;
+                font-size: 10pt;
                 margin: 0 5px;
             }
             
@@ -363,7 +371,7 @@ $grade = get_grade($average_score);
             }
             
             .main-heading {
-                font-size: 18pt;
+                font-size: 13pt;
                 font-weight: bold;
                 margin-bottom: 5px;
                 text-align: center;
@@ -410,6 +418,7 @@ $grade = get_grade($average_score);
     <div class="hidden-print">
         <button onclick="window.print()">طباعة الاستمارة</button>
         <button onclick="window.location.href='visits.php'">العودة للزيارات</button>
+        <button onclick="window.location.href='send_visit_email.php?id=<?= $visit_id ?>'">إرسال التقرير بالبريد الإلكتروني</button>
     </div>
     
     <div class="print-container">
@@ -444,9 +453,10 @@ $grade = get_grade($average_score);
                     <th>المعلم</th>
                     <td><?= htmlspecialchars($visit['teacher_name']) ?></td>
                     <th>الزائر</th>
-                    <td><?= htmlspecialchars($visit['visitor_person_name']) ?></td>
-                    <th>الحصة</th>
-                    <td><?= $visit['period_number'] ?? '-' ?></td>
+                    <td colspan="3"><?= htmlspecialchars($visit['visitor_person_name']?? '0') ?></td>
+
+
+
                 </tr>
                 <tr>
                     <th>نوع الزيارة</th>
@@ -466,16 +476,17 @@ $grade = get_grade($average_score);
                     <th colspan="8" style="text-align: center; background-color: #ddd;">ثانياً : مجالات تقييم الأداء</th>
                 </tr>
                 <tr>
-                    <th rowspan="2" style="width: 20%;">المجال</th>
-                    <th rowspan="2" style="width: 45%;">مؤشرات الأداء</th>
-                    <th colspan="5" style="width: 35%;">الدرجة التقييمية</th>
+                   <th rowspan="2" style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 10%;">المجال</th>
+                   <th rowspan="2" style="width: 30%;">مؤشرات الأداء</th>
+                   <th colspan="5" style="width: 20%;">الدرجة التقييمية</th>
+                   <th rowspan="2" style="width: 40%;">التوصية</th>
                 </tr>
                 <tr>
-                    <th>الأدلة مستكملة وفاعلة</th>
-                    <th>تتوفر معظم الأدلة</th>
-                    <th>تتوفر بعض الأدلة</th>
-                    <th>الأدلة غير متوفرة أو محدودة</th>
-                    <th>لم يتم قياسه</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة مستكملة وفاعلة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر معظم الأدلة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر بعض الأدلة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة غير متوفرة أو محدودة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">لم يتم قياسه</th>
                 </tr>
                 
                 <?php 
@@ -499,13 +510,14 @@ $grade = get_grade($average_score);
                         }
                 ?>
                 <tr>
-                    <td rowspan="<?= $domain_rowspan ?>" class="domain-heading"><?= htmlspecialchars($current_domain) ?></td>
+                    <td rowspan="<?= $domain_rowspan ?>" class="domain-heading" style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center;"><?= htmlspecialchars($current_domain) ?></td>
                     <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
                     <td class="text-center"><?= $eval['score'] == 4 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 3 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                    <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
                 </tr>
                 <?php else: ?>
                 <tr>
@@ -515,6 +527,7 @@ $grade = get_grade($average_score);
                     <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
                     <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                    <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
                 </tr>
                 <?php 
                     endif;
@@ -530,14 +543,17 @@ $grade = get_grade($average_score);
                     <th colspan="2" style="background-color: #ddd;">ملاحظات وتوصيات عامة</th>
                 </tr>
                 <tr>
-                    <td colspan="2" style="height: 60px;"><?= nl2br(htmlspecialchars($visit['general_notes'] ?: '')) ?></td>
                 </tr>
                 <tr>
-                    <td style="height: 30px;">أشكر المعلم على: <?= nl2br(htmlspecialchars($visit['appreciation_notes'] ?: '')) ?></td>
-                </tr>
-                <tr>
-                    <td style="height: 60px;">وأوصي بما يلي: <?= nl2br(htmlspecialchars($visit['recommendation_notes'] ?: '')) ?></td>
-                </tr>
+    <td style="height: 30px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+        أشكر المعلم على: <?= htmlspecialchars($visit['appreciation_notes'] ?: '') ?>
+    </td>
+</tr>
+<tr>
+    <td style="height: 30px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+        وأوصي بما يلي: <?= htmlspecialchars($visit['recommendation_notes'] ?: '') ?>
+    </td>
+</tr>
             </table>
         </div>
         
@@ -554,9 +570,9 @@ $grade = get_grade($average_score);
             </table>
             
             <div style="margin-top: 10px; font-size: 8pt; text-align: center;">
-                <p>رؤية وزارة التعليم والتعليم العالي: الريادة في توفير فرص تعلّم دائمة ومستمرة وذات جودة عالية للمجتمع القطري.</p>
-                <p>الرسالة: تنظيم ودعم فُرَص تعلّم ذات جودة عالية لكافة المراحل والمستويات، وذلك بهدف تنمية المعارف والمهارات والاتجاهات اللازمة لأفراد المجتمع القطري، بما يناسب احتياجاتهم المختلفة.</p>
-            </div>
+                <p>الرؤية : متعلم ريادي لتنمية مستدامة</p>
+<p>الرسالة: نرسي بيئة تعليمية شاملة ومبتكرة تعزز القيم والأخلاق وتؤهل المتعلم بمهارات عالية; لإعداد جيل واعٍ قادرٍ على بناء مجتمع متقدم واقتصاد مزدهر</p>
+                </div>
         </div>
         
     </div>

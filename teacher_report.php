@@ -13,6 +13,9 @@ $current_page = 'teacher_report.php';
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
 
+// تضمين مكون فلترة العام الأكاديمي والفصل الدراسي
+require_once 'includes/academic_filter.php';
+
 // التحقق من وجود معرف المعلم
 $teacher_id = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
 
@@ -22,18 +25,9 @@ if (!$teacher_id) {
     exit;
 }
 
-// تحديد العام الدراسي
-$academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : 0;
-
-// جلب العام الدراسي النشط إذا لم يتم تحديد عام
-if (!$academic_year_id) {
-    $active_year = get_active_academic_year();
-    $academic_year_id = $active_year ? $active_year['id'] : 0;
-    $academic_year_name = $active_year ? $active_year['name'] : '';
-} else {
-    $year = query_row("SELECT name FROM academic_years WHERE id = ?", [$academic_year_id]);
-    $academic_year_name = $year ? $year['name'] : '';
-}
+// استخدام العام الدراسي ومعلوماته من مكون الفلترة
+$academic_year_id = $selected_year_id;
+$academic_year_name = $current_year_data['name'] ?? '';
 
 // جلب معلومات المعلم
 $teacher = query_row("SELECT * FROM teachers WHERE id = ?", [$teacher_id]);
@@ -81,10 +75,11 @@ $visits = query("
         teachers t ON v.visitor_person_id = t.id
     WHERE 
         v.teacher_id = ?
-        " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
+        AND v.academic_year_id = ?
+        " . ($selected_term != 'all' ? $date_condition : "") . "
     ORDER BY 
         v.visit_date ASC
-", $academic_year_id > 0 ? [$teacher_id, $academic_year_id] : [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // جلب متوسطات المجالات لكل زيارة
 $domain_visits = query("
@@ -104,13 +99,14 @@ $domain_visits = query("
         evaluation_domains d ON i.domain_id = d.id
     WHERE 
         v.teacher_id = ?
-        " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
+        AND v.academic_year_id = ?
+        " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score > 0
     GROUP BY 
         v.id, v.visit_date, d.id, d.name
     ORDER BY 
         v.visit_date ASC, d.id ASC
-", $academic_year_id > 0 ? [$teacher_id, $academic_year_id] : [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // تنظيم بيانات المجالات حسب الزيارة
 $visits_by_domain = [];
@@ -150,13 +146,14 @@ $domains_avg = query("
         visits v ON ve.visit_id = v.id
     WHERE 
         v.teacher_id = ?
-        " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
+        AND v.academic_year_id = ?
+        " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score > 0
     GROUP BY 
         d.id, d.name
     ORDER BY 
         d.id
-", $academic_year_id > 0 ? [$teacher_id, $academic_year_id] : [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // حساب المتوسط العام
 $overall_avg = 0;
@@ -185,7 +182,8 @@ $weakest_indicators = query("
         visits v ON ve.visit_id = v.id
     WHERE 
         v.teacher_id = ?
-        " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
+        AND v.academic_year_id = ?
+        " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score > 0
     GROUP BY 
         i.id, i.name
@@ -194,7 +192,7 @@ $weakest_indicators = query("
     ORDER BY 
         avg_score ASC
     LIMIT 5
-", $academic_year_id > 0 ? [$teacher_id, $academic_year_id] : [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // جلب أقوى المؤشرات أداءً
 $strongest_indicators = query("
@@ -212,7 +210,8 @@ $strongest_indicators = query("
         visits v ON ve.visit_id = v.id
     WHERE 
         v.teacher_id = ?
-        " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
+        AND v.academic_year_id = ?
+        " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score > 0
     GROUP BY 
         i.id, i.name
@@ -221,7 +220,7 @@ $strongest_indicators = query("
     ORDER BY 
         avg_score DESC
     LIMIT 5
-", $academic_year_id > 0 ? [$teacher_id, $academic_year_id] : [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // جلب أكثر التوصيات تكراراً
 $common_recommendations = query("
@@ -308,10 +307,13 @@ $common_recommendations = query("
                 <!-- المتوسط العام -->
                 <div class="bg-white p-4 rounded-lg border border-gray-200">
                     <h3 class="text-lg font-semibold mb-3">المتوسط العام للأداء</h3>
-                    <div class="flex justify-center items-center h-64">
-                        <div class="text-center">
-                            <div class="text-5xl font-bold mb-2"><?= number_format($overall_avg, 1) ?>%</div>
-                            <div class="text-xl"><?= get_grade($overall_avg / 25) ?></div>
+                    <div class="flex flex-col justify-center items-center h-64">
+                        <div class="text-center mb-4">
+                            <div class="text-5xl font-bold mb-2"><?= !is_null($overall_avg) ? number_format($overall_avg, 1) : '-' ?>%</div>
+                            <div class="text-xl"><?= !is_null($overall_avg) ? get_grade($overall_avg / 25) : '-' ?></div>
+                        </div>
+                        <div class="w-48 h-48">
+                            <canvas id="pieChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -825,11 +827,13 @@ const progressData = {
                     $visit_avg = 0;
                     $domains_count = 0;
                     foreach ($visit_data['domains'] as $domain) {
-                        $visit_avg += $domain['avg_percentage'];
-                        $domains_count++;
+                        if (!is_null($domain['avg_percentage'])) {
+                            $visit_avg += $domain['avg_percentage'];
+                            $domains_count++;
+                        }
                     }
                     $visit_avg = $domains_count > 0 ? $visit_avg / $domains_count : 0;
-                    echo number_format($visit_avg, 1) . ",";
+                    echo (!is_null($visit_avg) ? number_format($visit_avg, 1) : "0") . ",";
                 endforeach;
                 ?>
             ],
@@ -873,6 +877,43 @@ const progressChart = new Chart(progressCtx, {
         elements: {
             line: {
                 fill: false
+            }
+        }
+    }
+});
+
+// إنشاء مخطط دائري للمتوسط العام
+const pieCtx = document.getElementById('pieChart').getContext('2d');
+const pieChart = new Chart(pieCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['نسبة الأداء', 'متبقي'],
+        datasets: [{
+            data: [
+                <?= !is_null($overall_avg) ? number_format($overall_avg, 1) : 0 ?>,
+                <?= !is_null($overall_avg) ? number_format(100 - $overall_avg, 1) : 100 ?>
+            ],
+            backgroundColor: [
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(220, 220, 220, 0.5)'
+            ],
+            borderColor: [
+                'rgba(75, 192, 192, 1)',
+                'rgba(220, 220, 220, 1)'
+            ],
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                enabled: false
             }
         }
     }

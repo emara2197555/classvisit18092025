@@ -12,8 +12,44 @@ $page_title = 'تقرير مقارنة أداء المعلمين';
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
 
-// تحديد العام الدراسي (يمكن جعلها متغيرة وأخذها من النموذج)
-$academic_year = isset($_GET['academic_year']) ? $_GET['academic_year'] : '2024/2025';
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+if (!isset($_SESSION['selected_academic_year'])) {
+    // ابحث عن العام الأكاديمي النشط
+    $active_year = get_active_academic_year();
+    $_SESSION['selected_academic_year'] = $active_year['id'] ?? null;
+    $_SESSION['selected_term'] = 'all';
+}
+
+// الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
+$academic_year_id = $_SESSION['selected_academic_year'];
+$selected_term = $_SESSION['selected_term'] ?? 'all';
+
+// الحصول على تفاصيل العام الأكاديمي المحدد
+$current_year_query = "SELECT * FROM academic_years WHERE id = ?";
+$current_year_data = query_row($current_year_query, [$academic_year_id]);
+
+// تحديد تواريخ الفصول الدراسية
+$first_term_start = $current_year_data['first_term_start'] ?? null;
+$first_term_end = $current_year_data['first_term_end'] ?? null;
+$second_term_start = $current_year_data['second_term_start'] ?? null;
+$second_term_end = $current_year_data['second_term_end'] ?? null;
+
+// تحديد معلومات الفلتر للفصل الدراسي 
+$date_filter = "";
+$date_params = [];
+
+if ($selected_term == 'first' && $first_term_start && $first_term_end) {
+    $date_filter = " AND visit_date BETWEEN ? AND ?";
+    $date_params[] = $first_term_start;
+    $date_params[] = $first_term_end;
+} elseif ($selected_term == 'second' && $second_term_start && $second_term_end) {
+    $date_filter = " AND visit_date BETWEEN ? AND ?";
+    $date_params[] = $second_term_start;
+    $date_params[] = $second_term_end;
+}
+
+// تضمين مكون فلترة العام الأكاديمي والفصل الدراسي
+require_once 'includes/academic_filter.php';
 
 // تحديد نوع الزائر (النائب الأكاديمي)
 $visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id'] : 2; // النائب الأكاديمي هو 2
@@ -24,72 +60,14 @@ $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 // جلب قائمة المواد الدراسية
 $subjects = query("SELECT * FROM subjects ORDER BY name");
 
-// إضافة متوسطات المجالات الأخرى
-$sql = "
+// استعلام أبسط لجلب بيانات المعلمين والزيارات
+$sql_basic = "
     SELECT 
         t.id AS teacher_id,
         t.name AS teacher_name,
         s.id AS subject_id,
         s.name AS subject_name,
-        COUNT(DISTINCT v.id) AS visits_count,
-        
-        -- متوسط التخطيط (مجال رقم 1)
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ei.domain_id = 1
-           AND ve.score > 0) AS planning_avg,
-        
-        -- متوسط تنفيذ الدرس (مجال رقم 2)
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ei.domain_id = 2
-           AND ve.score > 0) AS lesson_execution_avg,
-         
-        -- متوسط الإدارة الصفية (مجال رقم 3)
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ei.domain_id = 3
-           AND ve.score > 0) AS classroom_management_avg,
-         
-        -- متوسط التقويم (مجال رقم 4)
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ei.domain_id = 4
-           AND ve.score > 0) AS evaluation_avg,
-         
-        -- متوسط النشاط العملي (مجال رقم 5)
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ei.domain_id = 5
-           AND ve.score > 0) AS practical_avg,
-         
-        -- المتوسط العام
-        (SELECT AVG(ve.score) * 25
-         FROM visit_evaluations ve 
-         JOIN visits vs ON ve.visit_id = vs.id
-         WHERE vs.teacher_id = t.id 
-           " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
-           AND ve.score > 0) AS overall_avg
+        COUNT(DISTINCT v.id) AS visits_count
     FROM 
         teachers t
     JOIN 
@@ -97,46 +75,216 @@ $sql = "
     JOIN 
         subjects s ON ts.subject_id = s.id
     LEFT JOIN 
-        visits v ON t.id = v.teacher_id " . ($visitor_type_id > 0 ? "AND v.visitor_type_id = ?" : "") . "
+        visits v ON t.id = v.teacher_id 
+        AND v.academic_year_id = ?";
+
+// إضافة شروط اختيارية        
+if ($visitor_type_id > 0) {
+    $sql_basic .= " AND v.visitor_type_id = ?";
+}
+
+if (!empty($date_filter)) {
+    $sql_basic .= $date_filter;
+}
+
+$sql_basic .= "
     WHERE
-        t.job_title = 'معلم'
-        " . ($subject_id > 0 ? "AND s.id = ?" : "") . "
+        t.job_title = 'معلم'";
+
+if ($subject_id > 0) {
+    $sql_basic .= " AND s.id = ?";
+}
+
+$sql_basic .= "
     GROUP BY 
         t.id, t.name, s.id, s.name
     ORDER BY 
-        s.name, t.name
-";
+        s.name, t.name";
 
-// تحضير المعلمات للاستعلام
-$query_params = [];
+// تحضير المعلمات للاستعلام الأساسي
+$basic_params = [$academic_year_id];
+
 if ($visitor_type_id > 0) {
-    $query_params = array_merge($query_params, [$visitor_type_id, $visitor_type_id, $visitor_type_id, $visitor_type_id, $visitor_type_id, $visitor_type_id, $visitor_type_id]);
+    $basic_params[] = $visitor_type_id;
+}
+
+if (!empty($date_filter)) {
+    $basic_params = array_merge($basic_params, $date_params);
 }
 
 if ($subject_id > 0) {
-    $query_params[] = $subject_id;
+    $basic_params[] = $subject_id;
 }
 
-$teachers_data = query($sql, $query_params);
+// جلب المعلومات الأساسية للمعلمين
+$teachers_basic = query($sql_basic, $basic_params);
+
+// استعلام للحصول على متوسطات المجالات
+$sql_domain = "
+    SELECT 
+        vs.teacher_id,
+        ei.domain_id,
+        AVG(ve.score) * 25 AS avg_score
+    FROM 
+        visit_evaluations ve 
+    JOIN 
+        visits vs ON ve.visit_id = vs.id
+    JOIN 
+        evaluation_indicators ei ON ve.indicator_id = ei.id
+    WHERE 
+        vs.academic_year_id = ?";
+
+if ($visitor_type_id > 0) {
+    $sql_domain .= " AND vs.visitor_type_id = ?";
+}
+
+if (!empty($date_filter)) {
+    $sql_domain .= str_replace("visit_date", "vs.visit_date", $date_filter);
+}
+
+$sql_domain .= " 
+    AND ve.score > 0
+    GROUP BY 
+        vs.teacher_id, ei.domain_id";
+
+// تحضير المعلمات لاستعلام المجالات
+$domain_params = [$academic_year_id];
+
+if ($visitor_type_id > 0) {
+    $domain_params[] = $visitor_type_id;
+}
+
+if (!empty($date_filter)) {
+    $domain_params = array_merge($domain_params, $date_params);
+}
+
+// جلب متوسطات المجالات
+$domain_averages = query($sql_domain, $domain_params);
+
+// تنظيم البيانات في مصفوفة
+$domain_data = [];
+foreach ($domain_averages as $avg) {
+    $domain_data[$avg['teacher_id']][$avg['domain_id']] = $avg['avg_score'];
+}
+
+// استعلام للحصول على المتوسط العام
+$sql_overall = "
+    SELECT 
+        vs.teacher_id,
+        AVG(ve.score) * 25 AS overall_avg
+    FROM 
+        visit_evaluations ve 
+    JOIN 
+        visits vs ON ve.visit_id = vs.id
+    WHERE 
+        vs.academic_year_id = ?";
+
+if ($visitor_type_id > 0) {
+    $sql_overall .= " AND vs.visitor_type_id = ?";
+}
+
+if (!empty($date_filter)) {
+    $sql_overall .= str_replace("visit_date", "vs.visit_date", $date_filter);
+}
+
+$sql_overall .= " 
+    AND ve.score > 0
+    GROUP BY 
+        vs.teacher_id";
+
+// جلب المتوسطات العامة
+$overall_averages = query($sql_overall, $domain_params);
+
+// تنظيم بيانات المتوسط العام
+$overall_data = [];
+foreach ($overall_averages as $avg) {
+    $overall_data[$avg['teacher_id']] = $avg['overall_avg'];
+}
+
+// دمج البيانات في مصفوفة واحدة
+$teachers_data = [];
+foreach ($teachers_basic as $teacher) {
+    $teacher_id = $teacher['teacher_id'];
+    
+    $teachers_data[] = [
+        'teacher_id' => $teacher_id,
+        'teacher_name' => $teacher['teacher_name'],
+        'subject_id' => $teacher['subject_id'],
+        'subject_name' => $teacher['subject_name'],
+        'visits_count' => $teacher['visits_count'],
+        'planning_avg' => $domain_data[$teacher_id][1] ?? null,
+        'lesson_execution_avg' => $domain_data[$teacher_id][2] ?? null,
+        'classroom_management_avg' => $domain_data[$teacher_id][3] ?? null,
+        'evaluation_avg' => $domain_data[$teacher_id][4] ?? null,
+        'practical_avg' => $domain_data[$teacher_id][5] ?? null,
+        'overall_avg' => $overall_data[$teacher_id] ?? null
+    ];
+}
 
 // حساب معدلات الأداء العامة
+$total_planning = 0;
 $total_lesson_execution = 0;
 $total_classroom_management = 0;
+$total_evaluation = 0;
+$total_practical = 0;
+$total_overall = 0;
+
+$total_valid_teachers_planning = 0;
 $total_valid_teachers_lesson = 0;
 $total_valid_teachers_management = 0;
+$total_valid_teachers_evaluation = 0;
+$total_valid_teachers_practical = 0;
+$total_valid_teachers_overall = 0;
 
 // تحديد أفضل وأقل أداء
 $max_lesson_execution = 0;
 $min_lesson_execution = 100;
 $max_classroom_management = 0;
 $min_classroom_management = 100;
+
+// إضافة متغيرات جديدة لباقي المجالات
+$max_planning = 0;
+$min_planning = 100;
+$max_evaluation = 0;
+$min_evaluation = 100;
+$max_practical = 0;
+$min_practical = 100;
+$max_overall = 0;
+$min_overall = 100;
+
 $max_lesson_teacher = '';
 $min_lesson_teacher = '';
 $max_management_teacher = '';
 $min_management_teacher = '';
 
+// إضافة متغيرات لأسماء المعلمين في بقية المجالات
+$max_planning_teacher = '';
+$min_planning_teacher = '';
+$max_evaluation_teacher = '';
+$min_evaluation_teacher = '';
+$max_practical_teacher = '';
+$min_practical_teacher = '';
+$max_overall_teacher = '';
+$min_overall_teacher = '';
+
 // حساب المتوسطات العامة وتحديد أفضل وأقل أداء
 foreach ($teachers_data as $teacher) {
+    // حساب متوسط التخطيط
+    if ($teacher['planning_avg'] !== null) {
+        $total_planning += $teacher['planning_avg'];
+        $total_valid_teachers_planning++;
+        
+        // تحديد الأفضل والأقل في التخطيط
+        if ($teacher['planning_avg'] > $max_planning) {
+            $max_planning = $teacher['planning_avg'];
+            $max_planning_teacher = $teacher['teacher_name'];
+        }
+        if ($teacher['planning_avg'] < $min_planning && $teacher['planning_avg'] > 0) {
+            $min_planning = $teacher['planning_avg'];
+            $min_planning_teacher = $teacher['teacher_name'];
+        }
+    }
+    
     // حساب متوسط تنفيذ الدرس
     if ($teacher['lesson_execution_avg'] !== null) {
         $total_lesson_execution += $teacher['lesson_execution_avg'];
@@ -168,19 +316,84 @@ foreach ($teachers_data as $teacher) {
             $min_management_teacher = $teacher['teacher_name'];
         }
     }
+    
+    // حساب متوسط التقويم
+    if ($teacher['evaluation_avg'] !== null) {
+        $total_evaluation += $teacher['evaluation_avg'];
+        $total_valid_teachers_evaluation++;
+        
+        // تحديد الأفضل والأقل في التقويم
+        if ($teacher['evaluation_avg'] > $max_evaluation) {
+            $max_evaluation = $teacher['evaluation_avg'];
+            $max_evaluation_teacher = $teacher['teacher_name'];
+        }
+        if ($teacher['evaluation_avg'] < $min_evaluation && $teacher['evaluation_avg'] > 0) {
+            $min_evaluation = $teacher['evaluation_avg'];
+            $min_evaluation_teacher = $teacher['teacher_name'];
+        }
+    }
+    
+    // حساب متوسط النشاط العملي
+    if ($teacher['practical_avg'] !== null) {
+        $total_practical += $teacher['practical_avg'];
+        $total_valid_teachers_practical++;
+        
+        // تحديد الأفضل والأقل في النشاط العملي
+        if ($teacher['practical_avg'] > $max_practical) {
+            $max_practical = $teacher['practical_avg'];
+            $max_practical_teacher = $teacher['teacher_name'];
+        }
+        if ($teacher['practical_avg'] < $min_practical && $teacher['practical_avg'] > 0) {
+            $min_practical = $teacher['practical_avg'];
+            $min_practical_teacher = $teacher['teacher_name'];
+        }
+    }
+    
+    // حساب المتوسط العام
+    if ($teacher['overall_avg'] !== null) {
+        $total_overall += $teacher['overall_avg'];
+        $total_valid_teachers_overall++;
+        
+        // تحديد الأفضل والأقل في المتوسط العام
+        if ($teacher['overall_avg'] > $max_overall) {
+            $max_overall = $teacher['overall_avg'];
+            $max_overall_teacher = $teacher['teacher_name'];
+        }
+        if ($teacher['overall_avg'] < $min_overall && $teacher['overall_avg'] > 0) {
+            $min_overall = $teacher['overall_avg'];
+            $min_overall_teacher = $teacher['teacher_name'];
+        }
+    }
 }
 
-// حساب المتوسط العام
+// حساب المتوسطات العامة
+$avg_planning = $total_valid_teachers_planning > 0 ? $total_planning / $total_valid_teachers_planning : 0;
 $avg_lesson_execution = $total_valid_teachers_lesson > 0 ? $total_lesson_execution / $total_valid_teachers_lesson : 0;
 $avg_classroom_management = $total_valid_teachers_management > 0 ? $total_classroom_management / $total_valid_teachers_management : 0;
+$avg_evaluation = $total_valid_teachers_evaluation > 0 ? $total_evaluation / $total_valid_teachers_evaluation : 0;
+$avg_practical = $total_valid_teachers_practical > 0 ? $total_practical / $total_valid_teachers_practical : 0;
+$avg_overall = $total_valid_teachers_overall > 0 ? $total_overall / $total_valid_teachers_overall : 0;
 
 // في حالة عدم وجود بيانات كافية
 if ($min_lesson_execution === 100) $min_lesson_execution = 0;
 if ($min_classroom_management === 100) $min_classroom_management = 0;
+if ($min_planning === 100) $min_planning = 0;
+if ($min_evaluation === 100) $min_evaluation = 0;
+if ($min_practical === 100) $min_practical = 0;
+if ($min_overall === 100) $min_overall = 0;
+
 if ($min_lesson_teacher === '') $min_lesson_teacher = '-';
 if ($max_lesson_teacher === '') $max_lesson_teacher = '-';
 if ($min_management_teacher === '') $min_management_teacher = '-';
 if ($max_management_teacher === '') $max_management_teacher = '-';
+if ($min_planning_teacher === '') $min_planning_teacher = '-';
+if ($max_planning_teacher === '') $max_planning_teacher = '-';
+if ($min_evaluation_teacher === '') $min_evaluation_teacher = '-';
+if ($max_evaluation_teacher === '') $max_evaluation_teacher = '-';
+if ($min_practical_teacher === '') $min_practical_teacher = '-';
+if ($max_practical_teacher === '') $max_practical_teacher = '-';
+if ($min_overall_teacher === '') $min_overall_teacher = '-';
+if ($max_overall_teacher === '') $max_overall_teacher = '-';
 
 // جلب معلومات نوع الزائر
 $visitor_type_name = "جميع الزائرين";
@@ -199,15 +412,10 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج تحديد العام الدراسي ونوع الزائر -->
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label for="academic_year" class="block mb-1">العام الدراسي</label>
-                    <input type="text" id="academic_year" name="academic_year" class="w-full rounded border-gray-300" value="<?= htmlspecialchars($academic_year) ?>">
-                </div>
-                
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label for="visitor_type_id" class="block mb-1">نوع الزائر</label>
-                    <select id="visitor_type_id" name="visitor_type_id" class="w-full rounded border-gray-300">
+                    <select id="visitor_type_id" name="visitor_type_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="0" <?= $visitor_type_id == 0 ? 'selected' : '' ?>>الكل</option>
                         <?php foreach ($visitor_types as $type): ?>
                             <option value="<?= $type['id'] ?>" <?= $visitor_type_id == $type['id'] ? 'selected' : '' ?>>
@@ -219,7 +427,7 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                 
                 <div>
                     <label for="subject_id" class="block mb-1">المادة الدراسية</label>
-                    <select id="subject_id" name="subject_id" class="w-full rounded border-gray-300">
+                    <select id="subject_id" name="subject_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
                         <option value="0" <?= $subject_id == 0 ? 'selected' : '' ?>>الكل</option>
                         <?php foreach ($subjects as $subject): ?>
                             <option value="<?= $subject['id'] ?>" <?= $subject_id == $subject['id'] ? 'selected' : '' ?>>
@@ -238,7 +446,10 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
         </form>
         
         <h2 class="text-xl font-semibold mb-4 text-center">
-            تقرير مقارنة أداء المعلمين بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($academic_year) ?>
+            تقرير مقارنة أداء المعلمين بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($current_year_data['name'] ?? '') ?>
+            <?php if ($selected_term != 'all'): ?>
+            (<?= $selected_term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)
+            <?php endif; ?>
         </h2>
         
         <!-- جدول التقرير -->
@@ -303,14 +514,27 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                     <!-- معدل الأداء لجميع المعلمين -->
                     <tr class="bg-green-100">
                         <td class="py-2 px-4 border text-center font-bold">معدل الأداء لجميع المعلمين</td>
-                        <td class="py-2 px-4 border text-center">
+                        <td class="py-2 px-4 border text-center font-bold">-</td>
+                        <td class="py-2 px-4 border text-center font-bold">
                             <?= array_sum(array_column($teachers_data, 'visits_count')) ?>
+                        </td>
+                        <td class="py-2 px-4 border text-center font-bold">
+                            <?= number_format($avg_planning, 1) ?>%
                         </td>
                         <td class="py-2 px-4 border text-center font-bold">
                             <?= number_format($avg_lesson_execution, 1) ?>%
                         </td>
                         <td class="py-2 px-4 border text-center font-bold">
                             <?= number_format($avg_classroom_management, 1) ?>%
+                        </td>
+                        <td class="py-2 px-4 border text-center font-bold">
+                            <?= number_format($avg_evaluation, 1) ?>%
+                        </td>
+                        <td class="py-2 px-4 border text-center font-bold">
+                            <?= number_format($avg_practical, 1) ?>%
+                        </td>
+                        <td class="py-2 px-4 border text-center font-bold">
+                            <?= number_format($avg_overall, 1) ?>%
                         </td>
                     </tr>
                 </tbody>
@@ -329,6 +553,11 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                 </thead>
                 <tbody>
                     <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-4 border text-center">التخطيط</td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_planning_teacher) ?></td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_planning_teacher) ?></td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
                         <td class="py-2 px-4 border text-center">تنفيذ الدرس</td>
                         <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_lesson_teacher) ?></td>
                         <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_lesson_teacher) ?></td>
@@ -337,6 +566,21 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                         <td class="py-2 px-4 border text-center">الإدارة الصفية</td>
                         <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_management_teacher) ?></td>
                         <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_management_teacher) ?></td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-4 border text-center">التقويم</td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_evaluation_teacher) ?></td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_evaluation_teacher) ?></td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-4 border text-center">النشاط العملي</td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_practical_teacher) ?></td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_practical_teacher) ?></td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-4 border text-center">المتوسط العام</td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_overall_teacher) ?></td>
+                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_overall_teacher) ?></td>
                     </tr>
                 </tbody>
             </table>

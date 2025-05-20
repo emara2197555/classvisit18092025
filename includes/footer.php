@@ -4,13 +4,13 @@
     </main>
 
     <!-- ذيل الصفحة -->
-    <footer class="bg-gray-800 text-white py-6 mt-12">
+    <footer class="bg-gray-800 text-white py-6 mt-10">
         <div class="container mx-auto px-4">
             <div class="flex flex-col md:flex-row justify-between items-center">
                 <div class="mb-4 md:mb-0">
                     <p>&copy; <?= date('Y') ?> نظام الزيارات الصفية - جميع الحقوق محفوظة</p>
                 </div>
-                <div>
+                <div class="text-center text-sm">
                     <p>تم التطوير بواسطة فريق البرمجة</p>
                 </div>
             </div>
@@ -42,6 +42,27 @@
         // تحديث ألوان حقول التقييم عند تحميل الصفحة
         document.addEventListener('DOMContentLoaded', function() {
             updateSelectColor();
+        });
+
+        // التحكم في القائمة المتنقلة
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+        
+        if (mobileMenuButton && mobileMenu) {
+            mobileMenuButton.addEventListener('click', function() {
+                mobileMenu.classList.toggle('hidden');
+            });
+        }
+
+        // التحكم في القوائم الفرعية المتنقلة
+        const mobileSubmenuToggles = document.querySelectorAll('.mobile-submenu-toggle');
+        
+        mobileSubmenuToggles.forEach(toggle => {
+            toggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                const submenu = this.nextElementSibling;
+                submenu.classList.toggle('hidden');
+            });
         });
     </script>
 </body>
