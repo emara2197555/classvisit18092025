@@ -1,4 +1,26 @@
 <?php
+// تضمين نظام المصادقة
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - يجب أن يكون المستخدم مسجل دخول
+protect_page();
+
+// توجيه المستخدمين للوحة التحكم المناسبة
+$user_role = $_SESSION['role_name'] ?? 'admin';
+
+// إذا كان المعلم، وجهه للوحة تحكمه
+if ($user_role === 'teacher') {
+    header('Location: teacher_dashboard.php');
+    exit;
+}
+
+// إذا كان المنسق، وجهه للوحة تحكمه
+if ($user_role === 'coordinator') {
+    header('Location: coordinator_dashboard.php');
+    exit;
+}
+
+// باقي المستخدمين (المديرين) يستمرون في هذه الصفحة
 // تعيين عنوان الصفحة
 $page_title = 'لوحة التحكم - نظام الزيارات الصفية';
 

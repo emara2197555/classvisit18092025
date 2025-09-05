@@ -5,6 +5,14 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - الوصول للمديرين والمشرفين ومنسقي المواد فقط
+protect_page(['Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
+
+// الحصول على معلومات المستخدم
+$user_id = $_SESSION['user_id'];
+$user_role_name = $_SESSION['role_name'];
 
 // تعيين عنوان الصفحة
 $page_title = 'إدارة الزيارات الصفية';
@@ -85,6 +93,23 @@ $search_filters = [
 // إضافة شرط العام الأكاديمي والفصل الدراسي
 $search_condition = " WHERE v.academic_year_id = ?";
 $search_params = [$selected_year_id];
+
+// إضافة قيود منسق المادة
+if ($user_role_name === 'Subject Coordinator') {
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$user_id]);
+    
+    if ($coordinator_data) {
+        $search_condition .= " AND v.subject_id = ?";
+        $search_params[] = $coordinator_data['subject_id'];
+    } else {
+        // إذا لم يكن هناك مادة مخصصة، لا تظهر أي زيارات
+        $search_condition .= " AND 1 = 0";
+    }
+}
 
 // إضافة شرط الفلترة حسب الفصل الدراسي إذا كان محددًا
 if ($selected_term != 'all' && !empty($date_condition)) {
@@ -167,8 +192,40 @@ try {
 // جلب المدارس للفلتر
 $schools = query("SELECT id, name FROM schools ORDER BY name");
 
-// جلب المعلمين للفلتر
-$teachers = query("SELECT id, name FROM teachers ORDER BY name");
+// جلب المعلمين للفلتر مع تطبيق قيود منسق المادة
+if ($user_role_name === 'Subject Coordinator') {
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$user_id]);
+    
+    if ($coordinator_data) {
+        // جلب المعلمين الذين يدرسون مادة المنسق فقط
+        $teachers = query("
+            SELECT DISTINCT t.id, t.name 
+            FROM teachers t 
+            JOIN teacher_subjects ts ON t.id = ts.teacher_id 
+            WHERE ts.subject_id = ? 
+            ORDER BY t.name
+        ", [$coordinator_data['subject_id']]);
+        
+        // جلب مادة المنسق فقط
+        $subjects = query("
+            SELECT id, name 
+            FROM subjects 
+            WHERE id = ? 
+            ORDER BY name
+        ", [$coordinator_data['subject_id']]);
+    } else {
+        $teachers = [];
+        $subjects = [];
+    }
+} else {
+    // المدراء والمشرفون يرون جميع المعلمين والمواد
+    $teachers = query("SELECT id, name FROM teachers ORDER BY name");
+    $subjects = query("SELECT id, name FROM subjects ORDER BY name");
+}
 
 // جلب أنواع الزائرين للفلتر
 $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");

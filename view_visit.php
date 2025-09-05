@@ -5,6 +5,14 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - جميع المستخدمين المسجلين يمكنهم عرض الزيارات
+protect_page();
+
+// الحصول على معلومات المستخدم
+$user_id = $_SESSION['user_id'];
+$user_role_name = $_SESSION['role_name'];
 
 // تعيين عنوان الصفحة
 $page_title = 'عرض تفاصيل الزيارة الصفية';
@@ -60,6 +68,34 @@ try {
     
     if (!$visit) {
         throw new Exception('الزيارة غير موجودة');
+    }
+    
+    // التحقق من صلاحيات الوصول للزيارة
+    $access_denied = false;
+    
+    if ($user_role_name === 'Teacher') {
+        // المعلم يمكنه رؤية زياراته فقط
+        $teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user_id]);
+        if (!$teacher_data || $visit['teacher_id'] != $teacher_data['id']) {
+            $access_denied = true;
+        }
+    } elseif ($user_role_name === 'Subject Coordinator') {
+        // منسق المادة يمكنه رؤية زيارات مادته فقط
+        $coordinator_data = query_row("
+            SELECT subject_id 
+            FROM coordinator_supervisors 
+            WHERE user_id = ?
+        ", [$user_id]);
+        
+        if (!$coordinator_data || $visit['subject_id'] != $coordinator_data['subject_id']) {
+            $access_denied = true;
+        }
+    }
+    
+    if ($access_denied) {
+        echo show_alert('غير مسموح لك بعرض هذه الزيارة', 'error');
+        require_once 'includes/footer.php';
+        exit;
     }
     
     // جلب تفاصيل التقييم لهذه الزيارة

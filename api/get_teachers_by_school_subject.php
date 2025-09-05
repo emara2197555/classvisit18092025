@@ -2,10 +2,47 @@
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once '../includes/db_connection.php';
 require_once '../includes/functions.php';
+require_once '../includes/auth_functions.php';
+
+// التحقق من تسجيل الدخول
+session_start();
+if (!is_logged_in()) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+$user_role_name = $_SESSION['role_name'];
 
 // استلام معرف المدرسة والمادة
 $school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
+
+// التحقق من صلاحيات منسق المادة
+if ($user_role_name === 'Subject Coordinator') {
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$user_id]);
+    
+    if (!$coordinator_data) {
+        http_response_code(403);
+        echo json_encode(['error' => 'No subject assigned']);
+        exit;
+    }
+    
+    // تأكد من أن منسق المادة لا يمكنه الوصول إلا لمادته
+    if ($subject_id > 0 && $subject_id != $coordinator_data['subject_id']) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Access denied to this subject']);
+        exit;
+    }
+    
+    // فرض معرف المادة للمنسق
+    $subject_id = $coordinator_data['subject_id'];
+}
 
 // بناء الاستعلام حسب المعلمات المتوفرة
 if ($school_id > 0 && $subject_id > 0) {

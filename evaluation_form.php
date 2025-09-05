@@ -5,6 +5,16 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - المسموح لهم بإنشاء الزيارات
+protect_page(['admin', 'director', 'academic_deputy', 'coordinator']);
+
+// الحصول على بيانات المستخدم الحالي
+$current_user_role = $_SESSION['role_name'] ?? 'admin';
+$current_user_school_id = $_SESSION['school_id'] ?? null;
+$current_user_subject_id = $_SESSION['subject_id'] ?? null;
+$current_user_id = $_SESSION['user_id'] ?? null;
 
 // تعيين عنوان الصفحة
 $page_title = 'نموذج تقييم زيارة صفية';
@@ -142,8 +152,28 @@ try {
     $domains = query("SELECT * FROM evaluation_domains ORDER BY id");
     $visitor_types = query("SELECT * FROM visitor_types ORDER BY name");
     
-    // جلب المواد الدراسية للمدرسة
-    $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NULL ORDER BY name", [$school_id]);
+    // جلب المواد الدراسية للمدرسة مع تطبيق قيود منسق المادة
+    if ($user_role_name === 'Subject Coordinator') {
+        // منسق المادة يرى مادته فقط
+        $coordinator_data = query_row("
+            SELECT subject_id 
+            FROM coordinator_supervisors 
+            WHERE user_id = ?
+        ", [$user_id]);
+        
+        if ($coordinator_data) {
+            $subjects = query("
+                SELECT * FROM subjects 
+                WHERE id = ? AND (school_id = ? OR school_id IS NULL) 
+                ORDER BY name
+            ", [$coordinator_data['subject_id'], $school_id]);
+        } else {
+            $subjects = [];
+        }
+    } else {
+        // المدراء والمشرفون يرون جميع المواد
+        $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NULL ORDER BY name", [$school_id]);
+    }
 } catch (PDOException $e) {
     // تعامل مع أي أخطاء في قاعدة البيانات
     $error_message = "حدث خطأ أثناء جلب البيانات. يرجى المحاولة مرة أخرى لاحقاً.";

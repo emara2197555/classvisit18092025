@@ -5,6 +5,14 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - جميع المستخدمين المسجلين يمكنهم عرض التقارير
+protect_page();
+
+// الحصول على معلومات المستخدم
+$user_id = $_SESSION['user_id'];
+$user_role_name = $_SESSION['role_name'];
 
 // تعيين عنوان الصفحة
 $page_title = 'تقرير أداء المعلم';
@@ -36,6 +44,41 @@ if (!$teacher) {
     echo show_alert("لم يتم العثور على المعلم المطلوب", "error");
     require_once 'includes/footer.php';
     exit;
+}
+
+// التحقق من صلاحيات الوصول لتقرير المعلم
+if ($user_role_name === 'Teacher') {
+    // المعلم يمكنه رؤية تقريره فقط
+    $user_teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user_id]);
+    if (!$user_teacher_data || $teacher_id != $user_teacher_data['id']) {
+        echo show_alert("غير مسموح لك بعرض تقرير هذا المعلم", "error");
+        require_once 'includes/footer.php';
+        exit;
+    }
+} elseif ($user_role_name === 'Subject Coordinator') {
+    // منسق المادة يمكنه رؤية تقارير معلمي مادته فقط
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$user_id]);
+    
+    if ($coordinator_data) {
+        $teacher_teaches_subject = query_row("
+            SELECT 1 FROM teacher_subjects 
+            WHERE teacher_id = ? AND subject_id = ?
+        ", [$teacher_id, $coordinator_data['subject_id']]);
+        
+        if (!$teacher_teaches_subject) {
+            echo show_alert("غير مسموح لك بعرض تقرير هذا المعلم", "error");
+            require_once 'includes/footer.php';
+            exit;
+        }
+    } else {
+        echo show_alert("لم يتم تخصيص مادة لك", "error");
+        require_once 'includes/footer.php';
+        exit;
+    }
 }
 
 // جلب المواد التي يدرسها المعلم
