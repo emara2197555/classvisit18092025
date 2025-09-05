@@ -276,7 +276,7 @@ if ($visitor_type_id > 0) {
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج تحديد العام الدراسي ونوع الزائر -->
-        <form action="" method="get" class="mb-6">
+        <form action="" method="get" class="mb-6 no-print">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <label for="academic_year_id" class="block mb-1">العام الدراسي</label>
@@ -354,154 +354,471 @@ if ($visitor_type_id > 0) {
             </div>
         </form>
         
-        <h2 class="text-xl font-semibold mb-4 text-center">
-            تقرير مقارنة أداء الصفوف والشعب بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($academic_year) ?>
-            <?php if ($selected_term != 'all'): ?>
-                (<?= $selected_term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)
-            <?php endif; ?>
-            <?php if ($subject_id > 0): ?>
-                <?php 
-                $subject_name = '';
-                foreach ($subjects as $subject) { 
-                    if ($subject['id'] == $subject_id) { 
-                        $subject_name = $subject['name']; 
-                        break; 
-                    } 
-                } 
-                ?>
-                - مادة: <?= htmlspecialchars($subject_name) ?>
-            <?php endif; ?>
-            <?php if ($teacher_id > 0): ?>
-                <?php 
-                $teacher_name = '';
-                foreach ($teachers as $teacher) { 
-                    if ($teacher['id'] == $teacher_id) { 
-                        $teacher_name = $teacher['name']; 
-                        break; 
-                    } 
-                } 
-                ?>
-                - معلم: <?= htmlspecialchars($teacher_name) ?>
-            <?php endif; ?>
-        </h2>
-        
-        <!-- جدول التقرير -->
-        <div class="overflow-x-auto">
-            <table class="min-w-full bg-white border border-gray-200">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="py-3 px-4 border text-center font-semibold">الصف والشعبة</th>
-                        <th class="py-3 px-4 border text-center font-semibold">عدد الزيارات</th>
-                        <th class="py-3 px-4 border text-center font-semibold">تنفيذ الدرس</th>
-                        <th class="py-3 px-4 border text-center font-semibold">الإدارة الصفية</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($classes_data as $class): ?>
-                        <tr class="hover:bg-gray-50">
-                            <td class="py-2 px-4 border text-center"><?= htmlspecialchars($class['class_name']) ?></td>
-                            <td class="py-2 px-4 border text-center"><?= $class['visits_count'] ?></td>
-                            <td class="py-2 px-4 border text-center">
-                                <?php if ($class['lesson_execution_avg'] !== null): ?>
-                                    <?= number_format($class['lesson_execution_avg'], 1) ?>%
-                                <?php endif; ?>
-                            </td>
-                            <td class="py-2 px-4 border text-center">
-                                <?php if ($class['classroom_management_avg'] !== null): ?>
-                                    <?= number_format($class['classroom_management_avg'], 1) ?>%
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    
-                    <!-- معدل الأداء لجميع الصفوف -->
-                    <tr class="bg-green-100">
-                        <td class="py-2 px-4 border text-center font-bold">معدل الأداء لجميع الصفوف</td>
-                        <td class="py-2 px-4 border text-center">
-                            <?= array_sum(array_column($classes_data, 'visits_count')) ?>
-                        </td>
-                        <td class="py-2 px-4 border text-center font-bold">
-                            <?= number_format($avg_lesson_execution, 1) ?>%
-                        </td>
-                        <td class="py-2 px-4 border text-center font-bold">
-                            <?= number_format($avg_classroom_management, 1) ?>%
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 mb-6">
+            <!-- العنوان المحسن -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-xl p-6">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-chart-line text-blue-200 ml-3"></i>
+                    تقرير مقارنة أداء الصفوف والشعب
+                </h2>
+                <div class="text-blue-100 text-sm mt-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="bg-blue-500 bg-opacity-30 px-2 py-1 rounded">للعام الأكاديمي <?= htmlspecialchars($academic_year) ?></span>
+                        <?php if ($selected_term != 'all'): ?>
+                            <span class="bg-blue-500 bg-opacity-30 px-2 py-1 rounded">(<?= $selected_term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)</span>
+                        <?php endif; ?>
+                        <span class="bg-blue-500 bg-opacity-30 px-2 py-1 rounded"><?= htmlspecialchars($visitor_type_name) ?></span>
+                        <?php if ($subject_id > 0): ?>
+                            <?php 
+                            $subject_name = '';
+                            foreach ($subjects as $subject) { 
+                                if ($subject['id'] == $subject_id) { 
+                                    $subject_name = $subject['name']; 
+                                    break; 
+                                } 
+                            } 
+                            ?>
+                            <span class="bg-green-500 bg-opacity-30 px-2 py-1 rounded">مادة: <?= htmlspecialchars($subject_name) ?></span>
+                        <?php endif; ?>
+                        <?php if ($teacher_id > 0): ?>
+                            <?php 
+                            $teacher_name = '';
+                            foreach ($teachers as $teacher) { 
+                                if ($teacher['id'] == $teacher_id) { 
+                                    $teacher_name = $teacher['name']; 
+                                    break; 
+                                } 
+                            } 
+                            ?>
+                            <span class="bg-purple-500 bg-opacity-30 px-2 py-1 rounded">معلم: <?= htmlspecialchars($teacher_name) ?></span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- جدول التقرير المحسن -->
+            <div class="p-6">
+                <div class="overflow-x-auto rounded-lg shadow-sm">
+                    <table class="min-w-full bg-white">
+                        <thead>
+                            <tr class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                                <th class="py-4 px-6 text-right font-bold">
+                                    <i class="fas fa-chalkboard-teacher ml-2"></i>
+                                    الصف والشعبة
+                                </th>
+                                <th class="py-4 px-6 text-center font-bold">
+                                    <i class="fas fa-eye ml-2"></i>
+                                    عدد الزيارات
+                                </th>
+                                <th class="py-4 px-6 text-center font-bold">
+                                    <i class="fas fa-tasks ml-2"></i>
+                                    تنفيذ الدرس
+                                </th>
+                                <th class="py-4 px-6 text-center font-bold">
+                                    <i class="fas fa-users-cog ml-2"></i>
+                                    الإدارة الصفية
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <?php foreach ($classes_data as $index => $class): ?>
+                                <tr class="hover:bg-blue-50 transition-colors duration-200 <?= $index % 2 == 0 ? 'bg-gray-50' : 'bg-white' ?>">
+                                    <td class="py-4 px-6 font-semibold text-gray-800">
+                                        <div class="flex items-center">
+                                            <div class="bg-indigo-100 rounded-full p-2 ml-3">
+                                                <i class="fas fa-graduation-cap text-indigo-600"></i>
+                                            </div>
+                                            <?= htmlspecialchars($class['class_name']) ?>
+                                        </div>
+                                    </td>
+                                    <td class="py-4 px-6 text-center">
+                                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
+                                            <?= $class['visits_count'] ?>
+                                        </span>
+                                    </td>
+                                    <td class="py-4 px-6 text-center">
+                                        <?php if ($class['lesson_execution_avg'] !== null): ?>
+                                            <?php 
+                                            $lesson_score = $class['lesson_execution_avg'];
+                                            $lesson_color = $lesson_score >= 80 ? 'green' : ($lesson_score >= 60 ? 'yellow' : 'red');
+                                            ?>
+                                            <span class="bg-<?= $lesson_color ?>-100 text-<?= $lesson_color ?>-800 px-3 py-2 rounded-full font-bold text-sm">
+                                                <?= number_format($lesson_score, 1) ?>%
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-gray-400">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="py-4 px-6 text-center">
+                                        <?php if ($class['classroom_management_avg'] !== null): ?>
+                                            <?php 
+                                            $management_score = $class['classroom_management_avg'];
+                                            $management_color = $management_score >= 80 ? 'green' : ($management_score >= 60 ? 'yellow' : 'red');
+                                            ?>
+                                            <span class="bg-<?= $management_color ?>-100 text-<?= $management_color ?>-800 px-3 py-2 rounded-full font-bold text-sm">
+                                                <?= number_format($management_score, 1) ?>%
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="text-gray-400">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            
+                            <!-- معدل الأداء لجميع الصفوف -->
+                            <tr class="bg-gradient-to-r from-green-100 to-emerald-100 border-t-2 border-green-300">
+                                <td class="py-4 px-6 font-bold text-green-800">
+                                    <div class="flex items-center">
+                                        <div class="bg-green-500 rounded-full p-2 ml-3">
+                                            <i class="fas fa-chart-bar text-white"></i>
+                                        </div>
+                                        معدل الأداء لجميع الصفوف
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <span class="bg-green-600 text-white px-4 py-2 rounded-full font-bold">
+                                        <?= array_sum(array_column($classes_data, 'visits_count')) ?>
+                                    </span>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <span class="bg-green-600 text-white px-4 py-2 rounded-full font-bold">
+                                        <?= number_format($avg_lesson_execution, 1) ?>%
+                                    </span>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <span class="bg-green-600 text-white px-4 py-2 rounded-full font-bold">
+                                        <?= number_format($avg_classroom_management, 1) ?>%
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         
-        <!-- جدول المقارنة -->
-        <div class="mt-6 overflow-x-auto">
-            <table class="min-w-full bg-white border border-gray-200">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="py-3 px-4 border text-center font-semibold">جوانب المقارنة</th>
-                        <th class="py-3 px-4 border text-center font-semibold">أفضل أداء</th>
-                        <th class="py-3 px-4 border text-center font-semibold">أقل أداء</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="hover:bg-gray-50">
-                        <td class="py-2 px-4 border text-center">تنفيذ الدرس</td>
-                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_lesson_class) ?></td>
-                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_lesson_class) ?></td>
-                    </tr>
-                    <tr class="hover:bg-gray-50">
-                        <td class="py-2 px-4 border text-center">الإدارة الصفية</td>
-                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($max_management_class) ?></td>
-                        <td class="py-2 px-4 border text-center"><?= htmlspecialchars($min_management_class) ?></td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- جدول المقارنة المحسن -->
+        <div class="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 mb-6">
+            <!-- عنوان جدول المقارنة -->
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-t-xl p-4">
+                <h3 class="text-lg font-bold flex items-center">
+                    <i class="fas fa-balance-scale text-purple-200 ml-3"></i>
+                    جدول المقارنة - أفضل وأقل أداء
+                </h3>
+                <p class="text-purple-100 text-sm mt-1">مقارنة سريعة لأعلى وأقل الصفوف أداءً</p>
+            </div>
+
+            <div class="p-6">
+                <div class="overflow-x-auto rounded-lg shadow-sm">
+                    <table class="min-w-full bg-white">
+                        <thead>
+                            <tr class="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+                                <th class="py-4 px-6 text-right font-bold">
+                                    <i class="fas fa-list-alt ml-2"></i>
+                                    جوانب المقارنة
+                                </th>
+                                <th class="py-4 px-6 text-center font-bold">
+                                    <i class="fas fa-trophy ml-2"></i>
+                                    أفضل أداء
+                                </th>
+                                <th class="py-4 px-6 text-center font-bold">
+                                    <i class="fas fa-arrow-down ml-2"></i>
+                                    أقل أداء
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <tr class="hover:bg-purple-50 transition-colors duration-200 bg-gray-50">
+                                <td class="py-4 px-6 font-semibold text-gray-800">
+                                    <div class="flex items-center">
+                                        <div class="bg-blue-100 rounded-full p-2 ml-3">
+                                            <i class="fas fa-tasks text-blue-600"></i>
+                                        </div>
+                                        تنفيذ الدرس
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <div class="bg-green-100 border border-green-300 rounded-lg p-3">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-medal text-green-600 ml-2"></i>
+                                            <span class="font-bold text-green-800"><?= htmlspecialchars($max_lesson_class) ?></span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <div class="bg-red-100 border border-red-300 rounded-lg p-3">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-exclamation-triangle text-red-600 ml-2"></i>
+                                            <span class="font-bold text-red-800"><?= htmlspecialchars($min_lesson_class) ?></span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-purple-50 transition-colors duration-200 bg-white">
+                                <td class="py-4 px-6 font-semibold text-gray-800">
+                                    <div class="flex items-center">
+                                        <div class="bg-orange-100 rounded-full p-2 ml-3">
+                                            <i class="fas fa-users-cog text-orange-600"></i>
+                                        </div>
+                                        الإدارة الصفية
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <div class="bg-green-100 border border-green-300 rounded-lg p-3">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-medal text-green-600 ml-2"></i>
+                                            <span class="font-bold text-green-800"><?= htmlspecialchars($max_management_class) ?></span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-6 text-center">
+                                    <div class="bg-red-100 border border-red-300 rounded-lg p-3">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-exclamation-triangle text-red-600 ml-2"></i>
+                                            <span class="font-bold text-red-800"><?= htmlspecialchars($min_management_class) ?></span>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ملخص سريع -->
+                <div class="mt-6 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg p-4">
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div>
+                            <div class="text-2xl font-bold text-green-600">
+                                <i class="fas fa-arrow-up"></i>
+                            </div>
+                            <div class="text-sm text-green-700 font-semibold">أفضل الصفوف</div>
+                            <div class="text-xs text-gray-600">يستحقون التقدير</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-red-600">
+                                <i class="fas fa-arrow-down"></i>
+                            </div>
+                            <div class="text-sm text-red-700 font-semibold">تحتاج تطوير</div>
+                            <div class="text-xs text-gray-600">برامج دعم إضافية</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <!-- زر الطباعة -->
-        <div class="mt-6 text-center">
-            <button onclick="window.print()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-                <i class="bi bi-printer ml-2"></i> طباعة التقرير
-            </button>
+        <!-- زر الطباعة المحسن -->
+        <div class="mt-8 text-center no-print">
+            <div class="bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl p-6 shadow-lg">
+                <h4 class="text-lg font-semibold text-gray-700 mb-4 flex items-center justify-center">
+                    <i class="fas fa-file-pdf text-red-500 ml-2"></i>
+                    إجراءات التقرير
+                </h4>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <button onclick="printReport()" class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+                        <i class="fas fa-print ml-2"></i> 
+                        طباعة التقرير
+                    </button>
+                    <button onclick="window.history.back()" class="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-lg font-semibold hover:from-gray-700 hover:to-gray-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105">
+                        <i class="fas fa-arrow-right ml-2"></i>
+                        العودة للخلف
+                    </button>
+                </div>
+                <div class="text-xs text-gray-600 mt-3">
+                    <i class="fas fa-info-circle ml-1"></i>
+                    يمكنك طباعة التقرير أو حفظه كملف PDF من خلال خيارات الطباعة
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
+<script>
+function printReport() {
+    // إضافة عنوان للطباعة
+    const originalTitle = document.title;
+    document.title = 'تقرير مقارنة أداء الصفوف والشعب - ' + new Date().toLocaleDateString('ar-SA');
+    
+    // تحسين إعداد الطباعة
+    window.print();
+    
+    // إرجاع العنوان الأصلي
+    document.title = originalTitle;
+}
+
+// إضافة تحسينات إضافية للطباعة
+window.addEventListener('beforeprint', function() {
+    // إضافة تاريخ الطباعة
+    const printDate = document.createElement('div');
+    printDate.id = 'print-date';
+    printDate.style.cssText = 'position: fixed; top: 10px; left: 10px; font-size: 8px; color: #666;';
+    printDate.textContent = 'تاريخ الطباعة: ' + new Date().toLocaleDateString('ar-SA') + ' ' + new Date().toLocaleTimeString('ar-SA');
+    document.body.appendChild(printDate);
+});
+
+window.addEventListener('afterprint', function() {
+    // إزالة تاريخ الطباعة بعد الطباعة
+    const printDate = document.getElementById('print-date');
+    if (printDate) {
+        printDate.remove();
+    }
+});
+</script>
+
 <style media="print">
     @page {
-        size: landscape;
+        size: A4 landscape;
+        margin: 0.5in;
     }
     
-    header, nav, footer, form, button {
+    /* إخفاء العناصر غير المطلوبة للطباعة */
+    header, nav, footer, form, button, .no-print {
         display: none !important;
     }
     
+    /* إعدادات الجسم الرئيسي */
     body {
-        background-color: white;
+        background-color: white !important;
+        font-size: 10px !important;
+        line-height: 1.2 !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     
-    h2 {
-        margin-top: 0;
-        margin-bottom: 20px;
+    /* إعدادات الحاوي الرئيسي */
+    .container, .main-content {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     
+    /* تحسين العناوين */
+    h1, h2, h3 {
+        margin-top: 0 !important;
+        margin-bottom: 10px !important;
+        font-size: 14px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+    }
+    
+    /* إعدادات البطاقات والحاويات */
+    .bg-gradient-to-br, .bg-gradient-to-r, .rounded-xl, .shadow-lg {
+        background: white !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* إعدادات الجداول */
     table {
-        width: 100%;
-        border-collapse: collapse;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin: 10px 0 !important;
+        font-size: 9px !important;
+        page-break-inside: avoid !important;
     }
     
     th, td {
-        border: 1px solid #000;
-        padding: 8px;
-        text-align: center;
+        border: 1px solid #000 !important;
+        padding: 4px 2px !important;
+        text-align: center !important;
+        background: white !important;
+        font-size: 9px !important;
+        line-height: 1.1 !important;
+        vertical-align: middle !important;
     }
     
-    tr.bg-green-100 {
+    th {
+        background-color: #e5e7eb !important;
+        font-weight: bold !important;
+        font-size: 8px !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    /* الألوان للطباعة */
+    .bg-green-100, .bg-gradient-to-r.from-green-100 {
         background-color: #d1fae5 !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     
-    thead.bg-gray-100 {
-        background-color: #f3f4f6 !important;
+    .bg-gradient-to-r.from-indigo-600, .bg-gradient-to-r.from-purple-600 {
+        background-color: #4f46e5 !important;
+        color: white !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    /* البطاقات الملونة */
+    .bg-green-100.text-green-800, .bg-yellow-100.text-yellow-800, .bg-red-100.text-red-800 {
+        background-color: #f3f4f6 !important;
+        color: black !important;
+        border: 1px solid #000 !important;
+        border-radius: 0 !important;
+        padding: 2px 4px !important;
+        font-size: 8px !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .bg-green-600.text-white {
+        background-color: #059669 !important;
+        color: white !important;
+        border-radius: 0 !important;
+        padding: 2px 4px !important;
+        font-size: 8px !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    /* إخفاء الأيقونات في الطباعة */
+    .fas, .fa, i {
+        display: none !important;
+    }
+    
+    /* تحسين المساحات */
+    .p-6, .p-4, .px-6, .py-4, .m-6, .mb-6, .mt-6 {
+        padding: 0 !important;
+        margin: 5px 0 !important;
+    }
+    
+    /* تحسين العرض للجوال */
+    .overflow-x-auto {
+        overflow: visible !important;
+    }
+    
+    /* منع كسر الصفحة داخل الجداول */
+    tr {
+        page-break-inside: avoid !important;
+    }
+    
+    /* تحسين تقسيم الأعمدة */
+    .grid {
+        display: block !important;
+    }
+    
+    /* عرض العناوين بشكل مناسب */
+    .text-blue-100, .text-purple-100 {
+        color: white !important;
+    }
+    
+    /* إزالة التأثيرات البصرية */
+    .hover\:bg-blue-50, .hover\:bg-purple-50, .transition-colors, .duration-200 {
+        background: transparent !important;
+        transition: none !important;
+    }
+    
+    /* ضغط المحتوى ليناسب صفحة واحدة */
+    body * {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    
+    /* تحسين توزيع المساحة */
+    .space-y-4 > * + *, .space-y-6 > * + *, .gap-4, .gap-6 {
+        margin-top: 5px !important;
     }
 </style>
 

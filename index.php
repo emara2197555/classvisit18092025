@@ -515,85 +515,213 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
             </div>
         </div>
         
-        <!-- رسم بياني: أداء المعلمين -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
-                <i class="fas fa-user-chart text-primary-500 ml-2"></i>
-                أداء المعلمين
-            </h2>
-            
-            <h3 class="text-md font-medium text-gray-700 mb-2">🔸 أفضل المعلمين أداءً:</h3>
-            <div class="space-y-3 mb-6">
-                <?php foreach ($best_teachers as $index => $teacher): ?>
-                <?php if ($index >= 2) continue; // إظهار أفضل معلمين فقط ?>
-                <div class="flex items-center">
-                    <div class="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center text-green-500 ml-3">
-                        <i class="fas fa-medal"></i>
-                    </div>
-                    <div>
-                        <div class="font-medium"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
-                        <div class="text-sm text-gray-500">
-                            <span class="ml-2">مادة <?= htmlspecialchars($teacher['subject_name']) ?></span>
-                            <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                                نسبة الأداء: <?= number_format($teacher['avg_score'], 0) ?>%
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
+        <!-- أداء المعلمين المحسن -->
+        <div class="bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg border border-blue-100 p-6">
+            <!-- العنوان الرئيسي -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg p-4 mb-6">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-user-chart text-blue-200 ml-3"></i>
+                    تقييم أداء المعلمين
+                </h2>
+                <p class="text-blue-100 text-sm mt-1">نظرة شاملة على مستويات الأداء في النظام التعليمي</p>
             </div>
-            
-            <h3 class="text-md font-medium text-gray-700 mb-2">🔸 أقل المعلمين أداءً:</h3>
-            <div class="space-y-3">
-                <?php foreach ($worst_teachers as $index => $teacher): ?>
-                <?php if ($index >= 2) continue; // إظهار أقل معلمين فقط ?>
-                <div class="flex items-center">
-                    <div class="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center text-red-500 ml-3">
-                        <i class="fas fa-exclamation-circle"></i>
-                    </div>
-                    <div>
-                        <div class="font-medium"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
-                        <div class="text-sm text-gray-500">
-                            <span class="ml-2">مادة <?= htmlspecialchars($teacher['subject_name']) ?></span>
-                            <span class="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
-                                نسبة الأداء: <?= number_format($teacher['avg_score'], 0) ?>%
-                            </span>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- أفضل المعلمين أداءً -->
+                <div class="bg-white rounded-lg border-r-4 border-green-500 p-5 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-green-100 p-2 rounded-lg ml-3">
+                            <i class="fas fa-trophy text-green-600 text-lg"></i>
                         </div>
+                        <h3 class="text-lg font-semibold text-green-700">أفضل المعلمين أداءً</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <?php foreach ($best_teachers as $index => $teacher): ?>
+                        <?php if ($index >= 2) continue; ?>
+                        <div class="bg-green-50 rounded-lg p-4 border border-green-200 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold ml-3">
+                                        <?= $index + 1 ?>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-gray-800"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
+                                        <div class="text-sm text-gray-600 flex items-center mt-1">
+                                            <i class="fas fa-book text-green-500 ml-1"></i>
+                                            <?= htmlspecialchars($teacher['subject_name']) ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-2 rounded-full text-sm font-bold">
+                                    <?= number_format($teacher['avg_score'], 0) ?>%
+                                </div>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
-                <?php endforeach; ?>
+
+                <!-- المعلمين الذين يحتاجون تطوير -->
+                <div class="bg-white rounded-lg border-r-4 border-orange-500 p-5 shadow-sm">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-orange-100 p-2 rounded-lg ml-3">
+                            <i class="fas fa-chart-line text-orange-600 text-lg"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-orange-700">يحتاجون تطوير</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <?php foreach ($worst_teachers as $index => $teacher): ?>
+                        <?php if ($index >= 2) continue; ?>
+                        <div class="bg-orange-50 rounded-lg p-4 border border-orange-200 hover:shadow-md transition-all duration-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold ml-3">
+                                        <i class="fas fa-exclamation text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-gray-800"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
+                                        <div class="text-sm text-gray-600 flex items-center mt-1">
+                                            <i class="fas fa-book text-orange-500 ml-1"></i>
+                                            <?= htmlspecialchars($teacher['subject_name']) ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-2 rounded-full text-sm font-bold">
+                                    <?= number_format($teacher['avg_score'], 0) ?>%
+                                </div>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ملخص سريع -->
+            <div class="mt-6 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg p-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600"><?= count($best_teachers) ?></div>
+                        <div class="text-sm text-blue-700">معلم متميز</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-600">
+                            <?= isset($best_teachers[0]) ? number_format($best_teachers[0]['avg_score'], 0) : '0' ?>%
+                        </div>
+                        <div class="text-sm text-green-700">أعلى نسبة</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-orange-600"><?= count($worst_teachers) ?></div>
+                        <div class="text-sm text-orange-700">يحتاج تطوير</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-red-600">
+                            <?= isset($worst_teachers[0]) ? number_format($worst_teachers[0]['avg_score'], 0) : '0' ?>%
+                        </div>
+                        <div class="text-sm text-red-700">أقل نسبة</div>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <!-- أداء المدارس / الصفوف -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
-                <i class="fas fa-school text-primary-500 ml-2"></i>
-                أداء المدارس / الصفوف
-            </h2>
-            
-            <div class="space-y-4">
-                <div class="border-r-4 border-blue-500 pr-3 py-1">
-                    <div class="text-sm text-gray-500">أفضل مدرسة من حيث نتائج التقييم:</div>
-                    <div class="font-medium"><?= htmlspecialchars($best_school) ?> (متوسط <?= $best_school_score ?>%)</div>
-                </div>
-                
-                <div class="border-r-4 border-green-500 pr-3 py-1">
-                    <div class="text-sm text-gray-500">الصف الأعلى أداءً:</div>
-                    <div class="font-medium"><?= htmlspecialchars($best_grade) ?> (<?= $best_grade_score ?>%)</div>
-                </div>
-                
-                <div class="border-r-4 border-red-500 pr-3 py-1">
-                    <div class="text-sm text-gray-500">الصف الأقل أداءً:</div>
-                    <div class="font-medium"><?= htmlspecialchars($worst_grade) ?> (<?= $worst_grade_score ?>%)</div>
-                </div>
+        <!-- أداء المدارس / الصفوف المحسن -->
+        <div class="bg-gradient-to-br from-white to-purple-50 rounded-xl shadow-lg border border-purple-100 p-6">
+            <!-- العنوان الرئيسي -->
+            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg p-4 mb-6">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-school text-purple-200 ml-3"></i>
+                    تقييم أداء المدارس والصفوف
+                </h2>
+                <p class="text-purple-100 text-sm mt-1">مؤشرات الأداء على مستوى المؤسسات التعليمية</p>
             </div>
-            
-            <div class="mt-4 text-left">
-                <a href="grades_performance_report.php" class="inline-block text-primary-600 hover:text-primary-800 hover:underline text-sm">
-                    <i class="fas fa-arrow-left ml-1"></i>
-                    عرض تقرير الأداء المفصل
-                </a>
+
+            <div class="grid gap-6">
+                <!-- أفضل مدرسة -->
+                <div class="bg-white rounded-lg shadow-sm border-2 border-blue-200 p-5 hover:shadow-md transition-all duration-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded-lg ml-4">
+                                <i class="fas fa-crown text-white text-xl"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm text-blue-600 font-medium mb-1">🏆 أفضل مدرسة من حيث نتائج التقييم</div>
+                                <div class="font-bold text-gray-800 text-lg"><?= htmlspecialchars($best_school) ?></div>
+                            </div>
+                        </div>
+                        <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full font-bold text-lg">
+                            <?= $best_school_score ?>%
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- الصف الأعلى أداءً -->
+                    <div class="bg-white rounded-lg shadow-sm border-2 border-green-200 p-5 hover:shadow-md transition-all duration-200">
+                        <div class="flex items-center mb-3">
+                            <div class="bg-gradient-to-r from-green-500 to-emerald-500 p-2 rounded-lg ml-3">
+                                <i class="fas fa-arrow-up text-white"></i>
+                            </div>
+                            <div class="text-green-700 font-semibold">الصف الأعلى أداءً</div>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-3 border border-green-200">
+                            <div class="font-bold text-gray-800"><?= htmlspecialchars($best_grade) ?></div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-sm text-green-600">نسبة الأداء</span>
+                                <span class="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                                    <?= $best_grade_score ?>%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- الصف الأقل أداءً -->
+                    <div class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-5 hover:shadow-md transition-all duration-200">
+                        <div class="flex items-center mb-3">
+                            <div class="bg-gradient-to-r from-red-500 to-orange-500 p-2 rounded-lg ml-3">
+                                <i class="fas fa-arrow-down text-white"></i>
+                            </div>
+                            <div class="text-red-700 font-semibold">يحتاج تطوير</div>
+                        </div>
+                        <div class="bg-red-50 rounded-lg p-3 border border-red-200">
+                            <div class="font-bold text-gray-800"><?= htmlspecialchars($worst_grade) ?></div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-sm text-red-600">نسبة الأداء</span>
+                                <span class="bg-gradient-to-r from-red-500 to-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                                    <?= $worst_grade_score ?>%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- الإحصائيات السريعة -->
+                <div class="bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg p-4">
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <div class="text-2xl font-bold text-purple-600"><?= $best_school_score ?>%</div>
+                            <div class="text-sm text-purple-700">أفضل مدرسة</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-green-600"><?= $best_grade_score ?>%</div>
+                            <div class="text-sm text-green-700">أعلى صف</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-red-600"><?= $worst_grade_score ?>%</div>
+                            <div class="text-sm text-red-700">أقل صف</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- رابط التقرير المفصل -->
+                <div class="bg-gradient-to-r from-gray-100 to-gray-200 rounded-lg p-4 text-center">
+                    <a href="grades_performance_report.php" class="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                        <i class="fas fa-chart-bar ml-2"></i>
+                        عرض تقرير الأداء المفصل
+                        <i class="fas fa-arrow-left mr-2"></i>
+                    </a>
+                    <div class="text-xs text-gray-600 mt-2">تحليل شامل لجميع المؤشرات والإحصائيات</div>
+                </div>
             </div>
         </div>
 
