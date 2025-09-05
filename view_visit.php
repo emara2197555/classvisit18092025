@@ -190,19 +190,25 @@ if ($visit['attendance_type'] == 'remote') {
     }
     
     .info-item {
-        margin-bottom: 10px;
+        margin-bottom: 12px;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background-color: #f9fafb;
     }
     
     .info-label {
-        font-weight: bold;
-        color: #555;
+        font-weight: 600;
+        color: #374151;
         display: block;
-        margin-bottom: 2px;
-        font-size: 0.9rem;
+        margin-bottom: 4px;
+        font-size: 0.875rem;
     }
     
     .info-value {
-        font-weight: normal;
+        font-weight: 500;
+        color: #111827;
+        font-size: 0.95rem;
     }
     
     .notes-box {
@@ -273,32 +279,79 @@ if ($visit['attendance_type'] == 'remote') {
         border: 2px dashed #d1d5db;
     }
     
+    .indicator-table {
+        border-collapse: collapse;
+        width: 100%;
+        background-color: white;
+    }
+    
     .indicator-table th {
-        background-color: #f2f2f2;
+        background-color: #f9fafb;
+        color: #374151;
         text-align: center;
-        padding: 10px;
+        padding: 12px;
+        font-weight: 600;
+        border: 1px solid #e5e7eb;
+        font-size: 14px;
+    }
+    
+    .indicator-table th:first-child {
+        text-align: right;
+        width: 50%;
+    }
+    
+    .indicator-table th:nth-child(2) {
+        width: 15%;
+    }
+    
+    .indicator-table th:last-child {
+        text-align: right;
+        width: 35%;
     }
     
     .indicator-table td {
-        padding: 10px;
-        border-bottom: 1px solid #e5e7eb;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        vertical-align: top;
+    }
+    
+    .indicator-table td:first-child {
+        text-align: right;
+        font-weight: 500;
+        color: #374151;
+        line-height: 1.5;
     }
     
     .indicator-table td:nth-child(2) {
         text-align: center;
     }
     
+    .indicator-table td:last-child {
+        text-align: right;
+        color: #374151;
+        line-height: 1.5;
+    }
+    
+    .indicator-table tr:hover {
+        background-color: #f9fafb;
+    }
+    
     .domain-section {
         margin-bottom: 30px;
+        border: 1px solid #e5e7eb;
+        background-color: white;
     }
     
     .domain-heading {
-        background-color: #f0f9ff;
-        padding: 10px;
-        margin-bottom: 15px;
-        border-radius: 6px;
-        border-right: 4px solid #0284c7;
-        font-size: 1.1rem;
+        background-color: #f3f4f6;
+        color: #374151;
+        padding: 12px 20px;
+        margin-bottom: 0;
+        border-radius: 0;
+        border: 1px solid #e5e7eb;
+        font-size: 16px;
+        font-weight: 600;
+        text-align: center;
     }
     
     .section-heading {
@@ -383,8 +436,10 @@ if ($visit['attendance_type'] == 'remote') {
 </div>
 
 <div id="basic-info" class="tab-content active">
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+    <!-- معلومات الزيارة الأساسية -->
+    <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-4 pb-2 border-b border-gray-200">معلومات الزيارة</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div class="info-item">
                 <span class="info-label">المدرسة:</span>
                 <span class="info-value"><?= htmlspecialchars($visit['school_name']) ?></span>
@@ -447,11 +502,12 @@ if ($visit['attendance_type'] == 'remote') {
         </div>
     </div>
 
-    <div class="result-box">
-        <h2 class="text-xl font-semibold mb-4">نتيجة التقييم</h2>
+    <!-- نتيجة التقييم -->
+    <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-4 pb-2 border-b border-gray-200">نتيجة التقييم</h2>
         
-        <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-8 md:space-x-reverse">
-            <div class="w-full md:w-1/3">
+        <div class="flex flex-col lg:flex-row items-center justify-center space-y-6 lg:space-y-0 lg:space-x-8 lg:space-x-reverse">
+            <div class="w-full lg:w-1/3">
                 <?php
                 $bg_color = 'bg-gray-100';
                 $text_color = 'text-gray-800';
@@ -474,36 +530,46 @@ if ($visit['attendance_type'] == 'remote') {
                     $text_color = 'text-red-800';
                 }
                 ?>
-                <div class="final-score <?= $text_color ?>"><?= number_format($average_score, 2) ?> (<?= $percentage_score ?>%)</div>
-                <div class="final-grade <?= $bg_color ?> <?= $text_color ?>"><?= $grade ?></div>
+                <div class="text-center">
+                    <div class="final-score text-3xl font-bold <?= $text_color ?> mb-2">
+                        <?= number_format($average_score, 2) ?> (<?= $percentage_score ?>%)
+                    </div>
+                    <div class="final-grade <?= $bg_color ?> <?= $text_color ?> px-4 py-2 rounded-lg font-semibold">
+                        <?= $grade ?>
+                    </div>
+                </div>
             </div>
             
-            <div class="w-full md:w-2/3">
+            <div class="w-full lg:w-2/3">
                 <canvas id="scoreChart" width="400" height="250"></canvas>
             </div>
         </div>
     </div>
 
-    <div class="section-separator"></div>
-
-    <div class="mb-6">
-        <h2 class="text-lg font-semibold mb-3">ملاحظات عامة</h2>
-        <div class="notes-box">
-            <?= nl2br(htmlspecialchars($visit['general_notes'] ?: 'لا توجد ملاحظات')) ?>
+    <!-- الملاحظات والتوصيات -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- ملاحظات عامة -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 class="text-md font-semibold mb-3 pb-2 border-b border-gray-200 text-gray-700">ملاحظات عامة</h3>
+            <div class="text-sm text-gray-600 bg-gray-50 p-3 rounded border">
+                <?= nl2br(htmlspecialchars($visit['general_notes'] ?: 'لا توجد ملاحظات')) ?>
+            </div>
         </div>
-    </div>
 
-    <div class="mb-6">
-        <h2 class="text-lg font-semibold mb-3">توصيات الزيارة</h2>
-        <div class="notes-box">
-            <?= nl2br(htmlspecialchars($visit['recommendation_notes'] ?: 'لا توجد توصيات')) ?>
+        <!-- توصيات الزيارة -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 class="text-md font-semibold mb-3 pb-2 border-b border-gray-200 text-gray-700">توصيات الزيارة</h3>
+            <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded border border-blue-200">
+                <?= nl2br(htmlspecialchars($visit['recommendation_notes'] ?: 'لا توجد توصيات')) ?>
+            </div>
         </div>
-    </div>
 
-    <div class="mb-6">
-        <h2 class="text-lg font-semibold mb-3">ملاحظات التقدير</h2>
-        <div class="notes-box">
-            <?= nl2br(htmlspecialchars($visit['appreciation_notes'] ?: 'لا توجد ملاحظات')) ?>
+        <!-- ملاحظات التقدير -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 class="text-md font-semibold mb-3 pb-2 border-b border-gray-200 text-gray-700">ملاحظات التقدير</h3>
+            <div class="text-sm text-gray-600 bg-green-50 p-3 rounded border border-green-200">
+                <?= nl2br(htmlspecialchars($visit['appreciation_notes'] ?: 'لا توجد ملاحظات')) ?>
+            </div>
         </div>
     </div>
 </div>
@@ -515,7 +581,7 @@ if ($visit['attendance_type'] == 'remote') {
         <div class="space-y-6">
             <?php foreach ($evaluations_by_domain as $domain_id => $domain_evaluations): ?>
                 <div class="domain-section">
-                    <h3 class="domain-heading font-medium">
+                    <h3 class="domain-heading">
                         <?= htmlspecialchars($domains[$domain_id]) ?>
                     </h3>
                     
@@ -523,16 +589,16 @@ if ($visit['attendance_type'] == 'remote') {
                         <table class="min-w-full indicator-table">
                             <thead>
                                 <tr>
-                                    <th class="text-right">المؤشر</th>
-                                    <th class="w-24">التقييم</th>
-                                    <th class="text-right">التوصية</th>
+                                    <th>المؤشر</th>
+                                    <th>التقييم</th>
+                                    <th>التوصية</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($domain_evaluations as $eval): ?>
                                     <tr>
-                                        <td class="text-sm text-gray-700"><?= htmlspecialchars($eval['indicator_text']) ?></td>
-                                        <td class="text-center">
+                                        <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
+                                        <td>
                                             <?php
                                             // التعامل مع القيم NULL والرقمية بشكل صحيح
                                             $score = $eval['score']; // الاحتفاظ بالقيمة كما هي (NULL أو رقم)
@@ -573,7 +639,7 @@ if ($visit['attendance_type'] == 'remote') {
                                                 <?= $score_text ?>
                                             </span>
                                         </td>
-                                        <td class="text-sm text-gray-700">
+                                        <td>
                                             <?php 
                                             // استرجاع كل التوصيات المختارة للمؤشر بدون تكرار
                                             $recommendations_sql = "
@@ -595,23 +661,25 @@ if ($visit['attendance_type'] == 'remote') {
                                             
                                             if (!empty($all_recommendations)): 
                                             ?>
-                                                <ul class="list-disc list-inside space-y-1">
+                                                <div class="space-y-2">
                                                     <?php foreach ($all_recommendations as $rec): ?>
-                                                        <li><?= htmlspecialchars($rec['recommendation_text']) ?></li>
+                                                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm">
+                                                            <span class="text-blue-800">• <?= htmlspecialchars($rec['recommendation_text']) ?></span>
+                                                        </div>
                                                     <?php endforeach; ?>
-                                                </ul>
+                                                </div>
                                             <?php endif; ?>
                                             
                                             <?php if (!empty($custom_recommendations)): ?>
-                                                <div class="mt-2">
-                                                    <ul class="list-disc list-inside space-y-1">
-                                                        <?php foreach ($custom_recommendations as $rec): ?>
-                                                            <li><em><?= htmlspecialchars($rec['custom_recommendation']) ?></em></li>
-                                                        <?php endforeach; ?>
-                                                    </ul>
+                                                <div class="mt-2 space-y-2">
+                                                    <?php foreach ($custom_recommendations as $rec): ?>
+                                                        <div class="bg-green-50 border border-green-200 rounded-lg p-2 text-sm">
+                                                            <span class="text-green-800">• <?= htmlspecialchars($rec['custom_recommendation']) ?></span>
+                                                        </div>
+                                                    <?php endforeach; ?>
                                                 </div>
                                             <?php elseif (empty($all_recommendations) && empty($custom_recommendations)): ?>
-                                                <span class="text-gray-400">لا توجد توصية</span>
+                                                <span class="text-gray-400 text-sm">لا توجد توصية</span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>

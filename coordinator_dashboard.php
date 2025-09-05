@@ -8,7 +8,7 @@ require_once 'includes/auth_functions.php';
 require_once 'includes/functions.php';
 
 // حماية الصفحة للمنسقين فقط
-protect_page(['coordinator']);
+protect_page(['Subject Coordinator']);
 
 // تعيين عنوان الصفحة
 $page_title = 'لوحة تحكم المنسق - نظام الزيارات الصفية';
@@ -52,23 +52,24 @@ $stats['visits_this_month'] = $visits_this_month['count'];
 
 // متوسط الأداء للمادة
 $avg_performance = query_row("
-    SELECT AVG((ve.lesson_execution + ve.classroom_management) / 2) as avg_score
+    SELECT AVG(ve.score) as avg_score
     FROM visits v
     INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
     WHERE v.subject_id = ? AND v.school_id = ?
 ", [$subject_id, $school_id]);
-$stats['avg_performance'] = $avg_performance['avg_score'] ? round($avg_performance['avg_score'], 1) : 0;
+$stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 4) * 100, 1) : 0;
 
 // الزيارات الأخيرة للمادة
 $recent_visits = query("
-    SELECT v.*, t.name as teacher_name, vt.name as visitor_name,
-           ve.lesson_execution, ve.classroom_management
+    SELECT v.*, t.name as teacher_name, vt.name as visitor_type_name,
+           AVG(ve.score) as avg_score
     FROM visits v
     LEFT JOIN teachers t ON v.teacher_id = t.id
-    LEFT JOIN visitor_types vt ON v.visitor_id = vt.id
+    LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
     LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
     WHERE v.subject_id = ? AND v.school_id = ?
-    ORDER BY v.visit_date DESC, v.visit_time DESC
+    GROUP BY v.id
+    ORDER BY v.visit_date DESC, v.created_at DESC
     LIMIT 10
 ", [$subject_id, $school_id]);
 
@@ -76,7 +77,7 @@ $recent_visits = query("
 $teachers_performance = query("
     SELECT t.id, t.name, 
            COUNT(v.id) as visits_count,
-           AVG((ve.lesson_execution + ve.classroom_management) / 2) as avg_score
+           AVG(ve.score) as avg_score
     FROM teachers t
     INNER JOIN teacher_subjects ts ON t.id = ts.teacher_id
     LEFT JOIN visits v ON t.id = v.teacher_id AND v.subject_id = ?
@@ -221,17 +222,18 @@ require_once 'includes/header.php';
                         <div class="flex justify-between items-start">
                             <div>
                                 <h4 class="font-semibold text-gray-800"><?= htmlspecialchars($visit['teacher_name']) ?></h4>
-                                <p class="text-sm text-gray-600">الزائر: <?= htmlspecialchars($visit['visitor_name']) ?></p>
+                                <p class="text-sm text-gray-600">الزائر: <?= htmlspecialchars($visit['visitor_type_name']) ?></p>
                                 <p class="text-xs text-gray-500"><?= format_date_ar($visit['visit_date']) ?></p>
                             </div>
-                            <?php if ($visit['lesson_execution'] && $visit['classroom_management']): ?>
+                            <?php if ($visit['avg_score']): ?>
                                 <div class="text-left">
                                     <?php 
-                                    $total_score = ($visit['lesson_execution'] + $visit['classroom_management']) / 2;
-                                    $color = $total_score >= 80 ? 'green' : ($total_score >= 60 ? 'yellow' : 'red');
+                                    $total_score = $visit['avg_score'];
+                                    $color = $total_score >= 3 ? 'green' : ($total_score >= 2 ? 'yellow' : 'red');
+                                    $percentage = ($total_score / 4) * 100; // تحويل النتيجة من 4 إلى نسبة مئوية
                                     ?>
                                     <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-2 py-1 rounded text-xs font-semibold">
-                                        <?= round($total_score, 1) ?>%
+                                        <?= round($percentage, 1) ?>%
                                     </span>
                                 </div>
                             <?php endif; ?>

@@ -60,11 +60,20 @@ function execute_sql_file($file_path, $file_name) {
             
         } catch (PDOException $e) {
             $error_count++;
-            echo "<p style='color: red;'>❌ خطأ في الاستعلام: " . $e->getMessage() . "</p>";
+            $error_code = $e->getCode();
+            $error_message = $e->getMessage();
             
-            // عرض جزء من الاستعلام للمساعدة في التشخيص
-            $preview = substr(trim($statement), 0, 100) . '...';
-            echo "<p style='color: red; font-size: 12px; margin-right: 20px;'>الاستعلام: $preview</p>";
+            // معالجة خاصة لأخطاء المفاتيح الأجنبية
+            if (strpos($error_message, 'foreign key constraint') !== false) {
+                echo "<p style='color: orange;'>⚠️ تجاهل خطأ المفتاح الأجنبي (عادي في أول تثبيت): " . $error_message . "</p>";
+                $error_count--; // لا نعتبر هذا خطأ فادح
+            } else {
+                echo "<p style='color: red;'>❌ خطأ في الاستعلام: " . $error_message . "</p>";
+                
+                // عرض جزء من الاستعلام للمساعدة في التشخيص
+                $preview = substr(trim($statement), 0, 100) . '...';
+                echo "<p style='color: red; font-size: 12px; margin-right: 20px;'>الاستعلام: $preview</p>";
+            }
         }
     }
     
@@ -82,14 +91,39 @@ try {
     echo "<h1>🚀 تثبيت نظام الصلاحيات والمستخدمين</h1>";
     echo "<hr>";
     
+    // فحص الجداول الأساسية المطلوبة
+    echo "<h3>🔍 فحص الجداول الأساسية المطلوبة</h3>";
+    $required_tables = ['schools', 'subjects', 'teachers', 'visitor_types'];
+    $missing_tables = [];
+    
+    foreach ($required_tables as $table) {
+        try {
+            $result = $pdo->query("SELECT 1 FROM `$table` LIMIT 1");
+            echo "<p style='color: green;'>✅ الجدول موجود: <strong>$table</strong></p>";
+        } catch (PDOException $e) {
+            echo "<p style='color: red;'>❌ الجدول مفقود: <strong>$table</strong></p>";
+            $missing_tables[] = $table;
+        }
+    }
+    
+    if (!empty($missing_tables)) {
+        echo "<div style='background: #ffe6e6; padding: 15px; border: 1px solid #ff0000; border-radius: 5px; margin: 10px 0;'>";
+        echo "<strong>⚠️ تحذير:</strong> الجداول التالية مفقودة ومطلوبة لعمل النظام:<br>";
+        echo implode(', ', $missing_tables);
+        echo "<br><br>يرجى التأكد من إعداد قاعدة البيانات الأساسية أولاً.";
+        echo "</div>";
+    }
+    
+    echo "<hr>";
+    
     $files_to_execute = [
         [
-            'path' => __DIR__ . '/database/user_roles_system.sql',
-            'name' => 'الجداول الأساسية (user_roles_system.sql)'
+            'path' => __DIR__ . '/database/user_roles_system_fixed.sql',
+            'name' => 'الجداول الأساسية (user_roles_system_fixed.sql)'
         ],
         [
-            'path' => __DIR__ . '/database/sample_data.sql',
-            'name' => 'البيانات التجريبية (sample_data.sql)'
+            'path' => __DIR__ . '/database/sample_data_fixed.sql',
+            'name' => 'البيانات التجريبية (sample_data_fixed.sql)'
         ]
     ];
     

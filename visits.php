@@ -8,7 +8,7 @@ require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
 
 // حماية الصفحة - الوصول للمديرين والمشرفين ومنسقي المواد فقط
-protect_page(['Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
+protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
 
 // الحصول على معلومات المستخدم
 $user_id = $_SESSION['user_id'];

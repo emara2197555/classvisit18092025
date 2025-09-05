@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار مبسط لنموذج التقييم</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <!-- نموذج اختيار المعلم والمادة -->
+        <div id="selection-form" class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-bold mb-4">اختيار المعلم والمادة</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block mb-2 font-semibold">نوع الزائر:</label>
+                    <select id="visitor-type" class="w-full p-2 border rounded">
+                        <option value="">اختر نوع الزائر</option>
+                        <option value="18">مدير</option>
+                        <option value="16">وكيل أكاديمي</option>
+                    </select>
+                    <div id="visitor-name" class="mt-2 text-sm text-gray-600"></div>
+                    <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
+                </div>
+                
+                <div>
+                    <label class="block mb-2 font-semibold">المعلم:</label>
+                    <select id="teacher" class="w-full p-2 border rounded">
+                        <option value="">اختر المعلم</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block mb-2 font-semibold">المادة:</label>
+                    <select id="subject" class="w-full p-2 border rounded">
+                        <option value="">اختر المادة</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button onclick="startEvaluation()" class="mt-4 bg-blue-500 text-white px-6 py-2 rounded">بدء التقييم</button>
+        </div>
+        
+        <!-- قسم معلومات الزيارات السابقة -->
+        <div id="previous-visits-info" class="bg-white p-6 rounded-lg shadow" style="display: none;">
+            <h3 class="text-lg font-semibold mb-4">معلومات الزيارات السابقة</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="bg-blue-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">عدد الزيارات:</span>
+                    <span id="visits-count" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-green-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">متوسط الأداء (كل الزائرين):</span>
+                    <span id="average-performance-all" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-yellow-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">متوسط الأداء (الزائر الحالي):</span>
+                    <span id="average-performance-current" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-purple-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">آخر زيارة:</span>
+                    <span id="last-visit-date" class="font-semibold">غير متوفر</span>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4">
+                <h4 class="font-semibold mb-2">آخر توصيات:</h4>
+                <div id="last-recommendation-notes">
+                    <p class="text-gray-600">غير متوفر</p>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4 mt-4">
+                <h4 class="font-semibold mb-2">آخر نقاط شكر:</h4>
+                <div id="last-appreciation-notes">
+                    <p class="text-gray-600">غير متوفر</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- سجل التشخيص -->
+        <div id="debug-log" class="bg-gray-800 text-white p-4 rounded mt-6" style="display: none;">
+            <h3 class="font-bold mb-2">سجل التشخيص:</h3>
+            <div id="debug-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // متغيرات عامة
+        let debugMode = true;
+        
+        function debugLog(message) {
+            if (debugMode) {
+                console.log(message);
+                const debugDiv = document.getElementById('debug-content');
+                debugDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+                document.getElementById('debug-log').style.display = 'block';
+            }
+        }
+        
+        // تحميل قائمة الزوار حسب النوع
+        document.getElementById('visitor-type').addEventListener('change', function() {
+            const visitorTypeId = this.value;
+            debugLog('تم اختيار نوع زائر: ' + visitorTypeId);
+            
+            if (!visitorTypeId) {
+                document.getElementById('visitor-name').innerHTML = '';
+                document.getElementById('visitor-person-id').value = '';
+                return;
+            }
+            
+            // محاكاة بيانات الزوار (يجب جلبها من API في الواقع)
+            const visitors = {
+                '18': [
+                    {id: 1, name: 'أحمد محمد', type: 'مدير'},
+                    {id: 2, name: 'فاطمة علي', type: 'مدير'}
+                ],
+                '16': [
+                    {id: 22, name: 'سعد الكعبي', type: 'وكيل أكاديمي'},
+                    {id: 23, name: 'نورا القحطاني', type: 'وكيل أكاديمي'}
+                ]
+            };
+            
+            const typeVisitors = visitors[visitorTypeId] || [];
+            
+            if (typeVisitors.length > 0) {
+                const select = document.createElement('select');
+                select.className = 'w-full p-2 border rounded';
+                select.innerHTML = '<option value="">اختر الزائر</option>';
+                
+                typeVisitors.forEach(visitor => {
+                    const option = document.createElement('option');
+                    option.value = visitor.id;
+                    option.textContent = visitor.name;
+                    select.appendChild(option);
+                });
+                
+                select.addEventListener('change', function() {
+                    document.getElementById('visitor-person-id').value = this.value;
+                    debugLog('تم اختيار زائر: ' + this.value);
+                });
+                
+                document.getElementById('visitor-name').innerHTML = '';
+                document.getElementById('visitor-name').appendChild(select);
+            }
+        });
+        
+        // تحميل قائمة المعلمين (محاكاة)
+        document.getElementById('teacher').innerHTML = `
+            <option value="">اختر المعلم</option>
+            <option value="45">محمد الخليفي</option>
+            <option value="57">أحمد الدوسري</option>
+            <option value="69">فاطمة العجمي</option>
+        `;
+        
+        // تحميل قائمة المواد (محاكاة)
+        document.getElementById('subject').innerHTML = `
+            <option value="">اختر المادة</option>
+            <option value="3">الرياضيات</option>
+            <option value="7">العلوم</option>
+            <option value="10">اللغة العربية</option>
+        `;
+        
+        function startEvaluation() {
+            const teacherId = document.getElementById('teacher').value;
+            const subjectId = document.getElementById('subject').value;
+            const visitorPersonId = document.getElementById('visitor-person-id').value;
+            
+            debugLog('====== بدء التقييم ======');
+            debugLog('teacherId: ' + teacherId + ' (نوع: ' + typeof teacherId + ')');
+            debugLog('subjectId: ' + subjectId + ' (نوع: ' + typeof subjectId + ')');
+            debugLog('visitorPersonId: ' + visitorPersonId + ' (نوع: ' + typeof visitorPersonId + ')');
+            
+            if (!teacherId || !subjectId || !visitorPersonId) {
+                alert('يرجى اختيار جميع الحقول المطلوبة');
+                return;
+            }
+            
+            // إخفاء نموذج الاختيار وإظهار معلومات الزيارات السابقة
+            document.getElementById('selection-form').style.display = 'none';
+            document.getElementById('previous-visits-info').style.display = 'block';
+            
+            // تحميل معلومات الزيارات السابقة
+            loadPreviousVisitsInfo(teacherId, visitorPersonId);
+        }
+        
+        function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
+            debugLog('====== تشخيص loadPreviousVisitsInfo ======');
+            debugLog('teacherId: ' + teacherId + ' (نوع: ' + typeof teacherId + ')');
+            debugLog('visitorPersonId: ' + visitorPersonId + ' (نوع: ' + typeof visitorPersonId + ')');
+            
+            if (!teacherId || !visitorPersonId) {
+                debugLog('تم إيقاف الدالة بسبب معاملات فارغة');
+                return;
+            }
+            
+            debugLog('جاري تحميل معلومات الزيارات السابقة للمعلم ' + teacherId + ' والزائر ' + visitorPersonId);
+            
+            // جلب معلومات الزيارات السابقة من خلال API
+            const apiUrl = `api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`;
+            debugLog('URL للاستدعاء: ' + apiUrl);
+            
+            fetch(apiUrl)
+                .then(response => {
+                    debugLog('تم استلام الرد من API - كود الحالة: ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    debugLog('البيانات المستلمة من API: ' + JSON.stringify(data));
+                    
+                    if (data.success) {
+                        const visitsInfo = data.data;
+                        
+                        // تحديث عدد الزيارات
+                        const visitsCountElement = document.getElementById('visits-count');
+                        if (visitsCountElement) {
+                            visitsCountElement.textContent = visitsInfo.visits_count || '0';
+                            debugLog('تم تحديث عدد الزيارات: ' + (visitsInfo.visits_count || '0'));
+                        }
+                        
+                        // تحديث متوسط الأداء العام لكل الزائرين
+                        const averagePerformanceAllElement = document.getElementById('average-performance-all');
+                        if (averagePerformanceAllElement) {
+                            if (visitsInfo.average_performance_all !== undefined && visitsInfo.average_performance_all !== null) {
+                                const avgPercentage = parseFloat((visitsInfo.average_performance_all * 100).toFixed(2));
+                                debugLog("متوسط الأداء لكل الزائرين (قيمة): " + visitsInfo.average_performance_all);
+                                debugLog("متوسط الأداء لكل الزائرين (نسبة): " + avgPercentage);
+                                
+                                averagePerformanceAllElement.textContent = `${avgPercentage}%`;
+                            } else {
+                                averagePerformanceAllElement.textContent = 'غير متوفر';
+                            }
+                        }
+                        
+                        // تحديث متوسط الأداء للزائر الحالي
+                        const averagePerformanceCurrentElement = document.getElementById('average-performance-current');
+                        if (averagePerformanceCurrentElement) {
+                            if (visitsInfo.average_performance_current_visitor !== undefined && visitsInfo.average_performance_current_visitor !== null) {
+                                const avgPercentage = parseFloat((visitsInfo.average_performance_current_visitor * 100).toFixed(2));
+                                debugLog("متوسط الأداء للزائر الحالي (قيمة): " + visitsInfo.average_performance_current_visitor);
+                                debugLog("متوسط الأداء للزائر الحالي (نسبة): " + avgPercentage);
+                                
+                                averagePerformanceCurrentElement.textContent = `${avgPercentage}%`;
+                            } else {
+                                averagePerformanceCurrentElement.textContent = 'غير متوفر';
+                            }
+                        }
+                        
+                        // تحديث تاريخ آخر زيارة
+                        const lastVisitDateElement = document.getElementById('last-visit-date');
+                        if (lastVisitDateElement) {
+                            if (visitsInfo.last_visit_current_visitor && visitsInfo.last_visit_current_visitor.date) {
+                                const visitDate = new Date(visitsInfo.last_visit_current_visitor.date).toLocaleDateString('ar-EG');
+                                lastVisitDateElement.textContent = visitDate;
+                                debugLog('تم تحديث تاريخ آخر زيارة: ' + visitDate);
+                            } else {
+                                lastVisitDateElement.textContent = 'غير متوفر';
+                                debugLog('لا توجد زيارة سابقة للزائر الحالي');
+                            }
+                        }
+                        
+                        // عرض توصيات المعلم من الزيارة السابقة
+                        const recommendationElement = document.querySelector('#last-recommendation-notes p');
+                        if (recommendationElement) {
+                            if (visitsInfo.last_visit_current_visitor && visitsInfo.last_visit_current_visitor.recommendation_notes) {
+                                recommendationElement.textContent = visitsInfo.last_visit_current_visitor.recommendation_notes;
+                                debugLog('تم تحديث التوصيات: ' + visitsInfo.last_visit_current_visitor.recommendation_notes);
+                            } else {
+                                recommendationElement.textContent = 'لا توجد توصيات مسجلة';
+                                debugLog('لا توجد توصيات مسجلة');
+                            }
+                        }
+                        
+                        // عرض نقاط الشكر من الزيارة السابقة
+                        const appreciationElement = document.querySelector('#last-appreciation-notes p');
+                        if (appreciationElement) {
+                            if (visitsInfo.last_visit_current_visitor && visitsInfo.last_visit_current_visitor.appreciation_notes) {
+                                appreciationElement.textContent = visitsInfo.last_visit_current_visitor.appreciation_notes;
+                                debugLog('تم تحديث نقاط الشكر: ' + visitsInfo.last_visit_current_visitor.appreciation_notes);
+                            } else {
+                                appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
+                                debugLog('لا توجد نقاط شكر مسجلة');
+                            }
+                        }
+                        
+                        debugLog('تم تحديث جميع العناصر بنجاح');
+                        
+                    } else {
+                        debugLog('خطأ في تحميل معلومات الزيارات السابقة: ' + data.message);
+                        
+                        // تعيين رسائل افتراضية في حالة حدوث خطأ
+                        document.getElementById('visits-count').textContent = '0';
+                        document.getElementById('average-performance-all').textContent = 'غير متوفر';
+                        document.getElementById('average-performance-current').textContent = 'غير متوفر';
+                        document.getElementById('last-visit-date').textContent = 'غير متوفر';
+                        document.querySelector('#last-recommendation-notes p').textContent = 'غير متوفر';
+                        document.querySelector('#last-appreciation-notes p').textContent = 'غير متوفر';
+                    }
+                })
+                .catch(error => {
+                    debugLog('خطأ في طلب API: ' + error.message);
+                    console.error('خطأ في تحميل معلومات الزيارات السابقة:', error);
+                });
+        }
+    </script>
+</body>
+</html>

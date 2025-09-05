@@ -9,13 +9,13 @@ protect_page();
 $user_role = $_SESSION['role_name'] ?? 'admin';
 
 // إذا كان المعلم، وجهه للوحة تحكمه
-if ($user_role === 'teacher') {
+if ($user_role === 'Teacher') {
     header('Location: teacher_dashboard.php');
     exit;
 }
 
 // إذا كان المنسق، وجهه للوحة تحكمه
-if ($user_role === 'coordinator') {
+if ($user_role === 'Subject Coordinator') {
     header('Location: coordinator_dashboard.php');
     exit;
 }

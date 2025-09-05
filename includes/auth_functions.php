@@ -12,12 +12,12 @@ require_once 'db_connection.php';
  * بدء جلسة آمنة للمستخدم
  */
 function start_secure_session() {
-    // إعدادات الجلسة الآمنة
-    ini_set('session.cookie_httponly', 1);
-    ini_set('session.cookie_secure', 1);
-    ini_set('session.use_strict_mode', 1);
-    
+    // التحقق من حالة الجلسة قبل تعديل الإعدادات
     if (session_status() === PHP_SESSION_NONE) {
+        // إعدادات الجلسة الآمنة (فقط إذا لم تبدأ الجلسة بعد)
+        @ini_set('session.cookie_httponly', 1);
+        @ini_set('session.cookie_secure', 0); // 0 للـ localhost
+        @ini_set('session.use_strict_mode', 1);
         session_start();
     }
 }
@@ -31,13 +31,12 @@ function start_secure_session() {
  */
 function authenticate_user($username, $password) {
     $sql = "SELECT u.*, r.name as role_name, r.display_name as role_display_name, 
-                   r.permissions, s.name as school_name, sub.name as subject_name,
+                   r.permissions, s.name as school_name,
                    t.name as teacher_name
             FROM users u
             LEFT JOIN user_roles r ON u.role_id = r.id
             LEFT JOIN schools s ON u.school_id = s.id
-            LEFT JOIN subjects sub ON u.subject_id = sub.id
-            LEFT JOIN teachers t ON u.teacher_id = t.id
+            LEFT JOIN teachers t ON t.user_id = u.id
             WHERE u.username = ? AND u.is_active = 1";
     
     $user = query_row($sql, [$username]);
@@ -57,10 +56,24 @@ function authenticate_user($username, $password) {
     $_SESSION['role_name'] = $user['role_name'];
     $_SESSION['role_id'] = $user['role_id'];
     $_SESSION['school_id'] = $user['school_id'];
-    $_SESSION['subject_id'] = $user['subject_id'];
-    $_SESSION['teacher_id'] = $user['teacher_id'];
     $_SESSION['full_name'] = $user['full_name'];
     $_SESSION['permissions'] = json_decode($user['permissions'], true);
+    
+    // للمعلمين: الحصول على معرف المعلم من جدول المعلمين
+    if ($user['role_name'] === 'Teacher') {
+        $teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user['id']]);
+        $_SESSION['teacher_id'] = $teacher_data ? $teacher_data['id'] : null;
+    } else {
+        $_SESSION['teacher_id'] = null;
+    }
+    
+    // لمنسقي المواد: الحصول على معرف المادة
+    if ($user['role_name'] === 'Subject Coordinator') {
+        $coordinator_data = query_row("SELECT subject_id FROM coordinator_supervisors WHERE user_id = ?", [$user['id']]);
+        $_SESSION['subject_id'] = $coordinator_data ? $coordinator_data['subject_id'] : null;
+    } else {
+        $_SESSION['subject_id'] = null;
+    }
     
     // تحديث آخر تسجيل دخول
     $update_sql = "UPDATE users SET last_login = NOW() WHERE id = ?";
@@ -399,6 +412,110 @@ function create_user($user_data) {
         return ['success' => true, 'message' => 'تم إنشاء المستخدم بنجاح', 'user_id' => $user_id];
     } catch (Exception $e) {
         return ['success' => false, 'message' => 'حدث خطأ أثناء إنشاء المستخدم: ' . $e->getMessage()];
+    }
+}
+
+/**
+ * تحديث بيانات مستخدم موجود
+ *
+ * @param int $user_id معرف المستخدم
+ * @param array $user_data بيانات المستخدم الجديدة
+ * @return array نتيجة العملية
+ */
+function update_user($user_id, $user_data) {
+    try {
+        // جلب البيانات القديمة للمقارنة
+        $old_data = query_row("SELECT * FROM users WHERE id = ?", [$user_id]);
+        
+        if (!$old_data) {
+            return ['success' => false, 'message' => 'المستخدم غير موجود'];
+        }
+        
+        // إعداد البيانات للتحديث
+        $fields = [];
+        $params = [];
+        
+        if (isset($user_data['full_name'])) {
+            $fields[] = "full_name = ?";
+            $params[] = $user_data['full_name'];
+        }
+        
+        if (isset($user_data['email'])) {
+            $fields[] = "email = ?";
+            $params[] = $user_data['email'];
+        }
+        
+        if (isset($user_data['role_id'])) {
+            $fields[] = "role_id = ?";
+            $params[] = $user_data['role_id'];
+        }
+        
+        if (isset($user_data['school_id'])) {
+            $fields[] = "school_id = ?";
+            $params[] = $user_data['school_id'];
+        }
+        
+        if (isset($user_data['is_active'])) {
+            $fields[] = "is_active = ?";
+            $params[] = $user_data['is_active'];
+        }
+        
+        // تحديث كلمة المرور إذا تم توفيرها
+        if (isset($user_data['password']) && !empty($user_data['password'])) {
+            $fields[] = "password = ?";
+            $params[] = password_hash($user_data['password'], PASSWORD_DEFAULT);
+        }
+        
+        if (empty($fields)) {
+            return ['success' => false, 'message' => 'لا توجد بيانات للتحديث'];
+        }
+        
+        // إضافة تاريخ التحديث
+        $fields[] = "updated_at = NOW()";
+        $params[] = $user_id;
+        
+        // تنفيذ الاستعلام
+        $sql = "UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?";
+        execute($sql, $params);
+        
+        // تسجيل النشاط
+        log_user_activity($_SESSION['user_id'], 'update_user', 'users', $user_id, $old_data, $user_data);
+        
+        return ['success' => true, 'message' => 'تم تحديث المستخدم بنجاح'];
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'حدث خطأ أثناء تحديث المستخدم: ' . $e->getMessage()];
+    }
+}
+
+/**
+ * حذف مستخدم
+ *
+ * @param int $user_id معرف المستخدم
+ * @return array نتيجة العملية
+ */
+function delete_user($user_id) {
+    try {
+        // التحقق من وجود المستخدم
+        $user = query_row("SELECT * FROM users WHERE id = ?", [$user_id]);
+        
+        if (!$user) {
+            return ['success' => false, 'message' => 'المستخدم غير موجود'];
+        }
+        
+        // منع حذف المستخدم الحالي
+        if ($user_id == $_SESSION['user_id']) {
+            return ['success' => false, 'message' => 'لا يمكن حذف المستخدم الحالي'];
+        }
+        
+        // حذف المستخدم
+        execute("DELETE FROM users WHERE id = ?", [$user_id]);
+        
+        // تسجيل النشاط
+        log_user_activity($_SESSION['user_id'], 'delete_user', 'users', $user_id, $user, null);
+        
+        return ['success' => true, 'message' => 'تم حذف المستخدم بنجاح'];
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'حدث خطأ أثناء حذف المستخدم: ' . $e->getMessage()];
     }
 }
 

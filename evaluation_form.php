@@ -8,7 +8,7 @@ require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
 
 // حماية الصفحة - المسموح لهم بإنشاء الزيارات
-protect_page(['admin', 'director', 'academic_deputy', 'coordinator']);
+protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
 
 // الحصول على بيانات المستخدم الحالي
 $current_user_role = $_SESSION['role_name'] ?? 'admin';
@@ -43,6 +43,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
         // التحقق من وجود البيانات الأساسية
         if (!$school_id || !$teacher_id || !$subject_id || !$visit_date || !$visitor_type_id || !$visitor_person_id) {
             throw new Exception("البيانات الأساسية غير مكتملة.");
+        }
+        
+        // تطبيق قيود منسق المادة
+        if ($current_user_role === 'Subject Coordinator') {
+            // التحقق من أن منسق المادة لا يُنشئ زيارات إلا لمادته
+            $coordinator_data = query_row("
+                SELECT subject_id 
+                FROM coordinator_supervisors 
+                WHERE user_id = ?
+            ", [$current_user_id]);
+            
+            if (!$coordinator_data) {
+                throw new Exception("لا يوجد مادة مخصصة لمنسق المادة.");
+            }
+            
+            if ($subject_id != $coordinator_data['subject_id']) {
+                throw new Exception("لا يُسمح لمنسق المادة بإنشاء زيارات إلا لمادته المخصصة.");
+            }
+            
+            // التحقق من أن الزائر هو منسق المادة نفسه أو موجه مادته
+            $visitor_allowed = false;
+            
+            // التحقق من نوع الزائر
+            $visitor_type = query_row("SELECT name FROM visitor_types WHERE id = ?", [$visitor_type_id]);
+            
+            if ($visitor_type) {
+                if ($visitor_type['name'] === 'منسق المادة' && $visitor_person_id == $current_user_id) {
+                    $visitor_allowed = true;
+                } elseif ($visitor_type['name'] === 'موجه المادة') {
+                    // التحقق من أن الموجه يُدرس نفس المادة
+                    $supervisor_check = query_row("
+                        SELECT t.id 
+                        FROM teachers t
+                        JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                        WHERE t.id = ? AND t.job_title = 'موجه المادة' AND ts.subject_id = ?
+                    ", [$visitor_person_id, $coordinator_data['subject_id']]);
+                    
+                    if ($supervisor_check) {
+                        $visitor_allowed = true;
+                    }
+                }
+            }
+            
+            if (!$visitor_allowed) {
+                throw new Exception("منسق المادة يُسمح له فقط بإنشاء زيارات لنفسه أو لموجه مادته.");
+            }
         }
         
         // إضافة الزيارة الصفية إلى جدول الزيارات
@@ -150,16 +196,28 @@ try {
     $grades = query("SELECT g.*, e.id as level_id FROM grades g JOIN educational_levels e ON g.level_id = e.id ORDER BY e.id, g.id");
     
     $domains = query("SELECT * FROM evaluation_domains ORDER BY id");
-    $visitor_types = query("SELECT * FROM visitor_types ORDER BY name");
+    
+    // جلب أنواع الزوار مع تطبيق قيود منسق المادة
+    if ($current_user_role === 'Subject Coordinator') {
+        // منسق المادة يرى نفسه والموجه فقط
+        $visitor_types = query("
+            SELECT * FROM visitor_types 
+            WHERE name IN ('منسق المادة', 'الموجه', 'Subject Coordinator', 'Supervisor') 
+            ORDER BY name
+        ");
+    } else {
+        // باقي المستخدمين يرون جميع أنواع الزوار
+        $visitor_types = query("SELECT * FROM visitor_types ORDER BY name");
+    }
     
     // جلب المواد الدراسية للمدرسة مع تطبيق قيود منسق المادة
-    if ($user_role_name === 'Subject Coordinator') {
+    if ($current_user_role === 'Subject Coordinator') {
         // منسق المادة يرى مادته فقط
         $coordinator_data = query_row("
             SELECT subject_id 
             FROM coordinator_supervisors 
             WHERE user_id = ?
-        ", [$user_id]);
+        ", [$current_user_id]);
         
         if ($coordinator_data) {
             $subjects = query("
@@ -181,34 +239,43 @@ try {
 ?>
 
 <!-- نموذج اختيار المدرسة والمادة والمعلم -->
-<div id="selection-form" class="bg-white rounded-lg shadow-md p-6 mb-6">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">نموذج تقييم زيارة صفية</h1>
+<div id="selection-form" class="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl shadow-lg p-8 mb-8">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent mb-2">نموذج تقييم زيارة صفية</h1>
+        <p class="text-slate-600">أدخل بيانات الزيارة للبدء في عملية التقييم</p>
+        <div class="mt-4 w-20 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mx-auto"></div>
+    </div>
     
     <?php if (isset($error_message)): ?>
-        <div class="bg-red-100 border-r-4 border-red-500 text-red-700 p-4 mb-6 rounded-md">
-            <?= $error_message ?>
+        <div class="bg-red-50 border border-red-200 border-r-4 border-r-red-500 text-red-700 p-4 mb-6 rounded-lg shadow-sm">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <?= $error_message ?>
+            </div>
         </div>
     <?php endif; ?>
     
     <form action="evaluation_form.php" method="post" id="visit-form">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <!-- نوع الزائر -->
-            <div>
-                <label class="block mb-2 font-semibold">نوع الزائر:</label>
-                <select id="visitor-type" name="visitor_type_id" class="w-full border p-2 rounded" required onchange="updateVisitorName()">
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">نوع الزائر:</label>
+                <select id="visitor-type" name="visitor_type_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="updateVisitorName()">
                     <option value="">اختر نوع الزائر...</option>
                     <?php foreach ($visitor_types as $type): ?>
                         <option value="<?= $type['id'] ?>"><?= htmlspecialchars($type['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <div id="visitor-name" class="mt-2 text-sm text-gray-600"></div>
+                <div id="visitor-name" class="mt-2 text-sm text-blue-600 font-medium"></div>
                 <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
             </div>
 
             <!-- العام الدراسي -->
-            <div>
-                <label class="block mb-2 font-semibold">العام الدراسي:</label>
-                <select id="academic-year" name="academic_year_id" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">العام الدراسي:</label>
+                <select id="academic-year" name="academic_year_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="">اختر العام الدراسي...</option>
                     <?php 
                     // جلب العام الدراسي النشط
@@ -222,18 +289,18 @@ try {
             </div>
 
             <!-- نوع الزيارة -->
-            <div>
-                <label class="block mb-2 font-semibold">نوع الزيارة:</label>
-                <select id="visit-type" name="visit_type" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">نوع الزيارة:</label>
+                <select id="visit-type" name="visit_type" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="full">تقييم كلي</option>
                     <option value="partial">تقييم جزئي</option>
                 </select>
             </div>
 
             <!-- طريقة الحضور -->
-            <div>
-                <label class="block mb-2 font-semibold">طريقة الحضور:</label>
-                <select id="attendance-type" name="attendance_type" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">طريقة الحضور:</label>
+                <select id="attendance-type" name="attendance_type" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="physical">حضور</option>
                     <option value="remote">عن بعد</option>
                     <option value="hybrid">مدمج</option>
@@ -241,9 +308,9 @@ try {
             </div>
 
             <!-- المادة -->
-            <div>
-                <label class="block mb-2 font-semibold">المادة:</label>
-                <select id="subject" name="subject_id" class="w-full border p-2 rounded" required onchange="loadTeachers()">
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">المادة:</label>
+                <select id="subject" name="subject_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="loadTeachers()">
                     <option value="">اختر المادة...</option>
                     <?php foreach ($subjects as $subject): ?>
                         <option value="<?= $subject['id'] ?>"><?= htmlspecialchars($subject['name']) ?></option>
@@ -252,18 +319,18 @@ try {
             </div>
 
             <!-- المعلم -->
-            <div>
-                <label class="block mb-2 font-semibold">المعلم:</label>
-                <select id="teacher" name="teacher_id" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">المعلم:</label>
+                <select id="teacher" name="teacher_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="">اختر المعلم...</option>
                     <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على المدرسة والمادة المختارة -->
                 </select>
             </div>
 
             <!-- الصف -->
-            <div>
-                <label class="block mb-2 font-semibold">الصف:</label>
-                <select id="grade" name="grade_id" class="w-full border p-2 rounded" required onchange="loadSections(this.value)">
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">الصف:</label>
+                <select id="grade" name="grade_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="loadSections(this.value)">
                     <option value="">اختر الصف...</option>
                     <?php foreach ($grades as $grade): ?>
                         <option value="<?= $grade['id'] ?>" data-level-id="<?= $grade['level_id'] ?>"><?= htmlspecialchars($grade['name']) ?></option>
@@ -272,33 +339,40 @@ try {
             </div>
 
             <!-- الشعبة -->
-            <div>
-                <label class="block mb-2 font-semibold">الشعبة:</label>
-                <select id="section" name="section_id" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">الشعبة:</label>
+                <select id="section" name="section_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="">اختر الشعبة...</option>
                     <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على الصف المختار -->
                 </select>
             </div>
 
             <!-- تقييم المعمل -->
-            <div class="flex items-center">
-                <label class="inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="has-lab" name="has_lab" class="form-checkbox h-5 w-5 text-blue-600">
-                    <span class="mr-2 font-semibold">إضافة تقييم المعمل</span>
-                </label>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">إعدادات إضافية:</label>
+                <div class="flex items-center">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="has-lab" name="has_lab" class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-200">
+                        <span class="mr-3 text-sm font-medium text-gray-700">إضافة تقييم المعمل</span>
+                    </label>
+                </div>
             </div>
 
             <!-- تاريخ الزيارة -->
-            <div>
-                <label class="block mb-2 font-semibold">تاريخ الزيارة:</label>
-                <input type="date" id="visit-date" name="visit_date" class="w-full border p-2 rounded" required>
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                <label class="block mb-3 font-bold text-gray-800 text-sm">تاريخ الزيارة:</label>
+                <input type="date" id="visit-date" name="visit_date" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
             </div>
 
             <!-- حذف حقل المدرسة - سنستخدم المدرسة الافتراضية -->
             <input type="hidden" id="school" name="school_id" value="<?= $school_id ?>">
         </div>
 
-        <button type="button" id="start-evaluation-btn" class="bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition">بدء التقييم</button>
+        <div class="text-center pt-6 border-t border-slate-200">
+            <button type="button" id="start-evaluation-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-lg">
+                بدء التقييم
+            </button>
+        </div>
     </form>
 </div>
 
@@ -312,67 +386,113 @@ try {
     <div id="evaluation-header" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6"></div>
     
     <!-- معلومات الزيارات السابقة -->
-    <div id="previous-visits-info" class="mb-6 border border-gray-200 rounded-lg p-4">
-        <h2 class="text-xl font-bold text-primary-700 mb-2 pb-2 border-b border-gray-200">معلومات الزيارات السابقة</h2>
-        
-        <div class="mb-4 text-sm bg-blue-50 p-3 rounded-lg text-blue-800 border border-blue-100">
-            <p>هذه المعلومات تساعدك على متابعة تقدم المعلم ومعرفة التوصيات السابقة قبل إجراء التقييم الجديد</p>
+    <div id="previous-visits-info" class="mb-8 bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-200 rounded-xl p-6 shadow-lg">
+        <div class="flex items-center mb-4 pb-4 border-b border-slate-300">
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-3 rounded-lg mr-4 shadow-md">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent">معلومات الزيارات السابقة</h2>
+                <p class="text-slate-600 text-sm mt-1">رؤية شاملة عن تاريخ أداء المعلم والتوصيات السابقة</p>
+            </div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <!-- عدد الزيارات ومتوسط الأداء -->
-            <div class="bg-white border border-blue-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-                <h3 class="text-lg font-bold text-blue-800 mb-2">الزيارات السابقة</h3>
-                <div class="mt-2">
-                    <p class="flex justify-between items-center">
-                        <span class="font-semibold text-gray-700">عدد الزيارات:</span>
-                        <span id="visits-count" class="text-lg font-bold text-primary-700">-</span>
-                    </p>
-                    <p class="flex justify-between items-center mt-2">
-                        <span class="font-semibold text-gray-700">متوسط الأداء (لكل الزائرين):</span>
-                        <span id="average-performance-all" class="text-lg font-bold text-primary-700">-</span>
-                    </p>
-                    <p class="flex justify-between items-center mt-2">
-                        <span class="font-semibold text-gray-700">متوسط الأداء (الزائر الحالي):</span>
-                        <span id="average-performance-current" class="text-lg font-bold text-primary-700">-</span>
-                    </p>
+        <div class="mb-6 p-4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg shadow-inner">
+            <div class="flex items-center text-white">
+                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <p class="text-sm font-medium">هذه المعلومات تساعدك على متابعة تقدم المعلم ومعرفة التوصيات السابقة قبل إجراء التقييم الجديد</p>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- إحصائيات الزيارات -->
+            <div class="bg-white border-l-4 border-blue-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
+                <div class="flex items-center mb-3">
+                    <div class="bg-blue-100 p-2 rounded-lg mr-3">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold text-blue-800">الزيارات السابقة</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-2 bg-blue-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">عدد الزيارات:</span>
+                        <span id="visits-count" class="text-xl font-bold text-blue-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-green-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">متوسط الأداء (كل الزائرين):</span>
+                        <span id="average-performance-all" class="text-xl font-bold text-green-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-purple-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">متوسط الأداء (الزائر الحالي):</span>
+                        <span id="average-performance-current" class="text-xl font-bold text-purple-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
                 </div>
             </div>
             
             <!-- تفاصيل آخر زيارة -->
-            <div class="bg-white border border-green-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-                <h3 class="text-lg font-bold text-green-800 mb-2">آخر زيارة</h3>
-                <div class="mt-2">
-                    <p class="flex justify-between items-center">
-                        <span class="font-semibold text-gray-700">التاريخ:</span>
-                        <span id="last-visit-date" class="text-primary-700 font-bold">-</span>
-                    </p>
-                    <p class="flex justify-between items-center mt-2">
-                        <span class="font-semibold text-gray-700">نسبة التقييم (الزائر الحالي):</span>
-                        <span id="last-visit-current-percentage" class="text-lg font-bold text-primary-700">-</span>
-                    </p>
-                    <p class="flex justify-between items-center mt-2">
-                        <span class="font-semibold text-gray-700">نسبة التقييم (آخر زائر):</span>
-                        <span id="last-visit-any-percentage" class="text-lg font-bold text-primary-700">-</span>
-                    </p>
-                    <p class="flex justify-between items-center mt-2">
-                        <span class="font-semibold text-gray-700">الصف/الشعبة:</span>
-                        <span id="last-visit-class" class="text-primary-700">-</span>
-                    </p>
+            <div class="bg-white border-l-4 border-green-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
+                <div class="flex items-center mb-3">
+                    <div class="bg-green-100 p-2 rounded-lg mr-3">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold text-green-800">آخر زيارة</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">التاريخ:</span>
+                        <span id="last-visit-date" class="text-green-700 font-bold bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-blue-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">نسبة التقييم (الزائر الحالي):</span>
+                        <span id="last-visit-current-percentage" class="text-xl font-bold text-blue-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-orange-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">نسبة التقييم (آخر زائر):</span>
+                        <span id="last-visit-any-percentage" class="text-xl font-bold text-orange-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-purple-50 rounded-lg">
+                        <span class="font-semibold text-gray-700 text-sm">الصف/الشعبة:</span>
+                        <span id="last-visit-class" class="text-purple-700 font-bold bg-white px-2 py-1 rounded shadow-sm">-</span>
+                    </div>
                 </div>
             </div>
             
             <!-- توصيات آخر زيارة -->
-            <div class="bg-white border border-yellow-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-                <h3 class="text-lg font-bold text-yellow-800 mb-2">توصيات آخر زيارة</h3>
-                <div id="last-visit-recommendations" class="mt-2 max-h-32 overflow-y-auto">
-                    <div id="last-recommendation-notes" class="p-2 bg-gray-50 rounded-lg text-sm mb-2">
-                        <span class="font-semibold text-gray-700 block mb-1">أنصح المعلم:</span>
-                        <p class="text-gray-800">-</p>
+            <div class="bg-white border-l-4 border-amber-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
+                <div class="flex items-center mb-3">
+                    <div class="bg-amber-100 p-2 rounded-lg mr-3">
+                        <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                        </svg>
                     </div>
-                    <div id="last-appreciation-notes" class="p-2 bg-gray-50 rounded-lg text-sm">
-                        <span class="font-semibold text-gray-700 block mb-1">أشكر المعلم على:</span>
-                        <p class="text-gray-800">-</p>
+                    <h3 class="text-lg font-bold text-amber-800">توصيات آخر زيارة</h3>
+                </div>
+                <div class="space-y-4">
+                    <div id="last-recommendation-notes" class="p-4 bg-gradient-to-r from-red-50 to-pink-50 rounded-lg border border-red-200 shadow-sm">
+                        <div class="flex items-center mb-2">
+                            <svg class="w-4 h-4 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                            <span class="font-bold text-red-700 text-sm">أنصح المعلم:</span>
+                        </div>
+                        <p class="text-gray-800 text-sm leading-relaxed bg-white p-2 rounded border-r-2 border-red-300">لا توجد توصيات مسجلة</p>
+                    </div>
+                    <div id="last-appreciation-notes" class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200 shadow-sm">
+                        <div class="flex items-center mb-2">
+                            <svg class="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span class="font-bold text-green-700 text-sm">أشكر المعلم على:</span>
+                        </div>
+                        <p class="text-gray-800 text-sm leading-relaxed bg-white p-2 rounded border-r-2 border-green-300">لا توجد نقاط شكر مسجلة</p>
                     </div>
                 </div>
             </div>
@@ -383,10 +503,15 @@ try {
     <!-- أقسام التقييم -->
     <?php $step = 1; ?>
     <?php foreach ($domains as $domain): ?>
-        <div id="step-<?= $step ?>" class="evaluation-section bg-white border border-gray-200 border-r-4 border-r-primary-600 rounded-lg p-6 mb-4 max-h-[70vh] overflow-y-auto scrollbar-thin" style="display: <?= $step === 1 ? 'block' : 'none' ?>;">
-            <h2 class="text-xl font-bold text-primary-700 mb-6 pb-2 border-b border-gray-200"><?= htmlspecialchars($domain['name']) ?></h2>
+        <div id="step-<?= $step ?>" class="evaluation-section bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl shadow-lg p-6 mb-6" style="display: <?= $step === 1 ? 'block' : 'none' ?>;">
+            <div class="flex items-center mb-6 pb-4 border-b border-slate-300">
+                <div>
+                    <h2 class="text-2xl font-bold bg-gradient-to-r from-purple-700 to-blue-700 bg-clip-text text-transparent"><?= htmlspecialchars($domain['name']) ?></h2>
+                    <p class="text-slate-600 text-sm mt-1">قيم أداء المعلم في هذا المجال بعناية</p>
+                </div>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <?php 
                 try {
                     $indicators = get_indicators_by_domain($domain['id']);
@@ -396,30 +521,66 @@ try {
                         
                         // إضافة class جديد للتحكم بظهور مؤشرات المعمل
                         $lab_class = $is_lab_indicator ? 'lab-indicator' : '';
+                        
+                        // تحديد لون وأيقونة المؤشر حسب النوع
+                        if ($is_lab_indicator) {
+                            $indicator_color = 'from-amber-500 to-orange-500';
+                            $bg_color = 'from-amber-50 to-orange-50';
+                            $border_color = 'border-amber-500';
+                            $text_color = 'text-amber-700';
+                            $badge_text = 'مؤشر معملي';
+                            $icon_path = 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z';
+                        } else {
+                            $indicator_color = 'from-indigo-500 to-purple-500';
+                            $bg_color = 'from-slate-100 to-blue-100';
+                            $border_color = 'border-indigo-500';
+                            $text_color = 'text-indigo-600';
+                            $badge_text = 'مؤشر عام';
+                            $icon_path = 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
+                        }
                 ?>
-                    <div class="indicator-block <?= $lab_class ?>">
-                        <label class="block text-gray-700 font-medium mb-2 pr-3 border-r-2 border-primary-500"><?= htmlspecialchars($indicator['name']) ?></label>
-                        <select name="score_<?= $indicator['id'] ?>" class="w-full border p-2 rounded mb-2">
-                            <option value="">لم يتم قياسه (NULL)</option>
-                            <option value="0">الأدلة غير متوفرة أو محدودة (0)</option>
-                            <option value="1">تتوفر بعض الأدلة (1)</option>
-                            <option value="2">تتوفر معظم الأدلة (2)</option>
-                            <option value="3">الأدلة مستكملة وفاعلة (3)</option>
-                        </select>
+                    <div class="indicator-block <?= $lab_class ?> bg-white border border-slate-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
+                        <div class="flex items-start mb-4">
+                            <div class="flex-1">
+                                <div class="bg-gradient-to-r <?= $bg_color ?> border-r-4 <?= $border_color ?> p-4 rounded-lg shadow-sm">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-gray-900 font-bold text-base leading-relaxed"><?= htmlspecialchars($indicator['name']) ?></label>
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold <?= $text_color ?> bg-white border <?= $border_color ?> shadow-sm">
+                                            <?= $badge_text ?>
+                                        </span>
+                                    </div>
+                                    <div class="text-xs <?= $text_color ?> font-medium">المؤشر رقم <?= $indicator['id'] ?> - قيم هذا العنصر بعناية</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <select name="score_<?= $indicator['id'] ?>" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm font-medium focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 hover:border-purple-400">
+                                <option value="">لم يتم قياسه (NULL)</option>
+                                <option value="3">الأدلة مستكملة وفاعلة (3)</option>
+                                <option value="2">تتوفر معظم الأدلة (2)</option>
+                                <option value="1">تتوفر بعض الأدلة (1)</option>
+                                <option value="0">الأدلة غير متوفرة أو محدودة (0)</option>
+                            </select>
+                        </div>
                         
                         <?php 
                         try {
                             $recommendations = get_recommendations_by_indicator($indicator['id']);
                             if (count($recommendations) > 0): 
                         ?>
-                            <div class="mb-2 bg-gray-50 p-3 border rounded">
-                                <p class="text-sm font-semibold mb-2 text-gray-700">التوصيات المقترحة:</p>
-                                <?php foreach ($recommendations as $rec): ?>
-                                <div class="flex items-center mb-1">
-                                    <input type="checkbox" name="recommend_<?= $indicator['id'] ?>[]" value="<?= $rec['id'] ?>" id="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="form-checkbox h-4 w-4 text-primary-600">
-                                    <label for="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="mr-2 text-sm text-gray-700"><?= htmlspecialchars($rec['text']) ?></label>
+                            <div class="mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border border-blue-200 rounded-lg shadow-sm">
+                                <div class="flex items-center mb-3">
+                                    <p class="text-sm font-bold text-blue-800">التوصيات المقترحة:</p>
                                 </div>
-                                <?php endforeach; ?>
+                                <div class="space-y-2">
+                                    <?php foreach ($recommendations as $rec): ?>
+                                    <div class="flex items-start p-2 bg-white rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors duration-200">
+                                        <input type="checkbox" name="recommend_<?= $indicator['id'] ?>[]" value="<?= $rec['id'] ?>" id="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="form-checkbox h-4 w-4 text-blue-600 mt-1 flex-shrink-0">
+                                        <label for="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="mr-3 text-sm text-gray-700 leading-relaxed cursor-pointer"><?= htmlspecialchars($rec['text']) ?></label>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
                         <?php 
                             endif;
@@ -429,7 +590,12 @@ try {
                         }
                         ?>
                         
-                        <input type="text" name="custom_recommend_<?= $indicator['id'] ?>" placeholder="أدخل توصية مخصصة (اختياري)" class="w-full border p-2 rounded">
+                        <div class="mt-4">
+                            <div class="flex items-center mb-2">
+                                <label class="text-sm font-semibold text-green-800">توصية مخصصة (اختياري):</label>
+                            </div>
+                            <input type="text" name="custom_recommend_<?= $indicator['id'] ?>" placeholder="أدخل توصية مخصصة..." class="w-full border-2 border-green-300 p-3 rounded-lg text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 hover:border-green-400 bg-green-50">
+                        </div>
                     </div>
                 <?php 
                     endforeach;
@@ -439,19 +605,27 @@ try {
                 ?>
             </div>
             
-            <div class="flex justify-between mt-6">
+            <div class="flex justify-between items-center mt-8 pt-6 border-t border-slate-200">
                 <?php if ($step > 1): ?>
-                    <button type="button" class="prev-step bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600" data-step="<?= $step ?>">السابق</button>
+                    <button type="button" class="prev-step bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-md hover:shadow-lg" data-step="<?= $step ?>">
+                        <span>السابق</span>
+                    </button>
                 <?php else: ?>
                     <div></div>
                 <?php endif; ?>
                 
-                <button type="button" class="go-to-notes bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600" data-notes-step="<?= count($domains) + 1 ?>">ملاحظات وتوصيات</button>
+                <button type="button" class="go-to-notes bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg" data-notes-step="<?= count($domains) + 1 ?>">
+                    <span>ملاحظات وتوصيات</span>
+                </button>
                 
                 <?php if ($step < count($domains)): ?>
-                    <button type="button" class="next-step bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700" data-step="<?= $step ?>">التالي</button>
+                    <button type="button" class="next-step bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg" data-step="<?= $step ?>">
+                        <span>التالي</span>
+                    </button>
                 <?php else: ?>
-                    <button type="button" class="notes-to-final-result bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700">عرض النتيجة النهائية</button>
+                    <button type="button" class="notes-to-final-result bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                        <span>عرض النتيجة النهائية</span>
+                    </button>
                 <?php endif; ?>
             </div>
         </div>
@@ -785,6 +959,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // تحديث اسم الزائر عند اختيار نوع الزائر
     document.getElementById('visitor-type').addEventListener('change', updateVisitorName);
+    
+    // تحديث قائمة الزوار عند تغيير المدرسة
+    document.getElementById('school').addEventListener('change', function() {
+        updateVisitorName(); // تحديث قائمة الزوار عند تغيير المدرسة
+    });
 
     // عند تغيير حالة اختيار المعمل
     document.getElementById('has-lab').addEventListener('change', function() {
@@ -796,7 +975,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // تحميل المعلمين عند اختيار المادة
-    document.getElementById('subject').addEventListener('change', loadTeachers);
+    document.getElementById('subject').addEventListener('change', function() {
+        loadTeachers();
+        updateVisitorName(); // تحديث قائمة الزوار عند تغيير المادة
+    });
 
     // تحميل الشعب عند اختيار الصف
     document.getElementById('grade').addEventListener('change', function() {
@@ -818,17 +1000,29 @@ function updateVisitorName() {
     const visitorNameDiv = document.getElementById('visitor-name');
     const visitorPersonIdInput = document.getElementById('visitor-person-id');
     const subjectSelect = document.getElementById('subject');
+    const schoolSelect = document.getElementById('school');
     
     if (visitorTypeSelect.value) {
+        // بناء URL مع المعلمات المطلوبة
+        let apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
+        
+        if (subjectSelect.value) {
+            apiUrl += `&subject_id=${subjectSelect.value}`;
+        }
+        
+        if (schoolSelect.value) {
+            apiUrl += `&school_id=${schoolSelect.value}`;
+        }
+        
         // إرسال طلب AJAX للحصول على قائمة الزوار حسب النوع المختار
-        fetch(`includes/get_visitors.php?type_id=${visitorTypeSelect.value}`)
+        fetch(apiUrl)
             .then(response => response.json())
             .then(data => {
-                if (data.length > 0) {
+                if (data.success && data.visitors.length > 0) {
                     // إنشاء قائمة منسدلة للزوار
                     let select = document.createElement('select');
                     select.id = 'visitor-person';
-                    select.className = 'w-full border p-2 rounded mt-2';
+                    select.className = 'w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400';
                     select.required = true;
                     
                     let defaultOption = document.createElement('option');
@@ -836,20 +1030,10 @@ function updateVisitorName() {
                     defaultOption.textContent = 'اختر الزائر...';
                     select.appendChild(defaultOption);
                     
-                    // تحديد ما إذا كان نوع الزائر منسق أو موجه
-                    const visitorTypeName = visitorTypeSelect.options[visitorTypeSelect.selectedIndex].text;
-                    const isCoordinatorOrSupervisor = visitorTypeName === 'منسق المادة' || visitorTypeName === 'موجه المادة';
-                    
-                    data.forEach(visitor => {
+                    data.visitors.forEach(visitor => {
                         let option = document.createElement('option');
                         option.value = visitor.id;
                         option.textContent = visitor.name;
-                        
-                        // إضافة معلومات المواد كخاصية للعنصر
-                        if (isCoordinatorOrSupervisor && visitor.subjects) {
-                            option.dataset.subjects = JSON.stringify(visitor.subjects);
-                        }
-                        
                         select.appendChild(option);
                     });
                     
@@ -857,36 +1041,9 @@ function updateVisitorName() {
                     visitorNameDiv.innerHTML = '';
                     visitorNameDiv.appendChild(select);
                     
-                    // تحديث معرف الزائر وإظهار المادة المناسبة عند الاختيار
+                    // تحديث معرف الزائر عند الاختيار
                     select.addEventListener('change', function() {
                         visitorPersonIdInput.value = this.value;
-                        
-                        // إذا كان منسق أو موجه مادة، نقوم بتحديث قائمة المواد
-                        if (isCoordinatorOrSupervisor && this.value) {
-                            const selectedOption = this.options[this.selectedIndex];
-                            if (selectedOption.dataset.subjects) {
-                                const subjects = JSON.parse(selectedOption.dataset.subjects);
-                                
-                                if (subjects.length > 0) {
-                                    // تعديل قائمة المواد لإظهار فقط المواد التي يشرف عليها المنسق/الموجه
-                                    subjectSelect.innerHTML = '<option value="">اختر المادة...</option>';
-                                    
-                                    subjects.forEach(subject => {
-                                        let option = document.createElement('option');
-                                        option.value = subject.id;
-                                        option.textContent = subject.name;
-                                        subjectSelect.appendChild(option);
-                                    });
-                                    
-                                    // إذا كان هناك مادة واحدة فقط، نختارها تلقائياً
-                                    if (subjects.length === 1) {
-                                        subjectSelect.value = subjects[0].id;
-                                        // تحميل المعلمين المتعلقين بهذه المادة
-                                        loadTeachers();
-                                    }
-                                }
-                            }
-                        }
                     });
                 } else {
                     visitorNameDiv.innerHTML = '<p class="text-red-500">لا يوجد زوار من هذا النوع</p>';
@@ -1207,7 +1364,10 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
     }
     
     // جلب معلومات الزيارات السابقة من خلال API
-    fetch(`api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`)
+    const apiUrl = `api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`;
+    console.log('🔥 استدعاء API مع URL:', apiUrl);
+    
+    fetch(apiUrl)
         .then(response => {
             console.log('تم استلام الرد من API');
             return response.json();
@@ -1228,10 +1388,10 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 const averagePerformanceAllElement = document.getElementById('average-performance-all');
                 if (averagePerformanceAllElement) {
                     if (visitsInfo.average_performance_all !== undefined && visitsInfo.average_performance_all !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية - المتوسط هو بالفعل نسبة (0-1)
+                        // المتوسط يأتي كنسبة من 0-1، نحوله لنسبة مئوية
                         const avgPercentage = parseFloat((visitsInfo.average_performance_all * 100).toFixed(2));
-                        console.log("متوسط الأداء لكل الزائرين (قيمة):", visitsInfo.average_performance_all);
-                        console.log("متوسط الأداء لكل الزائرين (نسبة):", avgPercentage);
+                        console.log("متوسط الأداء لكل الزائرين (قيمة خام):", visitsInfo.average_performance_all);
+                        console.log("متوسط الأداء لكل الزائرين (نسبة مئوية):", avgPercentage);
                         
                         averagePerformanceAllElement.textContent = `${avgPercentage}%`;
                     } else {
@@ -1243,10 +1403,10 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 const averagePerformanceCurrentElement = document.getElementById('average-performance-current');
                 if (averagePerformanceCurrentElement) {
                     if (visitsInfo.average_performance_current_visitor !== undefined && visitsInfo.average_performance_current_visitor !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية - المتوسط هو بالفعل نسبة (0-1)
+                        // المتوسط يأتي كنسبة من 0-1، نحوله لنسبة مئوية
                         const avgPercentage = parseFloat((visitsInfo.average_performance_current_visitor * 100).toFixed(2));
-                        console.log("متوسط الأداء للزائر الحالي (قيمة):", visitsInfo.average_performance_current_visitor);
-                        console.log("متوسط الأداء للزائر الحالي (نسبة):", avgPercentage);
+                        console.log("متوسط الأداء للزائر الحالي (قيمة خام):", visitsInfo.average_performance_current_visitor);
+                        console.log("متوسط الأداء للزائر الحالي (نسبة مئوية):", avgPercentage);
                         
                         averagePerformanceCurrentElement.textContent = `${avgPercentage}%`;
                     } else {
@@ -1255,13 +1415,20 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 }
                 
                 // إذا كان هناك زيارة سابقة للزائر الحالي، نعرض تفاصيلها
+                // وإلا نعرض آخر زيارة لأي زائر
                 const lastVisitCurrentVisitor = visitsInfo.last_visit_current_visitor;
+                const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
+                const lastVisitToShow = lastVisitCurrentVisitor || lastVisitAnyVisitor;
+                
+                console.log('آخر زيارة للزائر الحالي:', lastVisitCurrentVisitor);
+                console.log('آخر زيارة لأي زائر:', lastVisitAnyVisitor);
+                console.log('آخر زيارة لعرضها:', lastVisitToShow);
                 
                 // تحديث تاريخ آخر زيارة
                 const lastVisitDateElement = document.getElementById('last-visit-date');
                 if (lastVisitDateElement) {
-                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.date) {
-                        const visitDate = new Date(lastVisitCurrentVisitor.date).toLocaleDateString('ar-EG');
+                    if (lastVisitToShow && lastVisitToShow.date) {
+                        const visitDate = new Date(lastVisitToShow.date).toLocaleDateString('ar-EG');
                         lastVisitDateElement.textContent = visitDate;
                     } else {
                         lastVisitDateElement.textContent = 'غير متوفر';
@@ -1271,9 +1438,9 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 // تحديث الصف والشعبة
                 const lastVisitClassElement = document.getElementById('last-visit-class');
                 if (lastVisitClassElement) {
-                    if (lastVisitCurrentVisitor) {
+                    if (lastVisitToShow) {
                         lastVisitClassElement.textContent = 
-                            `${lastVisitCurrentVisitor.grade || '-'} / ${lastVisitCurrentVisitor.section || '-'}`;
+                            `${lastVisitToShow.grade || '-'} / ${lastVisitToShow.section || '-'}`;
                     } else {
                         lastVisitClassElement.textContent = 'غير متوفر';
                     }
@@ -1283,10 +1450,10 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 const lastVisitCurrentPercentageElement = document.getElementById('last-visit-current-percentage');
                 if (lastVisitCurrentPercentageElement) {
                     if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.average_score !== undefined && lastVisitCurrentVisitor.average_score !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
-                        const percentage = parseFloat(((lastVisitCurrentVisitor.average_score / 3) * 100).toFixed(2));
-                        console.log("نسبة آخر زيارة للزائر الحالي (قيمة):", lastVisitCurrentVisitor.average_score);
-                        console.log("نسبة آخر زيارة للزائر الحالي (نسبة):", percentage);
+                        // average_score يأتي كنسبة من 0-1، نحوله لنسبة مئوية
+                        const percentage = parseFloat((lastVisitCurrentVisitor.average_score * 100).toFixed(2));
+                        console.log("نسبة آخر زيارة للزائر الحالي (قيمة خام):", lastVisitCurrentVisitor.average_score);
+                        console.log("نسبة آخر زيارة للزائر الحالي (نسبة مئوية):", percentage);
                         
                         lastVisitCurrentPercentageElement.textContent = `${percentage}%`;
                     } else {
@@ -1299,10 +1466,10 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 if (lastVisitAnyPercentageElement) {
                     const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
                     if (lastVisitAnyVisitor && lastVisitAnyVisitor.average_score !== undefined && lastVisitAnyVisitor.average_score !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
-                        const percentage = parseFloat(((lastVisitAnyVisitor.average_score / 3) * 100).toFixed(2));
-                        console.log("نسبة آخر زيارة لأي زائر (قيمة):", lastVisitAnyVisitor.average_score);
-                        console.log("نسبة آخر زيارة لأي زائر (نسبة):", percentage);
+                        // average_score يأتي كنسبة من 0-1، نحوله لنسبة مئوية
+                        const percentage = parseFloat((lastVisitAnyVisitor.average_score * 100).toFixed(2));
+                        console.log("نسبة آخر زيارة لأي زائر (قيمة خام):", lastVisitAnyVisitor.average_score);
+                        console.log("نسبة آخر زيارة لأي زائر (نسبة مئوية):", percentage);
                         
                         lastVisitAnyPercentageElement.textContent = `${percentage}%`;
                         
@@ -1316,8 +1483,9 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 // عرض توصيات المعلم من الزيارة السابقة
                 const recommendationElement = document.querySelector('#last-recommendation-notes p');
                 if (recommendationElement) {
-                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.recommendation_notes) {
-                        recommendationElement.textContent = lastVisitCurrentVisitor.recommendation_notes;
+                    if (lastVisitToShow && lastVisitToShow.recommendation_notes) {
+                        recommendationElement.textContent = lastVisitToShow.recommendation_notes;
+                        console.log('تم عرض التوصيات من:', lastVisitCurrentVisitor ? 'الزائر الحالي' : 'آخر زائر');
                     } else {
                         recommendationElement.textContent = 'لا توجد توصيات مسجلة';
                     }
@@ -1326,8 +1494,9 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 // عرض نقاط الشكر من الزيارة السابقة
                 const appreciationElement = document.querySelector('#last-appreciation-notes p');
                 if (appreciationElement) {
-                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.appreciation_notes) {
-                        appreciationElement.textContent = lastVisitCurrentVisitor.appreciation_notes;
+                    if (lastVisitToShow && lastVisitToShow.appreciation_notes) {
+                        appreciationElement.textContent = lastVisitToShow.appreciation_notes;
+                        console.log('تم عرض نقاط الشكر من:', lastVisitCurrentVisitor ? 'الزائر الحالي' : 'آخر زائر');
                     } else {
                         appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
                     }

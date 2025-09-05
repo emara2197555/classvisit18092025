@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار API الزيارات السابقة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h1 class="text-2xl font-bold mb-6">اختبار API الزيارات السابقة</h1>
+        
+        <div class="mb-4">
+            <label class="block mb-2">معرف المعلم:</label>
+            <input type="number" id="teacher-id" value="45" class="border rounded px-3 py-2">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">معرف الزائر:</label>
+            <input type="number" id="visitor-person-id" value="1" class="border rounded px-3 py-2">
+        </div>
+        
+        <button onclick="testAPI()" class="bg-blue-500 text-white px-4 py-2 rounded">اختبار API</button>
+        
+        <div id="results" class="mt-6 p-4 bg-gray-50 rounded"></div>
+        
+        <!-- قسم عرض النتائج مثل الصفحة الأصلية -->
+        <div id="previous-visits-info" class="mt-6 border border-gray-200 rounded-lg p-4">
+            <h3 class="text-lg font-semibold mb-4">معلومات الزيارات السابقة</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="bg-blue-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">عدد الزيارات:</span>
+                    <span id="visits-count" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-green-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">متوسط الأداء (كل الزائرين):</span>
+                    <span id="average-performance-all" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-yellow-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">متوسط الأداء (الزائر الحالي):</span>
+                    <span id="average-performance-current" class="font-semibold">غير متوفر</span>
+                </div>
+                
+                <div class="bg-purple-50 p-3 rounded">
+                    <span class="text-sm text-gray-600">آخر زيارة:</span>
+                    <span id="last-visit-date" class="font-semibold">غير متوفر</span>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4">
+                <h4 class="font-semibold mb-2">آخر توصيات:</h4>
+                <div id="last-recommendation-notes">
+                    <p class="text-gray-600">غير متوفر</p>
+                </div>
+            </div>
+            
+            <div class="border-t pt-4 mt-4">
+                <h4 class="font-semibold mb-2">آخر نقاط شكر:</h4>
+                <div id="last-appreciation-notes">
+                    <p class="text-gray-600">غير متوفر</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function testAPI() {
+            const teacherId = document.getElementById('teacher-id').value;
+            const visitorPersonId = document.getElementById('visitor-person-id').value;
+            
+            console.log('اختبار API مع:', { teacherId, visitorPersonId });
+            
+            fetch(`api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`)
+                .then(response => {
+                    console.log('استجابة API:', response);
+                    return response.text(); // استخدم text() أولاً لرؤية المحتوى الخام
+                })
+                .then(data => {
+                    console.log('البيانات الخام:', data);
+                    
+                    try {
+                        const jsonData = JSON.parse(data);
+                        document.getElementById('results').innerHTML = `
+                            <h3>نتيجة API:</h3>
+                            <pre>${JSON.stringify(jsonData, null, 2)}</pre>
+                        `;
+                        
+                        if (jsonData.success) {
+                            loadPreviousVisitsInfo(jsonData.data);
+                        }
+                    } catch (e) {
+                        document.getElementById('results').innerHTML = `
+                            <h3>خطأ في تحليل JSON:</h3>
+                            <p>${e.message}</p>
+                            <pre>${data}</pre>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('خطأ:', error);
+                    document.getElementById('results').innerHTML = `
+                        <h3>خطأ:</h3>
+                        <p>${error.message}</p>
+                    `;
+                });
+        }
+        
+        function loadPreviousVisitsInfo(data) {
+            console.log('تحديث واجهة المستخدم مع البيانات:', data);
+            
+            // تحديث عدد الزيارات
+            const visitsCountElement = document.getElementById('visits-count');
+            if (visitsCountElement) {
+                visitsCountElement.textContent = data.visits_count || '0';
+            }
+            
+            // تحديث متوسط الأداء العام لكل الزائرين
+            const averagePerformanceAllElement = document.getElementById('average-performance-all');
+            if (averagePerformanceAllElement) {
+                if (data.average_performance_all !== undefined && data.average_performance_all !== null) {
+                    const avgPercentage = parseFloat((data.average_performance_all * 100).toFixed(2));
+                    averagePerformanceAllElement.textContent = `${avgPercentage}%`;
+                } else {
+                    averagePerformanceAllElement.textContent = 'غير متوفر';
+                }
+            }
+            
+            // تحديث متوسط الأداء للزائر الحالي
+            const averagePerformanceCurrentElement = document.getElementById('average-performance-current');
+            if (averagePerformanceCurrentElement) {
+                if (data.average_performance_current_visitor !== undefined && data.average_performance_current_visitor !== null) {
+                    const avgPercentage = parseFloat((data.average_performance_current_visitor * 100).toFixed(2));
+                    averagePerformanceCurrentElement.textContent = `${avgPercentage}%`;
+                } else {
+                    averagePerformanceCurrentElement.textContent = 'غير متوفر';
+                }
+            }
+            
+            // تحديث تاريخ آخر زيارة
+            const lastVisitDateElement = document.getElementById('last-visit-date');
+            if (lastVisitDateElement) {
+                if (data.last_visit_current_visitor && data.last_visit_current_visitor.date) {
+                    const visitDate = new Date(data.last_visit_current_visitor.date).toLocaleDateString('ar-EG');
+                    lastVisitDateElement.textContent = visitDate;
+                } else {
+                    lastVisitDateElement.textContent = 'غير متوفر';
+                }
+            }
+            
+            // عرض توصيات المعلم من الزيارة السابقة
+            const recommendationElement = document.querySelector('#last-recommendation-notes p');
+            if (recommendationElement) {
+                if (data.last_visit_current_visitor && data.last_visit_current_visitor.recommendation_notes) {
+                    recommendationElement.textContent = data.last_visit_current_visitor.recommendation_notes;
+                } else {
+                    recommendationElement.textContent = 'لا توجد توصيات مسجلة';
+                }
+            }
+            
+            // عرض نقاط الشكر من الزيارة السابقة
+            const appreciationElement = document.querySelector('#last-appreciation-notes p');
+            if (appreciationElement) {
+                if (data.last_visit_current_visitor && data.last_visit_current_visitor.appreciation_notes) {
+                    appreciationElement.textContent = data.last_visit_current_visitor.appreciation_notes;
+                } else {
+                    appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

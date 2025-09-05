@@ -8,7 +8,7 @@ require_once 'includes/auth_functions.php';
 require_once 'includes/functions.php';
 
 // حماية الصفحة للمعلمين فقط
-protect_page(['teacher']);
+protect_page(['Teacher']);
 
 // تعيين عنوان الصفحة
 $page_title = 'لوحة تحكم المعلم - نظام الزيارات الصفية';

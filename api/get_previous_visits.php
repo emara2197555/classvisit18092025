@@ -3,7 +3,18 @@
  * API لجلب معلومات الزيارات السابقة للمعلم
  */
 
-// تضمين ملف الاتصال بقاعدة البيانات
+// تضمين ملف الاتصال بقاع    // جلب متوسط أداء المعلم للزائر الحالي
+    $average_performance_current_visitor_query = "
+        SELECT 
+            AVG(v.total_score / (
+                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id), 0) * 3
+            )) as avg_score,
+            COUNT(DISTINCT v.id) as visits_used_in_calculation
+        FROM visits v 
+        WHERE v.teacher_id = ?
+        AND v.visitor_person_id = ?
+        AND EXISTS (SELECT 1 FROM visit_evaluations ve WHERE ve.visit_id = v.id)
+    ";
 require_once '../includes/db_connection.php';
 
 // إضافة سجل أخطاء للتصحيح
@@ -52,12 +63,12 @@ try {
     $average_performance_all_query = "
         SELECT 
             AVG(v.total_score / (
-                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id AND ve2.score IS NOT NULL), 0) * 3
+                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id), 0) * 3
             )) as avg_score,
             COUNT(DISTINCT v.id) as visits_used_in_calculation
         FROM visits v 
         WHERE v.teacher_id = ?
-        AND EXISTS (SELECT 1 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL)
+        AND EXISTS (SELECT 1 FROM visit_evaluations ve WHERE ve.visit_id = v.id)
     ";
     
     $average_performance_all = query_row($average_performance_all_query, [$teacher_id]);

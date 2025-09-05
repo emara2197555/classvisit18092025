@@ -5,10 +5,18 @@ ob_start();
 // تضمين ملفات الاتصال بقاعدة البيانات والوظائف المشتركة
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
 
 // بدء أو استئناف الجلسة
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
+}
+
+// التحقق من تسجيل الدخول (ما عدا صفحة تسجيل الدخول نفسها)
+$current_script = basename($_SERVER['SCRIPT_NAME']);
+if ($current_script !== 'login.php' && !is_logged_in()) {
+    header('Location: login.php?message=' . urlencode('يجب تسجيل الدخول أولاً'));
+    exit;
 }
 
 // عنوان الصفحة الافتراضي
@@ -148,11 +156,12 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                 
                 <!-- قائمة الإدارة -->
                 <div class="relative group">
-                    <button class="hover:text-primary-200 <?= in_array($current_page, ['teachers_management.php', 'subjects_management.php', 'sections_management.php', 'school_settings.php']) ? 'border-b-2 border-white' : '' ?>">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['users_management.php', 'teachers_management.php', 'subjects_management.php', 'sections_management.php', 'school_settings.php']) ? 'border-b-2 border-white' : '' ?>">
                         الإدارة
                         <i class="fas fa-caret-down mr-1"></i>
                     </button>
                     <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
+                        <a href="users_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-users mr-2"></i>إدارة المستخدمين</a>
                         <a href="teachers_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المعلمين</a>
                         <a href="subjects_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة المواد الدراسية</a>
                         <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الشعب</a>
@@ -189,6 +198,36 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                     </div>
                 </div>
             </nav>
+            
+            <!-- قسم المستخدم -->
+            <div class="hidden md:flex items-center space-x-4 space-x-reverse">
+                <div class="relative group">
+                    <button class="flex items-center space-x-2 space-x-reverse hover:text-primary-200 transition-colors duration-200">
+                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center text-primary-600">
+                            <i class="fas fa-user text-sm"></i>
+                        </div>
+                        <span class="text-sm font-medium"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></span>
+                        <i class="fas fa-caret-down text-xs"></i>
+                    </button>
+                    <div class="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-20">
+                        <div class="px-4 py-2 border-b border-gray-200">
+                            <p class="text-sm font-medium text-gray-900"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></p>
+                            <p class="text-xs text-gray-500"><?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
+                        </div>
+                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <i class="fas fa-user-edit ml-2"></i>الملف الشخصي
+                        </a>
+                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <i class="fas fa-cog ml-2"></i>الإعدادات
+                        </a>
+                        <div class="border-t border-gray-200"></div>
+                        <a href="logout.php" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                            <i class="fas fa-sign-out-alt ml-2"></i>تسجيل الخروج
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
             <button id="mobile-menu-button" class="md:hidden">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
@@ -196,11 +235,36 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
             </button>
         </div>
         <div id="mobile-menu" class="hidden md:hidden bg-primary-700 pb-4 px-4">
+            <!-- قسم المستخدم في القائمة المحمولة -->
+            <div class="border-b border-primary-600 pb-3 mb-3">
+                <div class="flex items-center space-x-3 space-x-reverse py-2">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-primary-600">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>
+                        <p class="text-white font-medium text-sm"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></p>
+                        <p class="text-primary-200 text-xs"><?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
+                    </div>
+                </div>
+                <div class="mt-2 space-y-1">
+                    <a href="#" class="block py-2 text-sm text-primary-200 hover:text-white">
+                        <i class="fas fa-user-edit ml-2"></i>الملف الشخصي
+                    </a>
+                    <a href="#" class="block py-2 text-sm text-primary-200 hover:text-white">
+                        <i class="fas fa-cog ml-2"></i>الإعدادات
+                    </a>
+                    <a href="logout.php" class="block py-2 text-sm text-red-300 hover:text-red-100">
+                        <i class="fas fa-sign-out-alt ml-2"></i>تسجيل الخروج
+                    </a>
+                </div>
+            </div>
+            
             <a href="index.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'index.php' ? 'font-bold' : '' ?>">الرئيسية</a>
             <a href="visits.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'visits.php' ? 'font-bold' : '' ?>">الزيارات الصفية</a>
             <a href="evaluation_form.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'font-bold' : '' ?>">زيارة جديدة</a>
             <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">الإدارة <i class="fas fa-caret-down mr-1"></i></a>
             <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
+                <a href="users_management.php" class="block py-1 hover:text-primary-200">إدارة المستخدمين</a>
                 <a href="teachers_management.php" class="block py-1 hover:text-primary-200">إدارة المعلمين</a>
                 <a href="subjects_management.php" class="block py-1 hover:text-primary-200">إدارة المواد الدراسية</a>
                 <a href="sections_management.php" class="block py-1 hover:text-primary-200">إدارة الشعب</a>
