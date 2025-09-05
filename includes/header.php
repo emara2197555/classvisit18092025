@@ -7,7 +7,9 @@ require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 
 // بدء أو استئناف الجلسة
-session_start();
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 
 // عنوان الصفحة الافتراضي
 $page_title = $page_title ?? 'نظام الزيارات الصفية';
@@ -156,19 +158,20 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                         <a href="sections_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الشعب</a>
                         <a href="school_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إعدادات المدرسة</a>
                         <a href="academic_years_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إدارة الأعوام الدراسية</a>
-                        <a href="add_recommendations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">إضافة توصيات</a>
+                        <a href="recommendations_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-lightbulb mr-2"></i>إدارة التوصيات</a>
                     </div>
                 </div>
                 
                 <!-- قائمة الاحتياجات التدريبية -->
                 <div class="relative group">
-                    <button class="hover:text-primary-200 <?= in_array($current_page, ['training_needs.php', 'collective_training_needs.php']) ? 'border-b-2 border-white' : '' ?>">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['training_needs.php', 'collective_training_needs.php', 'expert_trainers.php']) ? 'border-b-2 border-white' : '' ?>">
                         الاحتياجات التدريبية
                         <i class="fas fa-caret-down mr-1"></i>
                     </button>
                     <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
                         <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">احتياجات المعلمين</a>
                         <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
+                        <a href="expert_trainers.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">المدربين المؤهلين</a>
                     </div>
                 </div>
                 
@@ -209,6 +212,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
             <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
                 <a href="training_needs.php" class="block py-1 hover:text-primary-200">احتياجات المعلمين</a>
                 <a href="collective_training_needs.php" class="block py-1 hover:text-primary-200">الاحتياجات الجماعية</a>
+                <a href="expert_trainers.php" class="block py-1 hover:text-primary-200">المدربين المؤهلين</a>
             </div>
             <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">التقارير <i class="fas fa-caret-down mr-1"></i></a>
             <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">

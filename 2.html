@@ -1,414 +1,0 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام الزيارات الصفية - لوحة التحكم</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-        
-        body {
-            font-family: 'Tajawal', sans-serif;
-        }
-        
-        .sidebar {
-            transition: all 0.3s ease;
-        }
-        .sidebar.collapsed {
-            width: 70px;
-        }
-        .sidebar.collapsed .nav-text {
-            display: none;
-        }
-        .sidebar.collapsed .logo-text {
-            display: none;
-        }
-        .sidebar.collapsed .nav-item {
-            justify-content: center;
-        }
-        .main-content {
-            transition: all 0.3s ease;
-        }
-        .main-content.expanded {
-            margin-right: 70px;
-        }
-        .card-hover:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        .progress-bar {
-            transition: width 0.6s ease;
-        }
-        .rtl-grid {
-            direction: rtl;
-        }
-    </style>
-</head>
-<body class="bg-gray-100">
-    <div class="flex h-screen overflow-hidden">
-        <!-- Sidebar -->
-        <div class="sidebar bg-blue-800 text-white w-64 flex flex-col">
-            <div class="p-4 flex items-center">
-                <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center">
-                    <i class="fas fa-chalkboard-teacher text-blue-800 text-xl"></i>
-                </div>
-                <span class="logo-text mr-3 text-xl font-bold">نظام الزيارات</span>
-            </div>
-            <div class="mt-8 flex-1">
-                <div class="px-4">
-                    <div class="relative">
-                        <input type="text" placeholder="بحث..." class="w-full bg-blue-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-blue-300">
-                        <i class="fas fa-search absolute left-3 top-2.5 text-blue-300"></i>
-                    </div>
-                </div>
-                <nav class="mt-6">
-                    <div class="px-2">
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg bg-blue-700 text-white">
-                            <i class="fas fa-home"></i>
-                            <span class="nav-text mr-3">لوحة التحكم</span>
-                        </a>
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg text-blue-200 hover:bg-blue-700 hover:text-white mt-1">
-                            <i class="fas fa-chart-line"></i>
-                            <span class="nav-text mr-3">التقارير</span>
-                        </a>
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg text-blue-200 hover:bg-blue-700 hover:text-white mt-1">
-                            <i class="fas fa-calendar-check"></i>
-                            <span class="nav-text mr-3">الزيارات</span>
-                            <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">5</span>
-                        </a>
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg text-blue-200 hover:bg-blue-700 hover:text-white mt-1">
-                            <i class="fas fa-users"></i>
-                            <span class="nav-text mr-3">المعلمون</span>
-                        </a>
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg text-blue-200 hover:bg-blue-700 hover:text-white mt-1">
-                            <i class="fas fa-school"></i>
-                            <span class="nav-text mr-3">المدارس</span>
-                        </a>
-                        <a href="#" class="nav-item flex items-center px-4 py-3 rounded-lg text-blue-200 hover:bg-blue-700 hover:text-white mt-1">
-                            <i class="fas fa-cog"></i>
-                            <span class="nav-text mr-3">الإعدادات</span>
-                        </a>
-                    </div>
-                </nav>
-            </div>
-            <div class="p-4 border-t border-blue-700">
-                <div class="flex items-center">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User" class="w-10 h-10 rounded-full">
-                    <div class="mr-3">
-                        <div class="text-sm font-medium">أحمد محمد</div>
-                        <div class="text-xs text-blue-300">مدير النظام</div>
-                    </div>
-                    <button class="ml-auto text-blue-300 hover:text-white">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="main-content flex-1 flex flex-col overflow-hidden">
-            <!-- Top Navigation -->
-            <header class="bg-white shadow-sm py-4 px-6 flex items-center justify-between">
-                <div class="flex items-center">
-                    <button id="sidebarToggle" class="text-gray-500 hover:text-gray-700 focus:outline-none">
-                        <i class="fas fa-bars text-xl"></i>
-                    </button>
-                    <h1 class="mr-4 text-xl font-semibold text-gray-800">لوحة التحكم - نظام الزيارات الصفية</h1>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div class="relative">
-                        <button class="text-gray-500 hover:text-gray-700 focus:outline-none">
-                            <i class="fas fa-bell text-xl"></i>
-                            <span class="absolute top-0 left-0 w-2 h-2 bg-red-500 rounded-full"></span>
-                        </button>
-                    </div>
-                    <div class="relative">
-                        <button class="text-gray-500 hover:text-gray-700 focus:outline-none">
-                            <i class="fas fa-envelope text-xl"></i>
-                            <span class="absolute top-0 left-0 w-2 h-2 bg-red-500 rounded-full"></span>
-                        </button>
-                    </div>
-                    <div class="border-l border-gray-200 h-8 mx-2"></div>
-                    <div class="flex items-center">
-                        <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="User" class="w-8 h-8 rounded-full">
-                        <span class="mr-2 text-sm font-medium">أحمد م.</span>
-                    </div>
-                </div>
-            </header>
-
-            <!-- Main Content Area -->
-            <main class="flex-1 overflow-y-auto p-6">
-                <!-- Stats Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 rtl-grid">
-                    <div class="card-hover bg-white rounded-xl shadow-sm p-6 transition duration-300">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-500 text-sm">عدد الزيارات المسجلة</p>
-                                <h3 class="text-2xl font-bold mt-1">124</h3>
-                                <p class="text-green-500 text-sm mt-1 flex items-center">
-                                    <i class="fas fa-arrow-up mr-1"></i> هذا الفصل
-                                </p>
-                            </div>
-                            <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                                <i class="fas fa-clipboard-check text-green-600 text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-hover bg-white rounded-xl shadow-sm p-6 transition duration-300">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-500 text-sm">عدد المعلمين المقييمين</p>
-                                <h3 class="text-2xl font-bold mt-1">87</h3>
-                                <p class="text-blue-500 text-sm mt-1 flex items-center">
-                                    <i class="fas fa-chalkboard-teacher mr-1"></i> معلمًا
-                                </p>
-                            </div>
-                            <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                                <i class="fas fa-user-graduate text-blue-600 text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-hover bg-white rounded-xl shadow-sm p-6 transition duration-300">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-500 text-sm">متوسط الأداء العام</p>
-                                <h3 class="text-2xl font-bold mt-1">82.5%</h3>
-                                <p class="text-yellow-500 text-sm mt-1 flex items-center">
-                                    <i class="fas fa-chart-line mr-1"></i> للمعلمين
-                                </p>
-                            </div>
-                            <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
-                                <i class="fas fa-star text-yellow-600 text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-hover bg-white rounded-xl shadow-sm p-6 transition duration-300">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-gray-500 text-sm">التوصيات غير المنفذة</p>
-                                <h3 class="text-2xl font-bold mt-1">41</h3>
-                                <p class="text-red-500 text-sm mt-1 flex items-center">
-                                    <i class="fas fa-exclamation-circle mr-1"></i> توصية
-                                </p>
-                            </div>
-                            <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                                <i class="fas fa-clipboard-list text-red-600 text-xl"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Quick Stats Section -->
-                <div class="mt-6 bg-white rounded-xl shadow-sm p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 إحصائيات سريعة</h2>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">عدد المدارس المسجلة</p>
-                            <p class="text-xl font-bold text-blue-600">12</p>
-                        </div>
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">عدد الزائرين</p>
-                            <p class="text-xl font-bold text-blue-600">35</p>
-                        </div>
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">عدد المواد الدراسية</p>
-                            <p class="text-xl font-bold text-blue-600">22</p>
-                        </div>
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">عدد الشعب الدراسية</p>
-                            <p class="text-xl font-bold text-blue-600">65</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Charts Section -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 rtl-grid">
-                    <!-- Teacher Performance -->
-                    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
-                        <div class="flex items-center justify-between mb-6">
-                            <h2 class="text-lg font-semibold text-gray-800">📈 أداء المعلمين</h2>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <h3 class="font-medium text-green-600 mb-3">🔸 أفضل المعلمين أداءً:</h3>
-                                <div class="space-y-3">
-                                    <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                                        <span>أ. فاطمة العلي – مادة العلوم</span>
-                                        <span class="font-bold">94%</span>
-                                    </div>
-                                    <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                                        <span>أ. يوسف المري – مادة الرياضيات</span>
-                                        <span class="font-bold">91%</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <h3 class="font-medium text-red-600 mb-3">🔸 أقل المعلمين أداءً:</h3>
-                                <div class="space-y-3">
-                                    <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                                        <span>أ. سارة العبدالله – مادة اللغة الإنجليزية</span>
-                                        <span class="font-bold">65%</span>
-                                    </div>
-                                    <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                                        <span>أ. ناصر الشمري – مادة الفيزياء</span>
-                                        <span class="font-bold">68%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- School Performance -->
-                    <div class="bg-white rounded-xl shadow-sm p-6">
-                        <h2 class="text-lg font-semibold text-gray-800 mb-6">🏫 أداء المدارس / الصفوف</h2>
-                        <div class="space-y-4">
-                            <div class="p-3 bg-blue-50 rounded-lg">
-                                <p class="text-sm text-gray-600">أفضل مدرسة من حيث نتائج التقييم:</p>
-                                <p class="font-bold text-blue-700">مدرسة اليرموك الإعدادية <span class="text-green-600">(89%)</span></p>
-                            </div>
-                            <div class="p-3 bg-green-50 rounded-lg">
-                                <p class="text-sm text-gray-600">الصف الأعلى أداءً:</p>
-                                <p class="font-bold text-green-700">الصف التاسع – شعبة 3 <span class="text-green-600">(91%)</span></p>
-                            </div>
-                            <div class="p-3 bg-red-50 rounded-lg">
-                                <p class="text-sm text-gray-600">الصف الأقل أداءً:</p>
-                                <p class="font-bold text-red-700">الصف السابع – شعبة 2 <span class="text-red-600">(64%)</span></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Training Needs Section -->
-                <div class="mt-6 bg-white rounded-xl shadow-sm p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">🛠️ الاحتياجات التدريبية</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">عدد المعلمين الذين لديهم مؤشرات ضعيفة</p>
-                            <p class="text-xl font-bold text-red-600">23</p>
-                            <p class="text-sm mt-2">معلمًا</p>
-                        </div>
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">المجالات الأكثر ضعفًا</p>
-                            <ul class="list-disc mr-4 mt-2 space-y-1">
-                                <li class="text-sm">الإدارة الصفية</li>
-                                <li class="text-sm">تقويم التعلم</li>
-                            </ul>
-                        </div>
-                        <div class="border border-gray-200 rounded-lg p-4">
-                            <p class="text-gray-500 text-sm">برامج تدريب مقترحة</p>
-                            <ul class="list-disc mr-4 mt-2 space-y-1">
-                                <li class="text-sm">تحسين ضبط الصف</li>
-                                <li class="text-sm">توظيف أدوات التقويم التكويني</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Visits and Quick Alerts -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 rtl-grid">
-                    <!-- Upcoming Visits -->
-                    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
-                        <div class="flex items-center justify-between mb-6">
-                            <h2 class="text-lg font-semibold text-gray-800">📅 الزيارات المجدولة القادمة</h2>
-                            <button class="text-blue-600 text-sm font-medium">عرض الكل</button>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead>
-                                    <tr>
-                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">التاريخ</th>
-                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المعلم</th>
-                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المادة</th>
-                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الزائر</th>
-                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المدرسة</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <tr>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">2025-05-18</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">أ. ريم الزهراني</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">رياضيات</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">أ. خالد السبيعي</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">مدرسة المستقبل الإعدادية</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">2025-05-19</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">أ. عبدالله حمود</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">لغة عربية</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">أ. ناصر جاسم</td>
-                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">مدرسة المعرفة الثانوية</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Quick Alerts -->
-                    <div class="bg-white rounded-xl shadow-sm p-6">
-                        <h2 class="text-lg font-semibold text-gray-800 mb-6">📝 تنبيهات سريعة</h2>
-                        <div class="space-y-4">
-                            <div class="flex items-start p-3 bg-yellow-50 rounded-lg">
-                                <span class="text-yellow-500 mr-2 mt-1">⚠️</span>
-                                <p class="text-sm">لديك 7 توصيات لم تُتابَع بعد</p>
-                            </div>
-                            <div class="flex items-start p-3 bg-blue-50 rounded-lg">
-                                <span class="text-blue-500 mr-2 mt-1">📢</span>
-                                <p class="text-sm">تم رفع نموذج تقييم جديد يشمل "النشاط العملي"</p>
-                            </div>
-                            <div class="flex items-start p-3 bg-green-50 rounded-lg">
-                                <span class="text-green-500 mr-2 mt-1">📌</span>
-                                <p class="text-sm">تم تحديث بيانات الصفوف للعام الأكاديمي 2025/2026</p>
-                            </div>
-                        </div>
-                        
-                        <h2 class="text-lg font-semibold text-gray-800 mt-8 mb-4">🔐 الوصول السريع</h2>
-                        <div class="grid grid-cols-2 gap-3">
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                🧑‍🏫 إدارة المعلمين
-                            </a>
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                🗂️ تقارير الأداء
-                            </a>
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                🧾 التوصيات
-                            </a>
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                🛠️ إعدادات المدرسة
-                            </a>
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                📄 إنشاء زيارة جديدة
-                            </a>
-                            <a href="#" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-center">
-                                📊 الاحتياجات التدريبية
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
-
-    <script>
-        // Toggle sidebar
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('collapsed');
-            document.querySelector('.main-content').classList.toggle('expanded');
-        });
-
-        // Animate progress bars on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const progressBars = document.querySelectorAll('.progress-bar');
-            progressBars.forEach(bar => {
-                const width = bar.style.width;
-                bar.style.width = '0';
-                setTimeout(() => {
-                    bar.style.width = width;
-                }, 100);
-            });
-        });
-    </script>
-</body>
-</html>

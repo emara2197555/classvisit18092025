@@ -77,7 +77,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -86,10 +86,10 @@ if ($academic_year_id > 0) {
                AND vs.subject_id = s.id
                AND vs.academic_year_id = ?
                AND ei.domain_id = 2
-               AND ve.score > 0) AS lesson_execution_avg,
+               AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
             -- متوسط الإدارة الصفية (مجال رقم 3)
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -98,10 +98,10 @@ if ($academic_year_id > 0) {
                AND vs.subject_id = s.id
                AND vs.academic_year_id = ?
                AND ei.domain_id = 3
-               AND ve.score > 0) AS classroom_management_avg,
+               AND ve.score IS NOT NULL) AS classroom_management_avg,
                
             -- المتوسط العام للمجالين
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -110,7 +110,7 @@ if ($academic_year_id > 0) {
                AND vs.subject_id = s.id
                AND vs.academic_year_id = ?
                AND (ei.domain_id = 2 OR ei.domain_id = 3)
-               AND ve.score > 0) AS overall_avg
+               AND ve.score IS NOT NULL) AS overall_avg
         FROM 
             subjects s
         JOIN 
@@ -142,7 +142,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -150,10 +150,10 @@ if ($academic_year_id > 0) {
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
                AND ei.domain_id = 2
-               AND ve.score > 0) AS lesson_execution_avg,
+               AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
             -- متوسط الإدارة الصفية (مجال رقم 3)
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -161,10 +161,10 @@ if ($academic_year_id > 0) {
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
                AND ei.domain_id = 3
-               AND ve.score > 0) AS classroom_management_avg,
+               AND ve.score IS NOT NULL) AS classroom_management_avg,
                
             -- المتوسط العام للمجالين
-            (SELECT AVG(ve.score) * 25
+            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -172,7 +172,7 @@ if ($academic_year_id > 0) {
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
                AND (ei.domain_id = 2 OR ei.domain_id = 3)
-               AND ve.score > 0) AS overall_avg
+               AND ve.score IS NOT NULL) AS overall_avg
         FROM 
             subjects s
         JOIN 
@@ -225,8 +225,8 @@ $weakest_query = "
     SELECT 
         i.id,
         i.name,
-        AVG(ve.score) AS avg_score,
-        AVG(ve.score) * 25 AS avg_percentage,
+        (SUM(ve.score) / COUNT(ve.score)) AS avg_score,
+        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -238,12 +238,12 @@ $weakest_query = "
         v.section_id = ?
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
         AND (i.domain_id = 2 OR i.domain_id = 3)
     GROUP BY 
         i.id, i.name
     HAVING 
-        AVG(ve.score) < 3
+        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 < 50
     ORDER BY 
         avg_score ASC
     LIMIT 5
@@ -260,8 +260,8 @@ $strongest_query = "
     SELECT 
         i.id,
         i.name,
-        AVG(ve.score) AS avg_score,
-        AVG(ve.score) * 25 AS avg_percentage,
+        (SUM(ve.score) / COUNT(ve.score)) AS avg_score,
+        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -273,7 +273,7 @@ $strongest_query = "
         v.section_id = ?
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
         AND (i.domain_id = 2 OR i.domain_id = 3)
     GROUP BY 
         i.id, i.name

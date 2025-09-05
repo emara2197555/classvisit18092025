@@ -167,7 +167,7 @@ if ($subject_id) {
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * 25) AS percentage_score
+            (AVG(ve.score) * (100/3)) AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -244,7 +244,7 @@ if ($subject_id) {
                 ei.id AS indicator_id,
                 ei.name AS indicator_name,
                 AVG(ve.score) AS avg_score,
-                (AVG(ve.score) * 25) AS percentage_score,
+                (AVG(ve.score) * (100/3)) AS percentage_score,
                 COUNT(DISTINCT v.id) as visit_count
             FROM 
                 visit_evaluations ve
@@ -284,7 +284,13 @@ if ($subject_id) {
 ?>
 
 <div class="mb-6">
-    <h1 class="text-2xl font-bold mb-4">الاحتياجات التدريبية الجماعية</h1>
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold">الاحتياجات التدريبية الجماعية</h1>
+        <a href="expert_trainers.php" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+            <i class="fas fa-chalkboard-teacher mr-2"></i>
+            المدربين المؤهلين
+        </a>
+    </div>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <form action="" method="get" class="mb-6">
@@ -402,49 +408,103 @@ if ($subject_id) {
                 </p>
                 
                 <?php if (!empty($collective_needs)): ?>
-                    <div class="mb-8">
-                        <h3 class="text-lg font-medium mb-4">أبرز الاحتياجات التدريبية المشتركة</h3>
+                    <div class="bg-white shadow-lg rounded-lg overflow-hidden mb-8">
+                        <div class="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
+                            <h3 class="text-xl font-bold text-white flex items-center">
+                                <i class="fas fa-exclamation-triangle mr-3"></i>
+                                أبرز الاحتياجات التدريبية المشتركة
+                            </h3>
+                            <p class="text-green-100 text-sm mt-1">المؤشرات التي تحتاج إلى تدريب مشترك لجميع المعلمين</p>
+                        </div>
                         
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full bg-white border border-gray-200">
-                                <thead class="bg-gray-100">
-                                    <tr>
-                                        <th class="py-3 px-4 border-b text-right">م</th>
-                                        <th class="py-3 px-4 border-b text-right">المجال</th>
-                                        <th class="py-3 px-4 border-b text-right">المؤشر</th>
-                                        <th class="py-3 px-4 border-b text-right">الورشة المقترحة</th>
-                                        <th class="py-3 px-4 border-b text-center">متوسط الدرجة</th>
-                                        <th class="py-3 px-4 border-b text-center">النسبة المئوية</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                        <div class="p-6">
+                            <div class="overflow-x-auto">
+                                <table class="w-full table-auto border-collapse">
+                                    <thead>
+                                        <tr class="bg-gray-50">
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[50px]">
+                                                <i class="fas fa-list-ol mr-2 text-blue-600"></i>
+                                                م
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[120px]">
+                                                <i class="fas fa-layer-group mr-2 text-purple-600"></i>
+                                                المجال
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[300px]">
+                                                <i class="fas fa-list-ul mr-2 text-blue-600"></i>
+                                                المؤشر
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[250px]">
+                                                <i class="fas fa-graduation-cap mr-2 text-green-600"></i>
+                                                الورشة المقترحة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                                <i class="fas fa-calculator mr-2 text-orange-600"></i>
+                                                متوسط الدرجة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                                <i class="fas fa-percentage mr-2 text-red-600"></i>
+                                                النسبة المئوية
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                     <?php $counter = 1; ?>
                                     <?php foreach ($collective_needs as $id => $need): ?>
-                                        <tr>
-                                            <td class="py-2 px-4 border-b"><?= $counter++ ?></td>
-                                            <td class="py-2 px-4 border-b"><?= htmlspecialchars($need['domain_name']) ?></td>
-                                            <td class="py-2 px-4 border-b"><?= htmlspecialchars($need['indicator_name']) ?></td>
-                                            <td class="py-2 px-4 border-b font-medium"><?= htmlspecialchars($need['workshop']) ?></td>
-                                            <td class="py-2 px-4 border-b text-center"><?= number_format($need['avg_score'], 2) ?></td>
-                                            <td class="py-2 px-4 border-b text-center">
-                                                <?php
-                                                $score_class = '';
-                                                if ($need['percentage_score'] < 50) {
-                                                    $score_class = 'text-red-700 bg-red-100';
-                                                } elseif ($need['percentage_score'] < 60) {
-                                                    $score_class = 'text-orange-700 bg-orange-100';
-                                                } elseif ($need['percentage_score'] < 70) {
-                                                    $score_class = 'text-yellow-700 bg-yellow-100';
-                                                }
-                                                ?>
-                                                <span class="px-2 py-1 rounded <?= $score_class ?>">
-                                                    <?= number_format($need['percentage_score'], 2) ?>%
+                                        <tr class="hover:bg-gray-50 transition-colors duration-200">
+                                            <td class="border border-gray-300 px-4 py-3 text-center font-medium">
+                                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm font-bold">
+                                                    <?= $counter++ ?>
                                                 </span>
+                                            </td>
+                                            <td class="border border-gray-300 px-4 py-3 text-right">
+                                                <span class="font-medium text-gray-800"><?= htmlspecialchars($need['domain_name']) ?></span>
+                                            </td>
+                                            <td class="border border-gray-300 px-4 py-3 text-right">
+                                                <div class="font-medium text-gray-800"><?= htmlspecialchars($need['indicator_name']) ?></div>
+                                            </td>
+                                            <td class="border border-gray-300 px-4 py-3 text-right">
+                                                <div class="text-blue-700 font-medium"><?= htmlspecialchars($need['workshop']) ?></div>
+                                            </td>
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                                <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full font-bold">
+                                                    <?= number_format($need['avg_score'], 2) ?>
+                                                </span>
+                                            </td>
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                                <?php
+                                                $percentage = $need['percentage_score'];
+                                                $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                              ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                ?>
+                                                <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
+                                                    <?= number_format($percentage, 1) ?>%
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+                            </div>
+                            
+                            <!-- إضافة مفتاح الألوان -->
+                            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان:</h4>
+                                <div class="flex flex-wrap gap-4 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">جيد (60% - 79%)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 <?php elseif (!empty($indicators_data)): ?>
@@ -458,23 +518,51 @@ if ($subject_id) {
                 <?php endif; ?>
                 
                 <?php if (!empty($visitor_metrics) && count($visitor_metrics) > 1): ?>
-                    <div class="mb-8">
-                        <h3 class="text-lg font-medium mb-4">مقارنة التقييمات حسب نوع الزائر</h3>
+                    <div class="bg-white shadow-lg rounded-lg overflow-hidden mb-8">
+                        <div class="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
+                            <h3 class="text-xl font-bold text-white flex items-center">
+                                <i class="fas fa-users-cog mr-3"></i>
+                                مقارنة التقييمات حسب نوع الزائر
+                            </h3>
+                            <p class="text-purple-100 text-sm mt-1">مقارنة شاملة لتقييمات المؤشرات من قبل أنواع الزوار المختلفة</p>
+                        </div>
                         
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full bg-white border border-gray-200">
-                                <thead class="bg-gray-100">
-                                    <tr>
-                                        <th class="py-3 px-4 border-b text-right">المؤشر</th>
-                                        <th class="py-3 px-4 border-b text-center">منسق المادة</th>
-                                        <th class="py-3 px-4 border-b text-center">موجه المادة</th>
-                                        <th class="py-3 px-4 border-b text-center">النائب الأكاديمي</th>
-                                        <th class="py-3 px-4 border-b text-center">مدير المدرسة</th>
-                                        <th class="py-3 px-4 border-b text-center">متوسط الدرجة</th>
-                                        <th class="py-3 px-4 border-b text-center">النسبة المئوية</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                        <div class="p-6">
+                            <div class="overflow-x-auto">
+                                <table class="w-full table-auto border-collapse">
+                                    <thead>
+                                        <tr class="bg-gray-50">
+                                            <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[300px]">
+                                                <i class="fas fa-list-ul mr-2 text-blue-600"></i>
+                                                المؤشر
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                                <i class="fas fa-user-graduate mr-2 text-green-600"></i>
+                                                منسق المادة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                                <i class="fas fa-chalkboard-teacher mr-2 text-blue-600"></i>
+                                                موجه المادة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                                <i class="fas fa-user-tie mr-2 text-purple-600"></i>
+                                                النائب الأكاديمي
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                                <i class="fas fa-crown mr-2 text-yellow-600"></i>
+                                                مدير المدرسة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                                <i class="fas fa-calculator mr-2 text-orange-600"></i>
+                                                متوسط الدرجة
+                                            </th>
+                                            <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                                <i class="fas fa-percentage mr-2 text-red-600"></i>
+                                                النسبة المئوية
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                     <?php 
                                     // جلب أسماء المؤشرات
                                     $indicators_names = [];
@@ -500,127 +588,193 @@ if ($subject_id) {
                                         }
                                         
                                         $avg_score = $total_visits > 0 ? $total_score / $total_visits : 0;
-                                        $percentage_score = $avg_score * 25;
+                                        $percentage_score = $avg_score * (100/3);
                                     ?>
-                                        <tr>
-                                            <td class="py-2 px-4 border-b"><?= htmlspecialchars($indicator_name) ?></td>
+                                        <tr class="hover:bg-gray-50 transition-colors duration-200">
+                                            <td class="border border-gray-300 px-4 py-3 text-right">
+                                                <div class="font-medium text-gray-800"><?= htmlspecialchars($indicator_name) ?></div>
+                                            </td>
                                             <!-- منسق المادة -->
-                                            <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if (isset($visitor_metrics[15][$indicator_id])) {
                                                     $score = $visitor_metrics[15][$indicator_id];
-                                                    echo number_format($score['percentage_score'], 1) . '%';
-                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                    $percentage = number_format($score['percentage_score'], 1);
+                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                                                    echo $percentage . '%';
+                                                    echo '</div>';
+                                                    echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <!-- موجه المادة -->
-                                            <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if (isset($visitor_metrics[16][$indicator_id])) {
                                                     $score = $visitor_metrics[16][$indicator_id];
-                                                    echo number_format($score['percentage_score'], 1) . '%';
-                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                    $percentage = number_format($score['percentage_score'], 1);
+                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                                                    echo $percentage . '%';
+                                                    echo '</div>';
+                                                    echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <!-- النائب الأكاديمي -->
-                                            <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if (isset($visitor_metrics[17][$indicator_id])) {
                                                     $score = $visitor_metrics[17][$indicator_id];
-                                                    echo number_format($score['percentage_score'], 1) . '%';
-                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                    $percentage = number_format($score['percentage_score'], 1);
+                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                                                    echo $percentage . '%';
+                                                    echo '</div>';
+                                                    echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <!-- مدير المدرسة -->
-                                            <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if (isset($visitor_metrics[18][$indicator_id])) {
                                                     $score = $visitor_metrics[18][$indicator_id];
-                                                    echo number_format($score['percentage_score'], 1) . '%';
-                                                    echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                                                    $percentage = number_format($score['percentage_score'], 1);
+                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                                                    echo $percentage . '%';
+                                                    echo '</div>';
+                                                    echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <!-- متوسط الدرجة -->
-                                            <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if ($total_visits > 0) {
+                                                    echo '<span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full font-bold">';
                                                     echo number_format($avg_score, 2);
-                                                    echo '<br><small class="text-muted">(' . $total_visits . ' زيارة)</small>';
+                                                    echo '</span>';
+                                                    echo '<div class="text-xs text-gray-500 mt-1">(' . $total_visits . ' زيارة)</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
                                             </td>
                                             <!-- النسبة المئوية -->
-                                                <td class="py-2 px-4 border-b text-center">
+                                            <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if ($total_visits > 0) {
-                                                        $score_class = '';
-                                                    if ($percentage_score < 50) {
-                                                            $score_class = 'text-red-700';
-                                                    } elseif ($percentage_score < 60) {
-                                                            $score_class = 'text-orange-700';
-                                                    } elseif ($percentage_score < 70) {
-                                                            $score_class = 'text-yellow-700';
-                                                    } elseif ($percentage_score < 80) {
-                                                            $score_class = 'text-blue-700';
-                                                        } else {
-                                                            $score_class = 'text-green-700';
-                                                    }
-                                                    echo '<span class="' . $score_class . '">';
-                                                    echo number_format($percentage_score, 1) . '%';
-                                                    echo '</span>';
+                                                    $percentage = number_format($percentage_score, 1);
+                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                                                    echo $percentage . '%';
+                                                    echo '</div>';
                                                 } else {
-                                                    echo '-';
+                                                    echo '<span class="text-gray-400 font-medium">-</span>';
                                                 }
                                                 ?>
-                                                </td>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+                            </div>
+                            
+                            <!-- إضافة مفتاح الألوان -->
+                            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان:</h4>
+                                <div class="flex flex-wrap gap-4 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">جيد (60% - 79%)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 <?php endif; ?>
                 
                 <?php if (!empty($teachers_data)): ?>
-                    <div class="mb-8">
-                        <h3 class="text-lg font-medium mb-4">احتياجات المعلمين الفردية</h3>
+                    <div class="bg-white shadow rounded-lg p-6 mb-8">
+                        <h3 class="text-xl font-bold text-gray-800 mb-6 border-b pb-3">
+                            <i class="fas fa-users text-blue-600 mr-2"></i>
+                            احتياجات المعلمين الفردية
+                        </h3>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                             <?php foreach ($teachers_data as $teacher): ?>
-                                <div class="border rounded-lg p-4">
-                                    <h4 class="text-md font-medium mb-2"><?= htmlspecialchars($teacher['name']) ?></h4>
-                                    <p class="text-sm text-gray-600 mb-3">رقم الموظف: <?= htmlspecialchars($teacher['personal_id']) ?></p>
-                                    
-                                    <div class="mt-2">
-                                        <h5 class="text-sm font-medium mb-2">النقاط التي تحتاج إلى تحسين:</h5>
-                                        <ul class="list-disc list-inside space-y-1 text-sm">
-                                            <?php foreach ($teacher['weakest_areas'] as $area): ?>
-                                                <li>
-                                                    <span class="text-gray-700"><?= htmlspecialchars($area['indicator_name']) ?></span> - 
-                                                    <span class="text-primary-600 font-medium"><?= htmlspecialchars($area['workshop']) ?></span>
-                                                    <span class="text-gray-500">(<?= number_format($area['percentage'], 2) ?>%)</span>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
+                                <div class="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
+                                    <div class="flex items-start justify-between mb-4">
+                                        <div>
+                                            <h4 class="text-lg font-semibold text-gray-800 mb-1">
+                                                <i class="fas fa-user-tie text-blue-500 mr-2"></i>
+                                                <?= htmlspecialchars($teacher['name']) ?>
+                                            </h4>
+                                            <p class="text-sm text-gray-600">
+                                                <i class="fas fa-id-card text-gray-400 mr-1"></i>
+                                                رقم الموظف: <span class="font-medium"><?= htmlspecialchars($teacher['personal_id']) ?></span>
+                                            </p>
+                                        </div>
+                                        <div class="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                            <?= count($teacher['weakest_areas']) ?> نقطة
+                                        </div>
                                     </div>
                                     
-                                    <div class="mt-3 text-right">
-                                        <a href="training_needs.php?teacher_id=<?= $teacher['id'] ?>" class="text-primary-600 hover:text-primary-700 text-sm">
-                                            عرض التفاصيل الكاملة &larr;
+                                    <div class="mb-4">
+                                        <h5 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                                            <i class="fas fa-exclamation-triangle text-orange-500 mr-2"></i>
+                                            النقاط التي تحتاج إلى تحسين:
+                                        </h5>
+                                        <div class="space-y-3">
+                                            <?php foreach ($teacher['weakest_areas'] as $area): ?>
+                                                <div class="bg-white border border-gray-200 rounded-lg p-3">
+                                                    <div class="text-sm text-gray-800 font-medium mb-1">
+                                                        <?= htmlspecialchars($area['indicator_name']) ?>
+                                                    </div>
+                                                    <div class="text-xs text-blue-600 font-medium mb-1">
+                                                        <i class="fas fa-graduation-cap mr-1"></i>
+                                                        <?= htmlspecialchars($area['workshop']) ?>
+                                                    </div>
+                                                    <div class="flex items-center justify-between">
+                                                        <span class="text-xs text-gray-500">النسبة الحالية:</span>
+                                                        <span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-bold">
+                                                            <?= number_format($area['percentage'], 1) ?>%
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="pt-3 border-t border-gray-200">
+                                        <a href="training_needs.php?teacher_id=<?= $teacher['id'] ?>" 
+                                           class="inline-flex items-center justify-center w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors duration-200">
+                                            <i class="fas fa-chart-line mr-2"></i>
+                                            عرض التفاصيل الكاملة
                                         </a>
                                     </div>
                                 </div>
@@ -634,79 +788,150 @@ if ($subject_id) {
                 الرجاء اختيار المادة لعرض الاحتياجات التدريبية للمعلمين.
             </div>
         <?php endif; ?>
-    </div>
-</div>
-
-<!-- عرض جدول المقارنة -->
-<div class="table-responsive">
-    <table class="table table-bordered table-hover">
-        <thead>
-            <tr>
-                <th>المؤشر</th>
-                <th>منسق المادة</th>
-                <th>موجه المادة</th>
-                <th>النائب الأكاديمي</th>
-                <th>مدير المدرسة</th>
-            </tr>
-        </thead>
-        <tbody>
+        
+        <!-- عرض جدول المقارنة -->
+        <?php if (!empty($collective_needs)): ?>
+        <div class="bg-white shadow-lg rounded-lg overflow-hidden mb-8">
+            <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+                <h3 class="text-xl font-bold text-white flex items-center">
+                    <i class="fas fa-chart-bar mr-3"></i>
+                    مقارنة أداء المؤشرات حسب نوع الزائر
+                </h3>
+                <p class="text-blue-100 text-sm mt-1">تحليل شامل لأداء المؤشرات من خلال أنواع الزوار المختلفة</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="overflow-x-auto">
+                    <table class="w-full table-auto border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[300px]">
+                                    <i class="fas fa-list-ul mr-2 text-blue-600"></i>
+                                    المؤشر
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                    <i class="fas fa-user-graduate mr-2 text-green-600"></i>
+                                    منسق المادة
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                    <i class="fas fa-chalkboard-teacher mr-2 text-blue-600"></i>
+                                    موجه المادة
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                    <i class="fas fa-user-tie mr-2 text-purple-600"></i>
+                                    النائب الأكاديمي
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                    <i class="fas fa-crown mr-2 text-yellow-600"></i>
+                                    مدير المدرسة
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
             <?php foreach ($collective_needs as $indicator_id => $need): ?>
-                <tr>
-                    <td>
-                        <?php echo htmlspecialchars($need['indicator_name']); ?>
+                <tr class="hover:bg-gray-50 transition-colors duration-200">
+                    <td class="border border-gray-300 px-4 py-3 text-right">
+                        <div class="font-medium text-gray-800">
+                            <?php echo htmlspecialchars($need['indicator_name']); ?>
+                        </div>
                     </td>
                     <!-- منسق المادة -->
-                    <td>
+                    <td class="border border-gray-300 px-4 py-3 text-center">
                         <?php
                         if (isset($visitor_metrics[15][$indicator_id])) {
                             $score = $visitor_metrics[15][$indicator_id];
-                            echo number_format($score['percentage_score'], 1) . '%';
-                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                            $percentage = number_format($score['percentage_score'], 1);
+                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                            echo $percentage . '%';
+                            echo '</div>';
+                            echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
-                            echo '-';
+                            echo '<span class="text-gray-400 font-medium">-</span>';
                         }
                         ?>
                     </td>
                     <!-- موجه المادة -->
-                    <td>
+                    <td class="border border-gray-300 px-4 py-3 text-center">
                         <?php
                         if (isset($visitor_metrics[16][$indicator_id])) {
                             $score = $visitor_metrics[16][$indicator_id];
-                            echo number_format($score['percentage_score'], 1) . '%';
-                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                            $percentage = number_format($score['percentage_score'], 1);
+                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                            echo $percentage . '%';
+                            echo '</div>';
+                            echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
-                            echo '-';
+                            echo '<span class="text-gray-400 font-medium">-</span>';
                         }
                         ?>
                     </td>
                     <!-- النائب الأكاديمي -->
-                    <td>
+                    <td class="border border-gray-300 px-4 py-3 text-center">
                         <?php
                         if (isset($visitor_metrics[17][$indicator_id])) {
                             $score = $visitor_metrics[17][$indicator_id];
-                            echo number_format($score['percentage_score'], 1) . '%';
-                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                            $percentage = number_format($score['percentage_score'], 1);
+                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                            echo $percentage . '%';
+                            echo '</div>';
+                            echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
-                            echo '-';
+                            echo '<span class="text-gray-400 font-medium">-</span>';
                         }
                         ?>
                     </td>
                     <!-- مدير المدرسة -->
-                    <td>
+                    <td class="border border-gray-300 px-4 py-3 text-center">
                         <?php
                         if (isset($visitor_metrics[18][$indicator_id])) {
                             $score = $visitor_metrics[18][$indicator_id];
-                            echo number_format($score['percentage_score'], 1) . '%';
-                            echo '<br><small class="text-muted">(' . $score['visit_count'] . ' زيارة)</small>';
+                            $percentage = number_format($score['percentage_score'], 1);
+                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
+                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
+                            echo $percentage . '%';
+                            echo '</div>';
+                            echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
-                            echo '-';
+                            echo '<span class="text-gray-400 font-medium">-</span>';
                         }
                         ?>
+                    </td>
                     </td>
                 </tr>
             <?php endforeach; ?>
         </tbody>
     </table>
+                </div>
+                
+                <!-- إضافة مفتاح الألوان -->
+                <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان:</h4>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
+                            <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
+                            <span class="text-gray-600">جيد (60% - 79%)</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
+                            <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- إضافة سكريبت JavaScript في نهاية الملف -->
@@ -742,6 +967,89 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
+<style>
+/* تحسينات إضافية للجدول */
+.table-responsive {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.table-auto {
+    table-layout: auto;
+    width: 100%;
+}
+
+/* تحسين مظهر النسب المئوية */
+.percentage-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+/* تأثيرات hover للصفوف */
+.table-row:hover {
+    background-color: #f9fafb;
+    transition: background-color 0.2s ease-in-out;
+}
+
+/* تحسين مظهر الخلايا الفارغة */
+.empty-cell {
+    color: #9ca3af;
+    font-weight: 500;
+    font-style: italic;
+}
+
+/* تحسين responsive للشاشات الصغيرة */
+@media (max-width: 768px) {
+    .table-auto th,
+    .table-auto td {
+        min-width: 120px;
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .table-auto th:first-child,
+    .table-auto td:first-child {
+        min-width: 200px;
+        position: sticky;
+        right: 0;
+        background-color: white;
+        z-index: 10;
+    }
+}
+
+/* تحسين مظهر احتياجات المعلمين */
+.teacher-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.teacher-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.improvement-item {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.2s ease;
+}
+
+.improvement-item:hover {
+    border-color: #3b82f6;
+}
+</style>
 
 <?php
 // تضمين ملف ذيل الصفحة

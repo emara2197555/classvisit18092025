@@ -123,9 +123,32 @@ $day_names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربع�
 $day_name = $day_names[$date_obj->format('w')];
 $date_formatted = $date_obj->format('Y/m/d');
 
-// حساب متوسط الدرجات
-$average_score = round($visit['total_score'], 2);
+// حساب متوسط الدرجات مع استبعاد المؤشرات التي لم يتم قياسها
+$total_scores = 0;
+$valid_indicators_count = 0;
+
+// استعلام لجلب جميع التقييمات لهذه الزيارة
+$scores_sql = "
+    SELECT score 
+    FROM visit_evaluations 
+    WHERE visit_id = ?
+";
+$scores = query($scores_sql, [$visit_id]);
+
+foreach ($scores as $score_item) {
+    // نستثني المؤشرات غير المقاسة (score = NULL)
+    if ($score_item['score'] !== null) {
+        $total_scores += (float)$score_item['score'];
+        $valid_indicators_count++;
+    }
+}
+
+// حساب المتوسط فقط للمؤشرات المقاسة
+$average_score = $valid_indicators_count > 0 ? round($total_scores / $valid_indicators_count, 2) : 0;
 $grade = get_grade($average_score);
+
+// تحويل الدرجة إلى نسبة مئوية (من 3 إلى 100%)
+$percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid_indicators_count * 3)) * 100, 2) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -485,7 +508,7 @@ $grade = get_grade($average_score);
                     <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة مستكملة وفاعلة</th>
                     <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر معظم الأدلة</th>
                     <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر بعض الأدلة</th>
-                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة غير متوفرة أو محدودة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة غير متوفرة</th>
                     <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">لم يتم قياسه</th>
                 </tr>
                 
@@ -512,21 +535,21 @@ $grade = get_grade($average_score);
                 <tr>
                     <td rowspan="<?= $domain_rowspan ?>" class="domain-heading" style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center;"><?= htmlspecialchars($current_domain) ?></td>
                     <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
-                    <td class="text-center"><?= $eval['score'] == 4 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 3 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 3) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 2) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 1) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 0 && !is_null($eval['score'])) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= (is_null($eval['score']) || $eval['score'] === null || $eval['score'] === '') ? '✓' : '' ?></td>
                     <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
                 </tr>
                 <?php else: ?>
                 <tr>
                     <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
-                    <td class="text-center"><?= $eval['score'] == 4 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 3 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 2 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 1 ? '✓' : '' ?></td>
-                    <td class="text-center"><?= $eval['score'] == 0 ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 3) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 2) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 1) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 0 && !is_null($eval['score'])) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= (is_null($eval['score']) || $eval['score'] === null || $eval['score'] === '') ? '✓' : '' ?></td>
                     <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
                 </tr>
                 <?php 

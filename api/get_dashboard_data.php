@@ -32,10 +32,10 @@ try {
     
     // متوسط الأداء العام
     $sql_avg_performance = "
-        SELECT AVG(score) * 25 as avg_score
+        SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 as avg_score
         FROM visit_evaluations ve
         JOIN visits v ON ve.visit_id = v.id
-        WHERE v.academic_year_id = ?
+        WHERE v.academic_year_id = ? AND ve.score IS NOT NULL
     ";
     $avg_performance_result = query_row($sql_avg_performance, [$academic_year_id]);
     $dashboard_data['avgPerformance'] = number_format($avg_performance_result['avg_score'] ?? 0, 1);
@@ -91,7 +91,7 @@ try {
         SELECT 
             t.id,
             t.name as teacher_name,
-            AVG(ve.score) * 25 as avg_score
+            (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 as avg_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -99,7 +99,7 @@ try {
         JOIN 
             teachers t ON v.teacher_id = t.id
         WHERE 
-            v.academic_year_id = ?
+            v.academic_year_id = ? AND ve.score IS NOT NULL
         GROUP BY 
             t.id, t.name
         ORDER BY 
@@ -110,6 +110,7 @@ try {
     $dashboard_data['bestTeachers'] = [];
     
     foreach ($best_teachers as $teacher) {
+        // النسبة المئوية محسوبة بالفعل في الاستعلام
         $dashboard_data['bestTeachers'][] = [
             'name' => $teacher['teacher_name'],
             'score' => number_format($teacher['avg_score'], 0)

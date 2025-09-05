@@ -121,10 +121,11 @@ $sql_low_evaluations = "
     SELECT COUNT(DISTINCT v.id) as count
     FROM visits v
     JOIN (
-        SELECT visit_id, AVG(score) as avg_score
+        SELECT visit_id, (SUM(score) / (COUNT(score) * 3)) * 100 as avg_score
         FROM visit_evaluations
+        WHERE score IS NOT NULL
         GROUP BY visit_id
-        HAVING avg_score < 2
+        HAVING avg_score < 50
     ) ve ON v.id = ve.visit_id
     WHERE v.academic_year_id = ?
 ";

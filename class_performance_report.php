@@ -7,7 +7,7 @@ require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 
 // تعيين عنوان الصفحة
-$page_title = 'تقرير مقارنة أداء المعلمين';
+$page_title = 'تقرير مقارنة أداء المعلمين والمنسقين';
 
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
@@ -60,14 +60,57 @@ $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 // جلب قائمة المواد الدراسية
 $subjects = query("SELECT * FROM subjects ORDER BY name");
 
-// استعلام أبسط لجلب بيانات المعلمين والزيارات
-$sql_basic = "
+// استعلام لجلب بيانات المعلمين الذين لديهم زيارات
+$sql_with_visits = "
     SELECT 
         t.id AS teacher_id,
         t.name AS teacher_name,
+        t.job_title,
         s.id AS subject_id,
         s.name AS subject_name,
         COUNT(DISTINCT v.id) AS visits_count
+    FROM 
+        teachers t
+    JOIN 
+        teacher_subjects ts ON t.id = ts.teacher_id
+    JOIN 
+        subjects s ON ts.subject_id = s.id
+    JOIN 
+        visits v ON t.id = v.teacher_id 
+        AND v.academic_year_id = ?";
+
+// إضافة شروط اختيارية        
+if ($visitor_type_id > 0) {
+    $sql_with_visits .= " AND v.visitor_type_id = ?";
+}
+
+if (!empty($date_filter)) {
+    $sql_with_visits .= $date_filter;
+}
+
+$sql_with_visits .= "
+    WHERE
+        t.job_title IN ('معلم', 'منسق المادة')";
+
+if ($subject_id > 0) {
+    $sql_with_visits .= " AND s.id = ?";
+}
+
+$sql_with_visits .= "
+    GROUP BY 
+        t.id, t.name, t.job_title, s.id, s.name
+    ORDER BY 
+        s.name, t.name";
+
+// استعلام لجلب بيانات المعلمين الذين ليس لديهم زيارات
+$sql_without_visits = "
+    SELECT 
+        t.id AS teacher_id,
+        t.name AS teacher_name,
+        t.job_title,
+        s.id AS subject_id,
+        s.name AS subject_name,
+        0 AS visits_count
     FROM 
         teachers t
     JOIN 
@@ -78,53 +121,72 @@ $sql_basic = "
         visits v ON t.id = v.teacher_id 
         AND v.academic_year_id = ?";
 
-// إضافة شروط اختيارية        
+// إضافة شروط اختيارية للمعلمين بدون زيارات
 if ($visitor_type_id > 0) {
-    $sql_basic .= " AND v.visitor_type_id = ?";
+    $sql_without_visits .= " AND v.visitor_type_id = ?";
 }
 
 if (!empty($date_filter)) {
-    $sql_basic .= $date_filter;
+    $sql_without_visits .= $date_filter;
 }
 
-$sql_basic .= "
+$sql_without_visits .= "
     WHERE
-        t.job_title = 'معلم'";
+        t.job_title IN ('معلم', 'منسق المادة')
+        AND v.id IS NULL";
 
 if ($subject_id > 0) {
-    $sql_basic .= " AND s.id = ?";
+    $sql_without_visits .= " AND s.id = ?";
 }
 
-$sql_basic .= "
+$sql_without_visits .= "
     GROUP BY 
-        t.id, t.name, s.id, s.name
+        t.id, t.name, t.job_title, s.id, s.name
     ORDER BY 
         s.name, t.name";
 
-// تحضير المعلمات للاستعلام الأساسي
-$basic_params = [$academic_year_id];
+// تحضير المعلمات للاستعلام للمعلمين مع الزيارات
+$with_visits_params = [$academic_year_id];
 
 if ($visitor_type_id > 0) {
-    $basic_params[] = $visitor_type_id;
+    $with_visits_params[] = $visitor_type_id;
 }
 
 if (!empty($date_filter)) {
-    $basic_params = array_merge($basic_params, $date_params);
+    $with_visits_params = array_merge($with_visits_params, $date_params);
 }
 
 if ($subject_id > 0) {
-    $basic_params[] = $subject_id;
+    $with_visits_params[] = $subject_id;
 }
 
-// جلب المعلومات الأساسية للمعلمين
-$teachers_basic = query($sql_basic, $basic_params);
+// تحضير المعلمات للاستعلام للمعلمين بدون زيارات
+$without_visits_params = [$academic_year_id];
+
+if ($visitor_type_id > 0) {
+    $without_visits_params[] = $visitor_type_id;
+}
+
+if (!empty($date_filter)) {
+    $without_visits_params = array_merge($without_visits_params, $date_params);
+}
+
+if ($subject_id > 0) {
+    $without_visits_params[] = $subject_id;
+}
+
+// جلب المعلومات الأساسية للمعلمين مع الزيارات
+$teachers_with_visits = query($sql_with_visits, $with_visits_params);
+
+// جلب المعلومات الأساسية للمعلمين بدون زيارات
+$teachers_without_visits = query($sql_without_visits, $without_visits_params);
 
 // استعلام للحصول على متوسطات المجالات
 $sql_domain = "
     SELECT 
         vs.teacher_id,
         ei.domain_id,
-        AVG(ve.score) * 25 AS avg_score
+        AVG(ve.score) AS avg_score
     FROM 
         visit_evaluations ve 
     JOIN 
@@ -143,7 +205,7 @@ if (!empty($date_filter)) {
 }
 
 $sql_domain .= " 
-    AND ve.score > 0
+    AND ve.score IS NOT NULL
     GROUP BY 
         vs.teacher_id, ei.domain_id";
 
@@ -161,17 +223,18 @@ if (!empty($date_filter)) {
 // جلب متوسطات المجالات
 $domain_averages = query($sql_domain, $domain_params);
 
-// تنظيم البيانات في مصفوفة
+// تنظيم البيانات في مصفوفة - تحويل إلى نسبة مئوية
 $domain_data = [];
 foreach ($domain_averages as $avg) {
-    $domain_data[$avg['teacher_id']][$avg['domain_id']] = $avg['avg_score'];
+    $percentage = ($avg['avg_score'] / 3) * 100; // تحويل من 3 إلى 100%
+    $domain_data[$avg['teacher_id']][$avg['domain_id']] = round($percentage, 2);
 }
 
 // استعلام للحصول على المتوسط العام
 $sql_overall = "
     SELECT 
         vs.teacher_id,
-        AVG(ve.score) * 25 AS overall_avg
+        AVG(ve.score) AS overall_avg
     FROM 
         visit_evaluations ve 
     JOIN 
@@ -188,27 +251,29 @@ if (!empty($date_filter)) {
 }
 
 $sql_overall .= " 
-    AND ve.score > 0
+    AND ve.score IS NOT NULL
     GROUP BY 
         vs.teacher_id";
 
 // جلب المتوسطات العامة
 $overall_averages = query($sql_overall, $domain_params);
 
-// تنظيم بيانات المتوسط العام
+// تنظيم بيانات المتوسط العام - تحويل إلى نسبة مئوية
 $overall_data = [];
 foreach ($overall_averages as $avg) {
-    $overall_data[$avg['teacher_id']] = $avg['overall_avg'];
+    $percentage = ($avg['overall_avg'] / 3) * 100; // تحويل من 3 إلى 100%
+    $overall_data[$avg['teacher_id']] = round($percentage, 2);
 }
 
-// دمج البيانات في مصفوفة واحدة
-$teachers_data = [];
-foreach ($teachers_basic as $teacher) {
+// دمج البيانات في مصفوفة واحدة للمعلمين مع الزيارات
+$teachers_with_visits_data = [];
+foreach ($teachers_with_visits as $teacher) {
     $teacher_id = $teacher['teacher_id'];
     
-    $teachers_data[] = [
+    $teachers_with_visits_data[] = [
         'teacher_id' => $teacher_id,
         'teacher_name' => $teacher['teacher_name'],
+        'job_title' => $teacher['job_title'],
         'subject_id' => $teacher['subject_id'],
         'subject_name' => $teacher['subject_name'],
         'visits_count' => $teacher['visits_count'],
@@ -218,6 +283,27 @@ foreach ($teachers_basic as $teacher) {
         'evaluation_avg' => $domain_data[$teacher_id][4] ?? null,
         'practical_avg' => $domain_data[$teacher_id][5] ?? null,
         'overall_avg' => $overall_data[$teacher_id] ?? null
+    ];
+}
+
+// دمج البيانات في مصفوفة واحدة للمعلمين بدون زيارات
+$teachers_without_visits_data = [];
+foreach ($teachers_without_visits as $teacher) {
+    $teacher_id = $teacher['teacher_id'];
+    
+    $teachers_without_visits_data[] = [
+        'teacher_id' => $teacher_id,
+        'teacher_name' => $teacher['teacher_name'],
+        'job_title' => $teacher['job_title'],
+        'subject_id' => $teacher['subject_id'],
+        'subject_name' => $teacher['subject_name'],
+        'visits_count' => 0,
+        'planning_avg' => null,
+        'lesson_execution_avg' => null,
+        'classroom_management_avg' => null,
+        'evaluation_avg' => null,
+        'practical_avg' => null,
+        'overall_avg' => null
     ];
 }
 
@@ -268,7 +354,7 @@ $max_overall_teacher = '';
 $min_overall_teacher = '';
 
 // حساب المتوسطات العامة وتحديد أفضل وأقل أداء
-foreach ($teachers_data as $teacher) {
+foreach ($teachers_with_visits_data as $teacher) {
     // حساب متوسط التخطيط
     if ($teacher['planning_avg'] !== null) {
         $total_planning += $teacher['planning_avg'];
@@ -446,18 +532,34 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
         </form>
         
         <h2 class="text-xl font-semibold mb-4 text-center">
-            تقرير مقارنة أداء المعلمين بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($current_year_data['name'] ?? '') ?>
+            تقرير مقارنة أداء المعلمين والمنسقين بناءً على المشاهدات الصفّية ل<?= htmlspecialchars($visitor_type_name) ?> للعام الأكاديمي <?= htmlspecialchars($current_year_data['name'] ?? '') ?>
             <?php if ($selected_term != 'all'): ?>
             (<?= $selected_term == 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>)
             <?php endif; ?>
         </h2>
+        
+        <!-- مفتاح الألوان -->
+        <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+            <h4 class="text-sm font-semibold mb-2">مفتاح الألوان:</h4>
+            <div class="flex gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 bg-blue-100 border rounded"></div>
+                    <span>معلم</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-4 h-4 bg-green-100 border rounded"></div>
+                    <span>منسق المادة</span>
+                </div>
+            </div>
+        </div>
         
         <!-- جدول التقرير -->
         <div class="overflow-x-auto">
             <table class="min-w-full bg-white border border-gray-200">
                 <thead class="bg-gray-100">
                     <tr>
-                        <th class="py-3 px-4 border text-center font-semibold">المعلم</th>
+                        <th class="py-3 px-4 border text-center font-semibold">الاسم</th>
+                        <th class="py-3 px-4 border text-center font-semibold">الوظيفة</th>
                         <th class="py-3 px-4 border text-center font-semibold">المادة</th>
                         <th class="py-3 px-4 border text-center font-semibold">عدد الزيارات</th>
                         <th class="py-3 px-4 border text-center font-semibold">التخطيط</th>
@@ -469,12 +571,26 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($teachers_data as $teacher): ?>
-                        <tr class="hover:bg-gray-50">
+                    <?php foreach ($teachers_with_visits_data as $teacher): 
+                        // تحديد لون الصف حسب الوظيفة
+                        $row_class = "hover:bg-gray-50";
+                        $job_badge_class = "bg-blue-100 text-blue-800";
+                        
+                        if ($teacher['job_title'] == 'منسق المادة') {
+                            $row_class = "bg-green-50 hover:bg-green-100";
+                            $job_badge_class = "bg-green-100 text-green-800";
+                        }
+                    ?>
+                        <tr class="<?= $row_class ?>">
                             <td class="py-2 px-4 border text-center">
                                 <a href="teacher_report.php?teacher_id=<?= $teacher['teacher_id'] ?>" class="text-primary-600 hover:underline">
                                     <?= htmlspecialchars($teacher['teacher_name']) ?>
                                 </a>
+                            </td>
+                            <td class="py-2 px-4 border text-center">
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold <?= $job_badge_class ?>">
+                                    <?= htmlspecialchars($teacher['job_title']) ?>
+                                </span>
                             </td>
                             <td class="py-2 px-4 border text-center"><?= htmlspecialchars($teacher['subject_name']) ?></td>
                             <td class="py-2 px-4 border text-center"><?= $teacher['visits_count'] ?></td>
@@ -515,8 +631,9 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                     <tr class="bg-green-100">
                         <td class="py-2 px-4 border text-center font-bold">معدل الأداء لجميع المعلمين</td>
                         <td class="py-2 px-4 border text-center font-bold">-</td>
+                        <td class="py-2 px-4 border text-center font-bold">-</td>
                         <td class="py-2 px-4 border text-center font-bold">
-                            <?= array_sum(array_column($teachers_data, 'visits_count')) ?>
+                            <?= array_sum(array_column($teachers_with_visits_data, 'visits_count')) ?>
                         </td>
                         <td class="py-2 px-4 border text-center font-bold">
                             <?= number_format($avg_planning, 1) ?>%
@@ -540,6 +657,59 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                 </tbody>
             </table>
         </div>
+        
+        <!-- قسم المعلمين بدون زيارات -->
+        <?php if (!empty($teachers_without_visits_data)): ?>
+        <div class="mt-8">
+            <h3 class="text-xl font-semibold mb-4 text-center bg-yellow-100 p-3 rounded-lg">
+                المعلمين والمنسقين الذين ليس لديهم زيارات
+            </h3>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white border border-gray-200">
+                    <thead class="bg-yellow-50">
+                        <tr>
+                            <th class="py-3 px-4 border text-center font-semibold">الاسم</th>
+                            <th class="py-3 px-4 border text-center font-semibold">الوظيفة</th>
+                            <th class="py-3 px-4 border text-center font-semibold">المادة</th>
+                            <th class="py-3 px-4 border text-center font-semibold">عدد الزيارات</th>
+                            <th class="py-3 px-4 border text-center font-semibold">الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($teachers_without_visits_data as $teacher): 
+                            // تحديد لون الصف حسب الوظيفة
+                            $row_class = "hover:bg-yellow-50";
+                            $job_badge_class = "bg-blue-100 text-blue-800";
+                            
+                            if ($teacher['job_title'] == 'منسق المادة') {
+                                $row_class = "bg-green-50 hover:bg-green-100";
+                                $job_badge_class = "bg-green-100 text-green-800";
+                            }
+                        ?>
+                            <tr class="<?= $row_class ?>">
+                                <td class="py-2 px-4 border text-center">
+                                    <a href="teacher_report.php?teacher_id=<?= $teacher['teacher_id'] ?>" class="text-primary-600 hover:underline">
+                                        <?= htmlspecialchars($teacher['teacher_name']) ?>
+                                    </a>
+                                </td>
+                                <td class="py-2 px-4 border text-center">
+                                    <span class="px-2 py-1 rounded-full text-xs font-semibold <?= $job_badge_class ?>">
+                                        <?= htmlspecialchars($teacher['job_title']) ?>
+                                    </span>
+                                </td>
+                                <td class="py-2 px-4 border text-center"><?= htmlspecialchars($teacher['subject_name']) ?></td>
+                                <td class="py-2 px-4 border text-center text-red-600 font-bold">0</td>
+                                <td class="py-2 px-4 border text-center">
+                                    <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm">لا توجد زيارات</span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
         
         <!-- جدول المقارنة -->
         <div class="mt-6 overflow-x-auto">
@@ -627,11 +797,13 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
     tr.bg-green-100 {
         background-color: #d1fae5 !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     
     thead.bg-gray-100 {
         background-color: #f3f4f6 !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 </style>
 

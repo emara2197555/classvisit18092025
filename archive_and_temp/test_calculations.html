@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار حساب الدرجات والنسب</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; direction: rtl; }
+        .test-case { border: 1px solid #ccc; margin: 10px 0; padding: 15px; border-radius: 5px; }
+        .result { font-weight: bold; margin: 10px 0; }
+        .success { color: green; }
+        .error { color: red; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <h1>اختبار نظام الدرجات والنسب الجديد</h1>
+    
+    <div class="test-case">
+        <h2>1. اختبار حساب النسب المئوية</h2>
+        <table>
+            <tr>
+                <th>متوسط الدرجات (من 3)</th>
+                <th>النسبة المئوية</th>
+                <th>التقدير المتوقع</th>
+                <th>النتيجة</th>
+            </tr>
+            <tr>
+                <td>3.0</td>
+                <td id="percent_3_0">-</td>
+                <td>ممتاز</td>
+                <td id="grade_3_0">-</td>
+            </tr>
+            <tr>
+                <td>2.7</td>
+                <td id="percent_2_7">-</td>
+                <td>ممتاز</td>
+                <td id="grade_2_7">-</td>
+            </tr>
+            <tr>
+                <td>2.4</td>
+                <td id="percent_2_4">-</td>
+                <td>جيد جداً</td>
+                <td id="grade_2_4">-</td>
+            </tr>
+            <tr>
+                <td>1.95</td>
+                <td id="percent_1_95">-</td>
+                <td>جيد</td>
+                <td id="grade_1_95">-</td>
+            </tr>
+            <tr>
+                <td>1.5</td>
+                <td id="percent_1_5">-</td>
+                <td>مقبول</td>
+                <td id="grade_1_5">-</td>
+            </tr>
+            <tr>
+                <td>1.0</td>
+                <td id="percent_1_0">-</td>
+                <td>يحتاج إلى تحسين</td>
+                <td id="grade_1_0">-</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div class="test-case">
+        <h2>2. اختبار حساب المتوسط من درجات متفرقة</h2>
+        <div id="average-test"></div>
+    </div>
+    
+    <div class="test-case">
+        <h2>3. اختبار التعامل مع القيم NULL</h2>
+        <div id="null-test"></div>
+    </div>
+
+    <script>
+        // نسخ دالة getGrade من نموذج التقييم
+        function getGrade(average) {
+            const percentage = (average / 3) * 100;
+            
+            if (percentage >= 90) return 'ممتاز';       // 2.7 من 3
+            if (percentage >= 80) return 'جيد جداً';     // 2.4 من 3
+            if (percentage >= 65) return 'جيد';         // 1.95 من 3
+            if (percentage >= 50) return 'مقبول';       // 1.5 من 3
+            return 'يحتاج إلى تحسين';                  // أقل من 1.5 من 3
+        }
+        
+        // اختبار النسب والتقديرات
+        function testPercentagesAndGrades() {
+            const testValues = [3.0, 2.7, 2.4, 1.95, 1.5, 1.0];
+            
+            testValues.forEach(avg => {
+                const percentage = ((avg / 3) * 100).toFixed(1);
+                const grade = getGrade(avg);
+                
+                const avgStr = avg.toString().replace('.', '_');
+                document.getElementById(`percent_${avgStr}`).textContent = percentage + '%';
+                document.getElementById(`grade_${avgStr}`).textContent = grade;
+            });
+        }
+        
+        // اختبار حساب المتوسط
+        function testAverage() {
+            const scores = [3, 2, 1, 0, 3, 2]; // مثال على درجات
+            const nullScores = [null, 3, 2, null, 1]; // مثال مع null
+            
+            // حساب المتوسط للدرجات العادية
+            let totalScore = 0, totalItems = 0;
+            scores.forEach(score => {
+                if (score !== null) {
+                    totalScore += score;
+                    totalItems++;
+                }
+            });
+            const average1 = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : 0;
+            const percentage1 = totalItems > 0 ? ((totalScore / (totalItems * 3)) * 100).toFixed(2) : 0;
+            
+            // حساب المتوسط مع NULL
+            totalScore = 0; totalItems = 0;
+            nullScores.forEach(score => {
+                if (score !== null) {
+                    totalScore += score;
+                    totalItems++;
+                }
+            });
+            const average2 = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : 0;
+            const percentage2 = totalItems > 0 ? ((totalScore / (totalItems * 3)) * 100).toFixed(2) : 0;
+            
+            document.getElementById('average-test').innerHTML = `
+                <p><strong>الدرجات:</strong> [${scores.join(', ')}]</p>
+                <p><strong>المتوسط:</strong> ${average1} - <strong>النسبة:</strong> ${percentage1}%</p>
+                <p><strong>التقدير:</strong> ${getGrade(average1)}</p>
+                <hr>
+                <p><strong>الدرجات مع NULL:</strong> [${nullScores.map(s => s === null ? 'NULL' : s).join(', ')}]</p>
+                <p><strong>المتوسط:</strong> ${average2} - <strong>النسبة:</strong> ${percentage2}%</p>
+                <p><strong>التقدير:</strong> ${getGrade(average2)}</p>
+            `;
+        }
+        
+        // اختبار التعامل مع NULL
+        function testNullHandling() {
+            const testCases = [
+                { scores: [null, null, null], expected: 'لا توجد درجات' },
+                { scores: [3, null, 2], expected: 'متوسط 2.5' },
+                { scores: [0, 1, null, 2], expected: 'متوسط 1.0' }
+            ];
+            
+            let html = '';
+            testCases.forEach((testCase, index) => {
+                let totalScore = 0, totalItems = 0;
+                testCase.scores.forEach(score => {
+                    if (score !== null) {
+                        totalScore += score;
+                        totalItems++;
+                    }
+                });
+                
+                const average = totalItems > 0 ? (totalScore / totalItems).toFixed(1) : 'غير محدد';
+                const result = totalItems > 0 ? `متوسط ${average}` : 'لا توجد درجات';
+                
+                html += `
+                    <p><strong>حالة ${index + 1}:</strong> [${testCase.scores.map(s => s === null ? 'NULL' : s).join(', ')}]</p>
+                    <p><strong>النتيجة:</strong> ${result} - <strong>المتوقع:</strong> ${testCase.expected}</p>
+                    <p style="color: ${result.includes(testCase.expected.split(' ')[1]) ? 'green' : 'red'}">
+                        ${result.includes(testCase.expected.split(' ')[1]) ? '✓ نجح' : '✗ فشل'}
+                    </p>
+                    <hr>
+                `;
+            });
+            
+            document.getElementById('null-test').innerHTML = html;
+        }
+        
+        // تشغيل جميع الاختبارات عند تحميل الصفحة
+        window.onload = function() {
+            testPercentagesAndGrades();
+            testAverage();
+            testNullHandling();
+        };
+    </script>
+</body>
+</html>

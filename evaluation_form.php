@@ -77,7 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
         foreach ($_POST as $key => $value) {
             if (strpos($key, 'score_') === 0) {
                 $indicator_id = substr($key, 6);
-                $score = intval($value);
+                
+                // التعامل مع القيم الجديدة للتقييم
+                // إرسال NULL للمؤشرات التي لم يتم قياسها
+                if ($value === '' || $value === null) {
+                    $score = null; // NULL للمؤشرات غير المقاسة
+                } else {
+                    $score = intval($value); // 0, 1, 2, 3
+                }
                 
                 // حصول على التوصيات المختارة (إن وجدت)
                 $recommendations = isset($_POST['recommend_' . $indicator_id]) ? $_POST['recommend_' . $indicator_id] : [];
@@ -363,11 +370,11 @@ try {
                     <div class="indicator-block <?= $lab_class ?>">
                         <label class="block text-gray-700 font-medium mb-2 pr-3 border-r-2 border-primary-500"><?= htmlspecialchars($indicator['name']) ?></label>
                         <select name="score_<?= $indicator['id'] ?>" class="w-full border p-2 rounded mb-2">
-                            <option value="0">لم يتم قياسه</option>
-                            <option value="4">الأدلة مستكملة</option>
-                            <option value="3">معظم الأدلة</option>
-                            <option value="2">بعض الأدلة</option>
-                            <option value="1">الأدلة غير متوفرة</option>
+                            <option value="">لم يتم قياسه (NULL)</option>
+                            <option value="0">الأدلة غير متوفرة أو محدودة (0)</option>
+                            <option value="1">تتوفر بعض الأدلة (1)</option>
+                            <option value="2">تتوفر معظم الأدلة (2)</option>
+                            <option value="3">الأدلة مستكملة وفاعلة (3)</option>
                         </select>
                         
                         <?php 
@@ -1028,16 +1035,17 @@ function calculateAndShowFinalResult() {
             }
             
             const scoreSelect = block.querySelector('select[name^="score_"]');
-            const score = parseInt(scoreSelect.value);
+            const scoreValue = scoreSelect.value;
+            const score = scoreValue === '' ? null : parseInt(scoreValue);
             const indicatorLabel = block.querySelector('label').textContent;
             
             // إذا كان التقييم جزئياً، نحسب فقط العناصر التي تم تقييمها
-            // ونستثني مؤشرات "لم يتم قياسه" (score = 0) من الحساب
-            if (score > 0) {
+            // ونستثني مؤشرات "لم يتم قياسه" (قيمة فارغة أو null) من الحساب
+            if (scoreValue !== '' && score !== null) {
                 // تصنيف نقاط القوة والتحسين
-                if (score >= 3) {
+                if (score >= 2) {
                     strengths.push(indicatorLabel);
-                } else {
+                } else if (score >= 0) {
                     improvements.push(indicatorLabel);
                 }
                 
@@ -1058,13 +1066,13 @@ function calculateAndShowFinalResult() {
         document.getElementById('hidden-average-score').value = average;
         document.getElementById('hidden-grade').value = grade;
         
-        // حساب النسبة المئوية
-        const percentage = (average * 25).toFixed(2);
+        // حساب النسبة المئوية (من 3 إلى 100%)
+        const percentage = totalItems > 0 ? ((totalScore / (totalItems * 3)) * 100).toFixed(2) : 0;
         
         // عرض النتيجة الإجمالية
         const evaluationType = isPartialEvaluation ? 'تقييم جزئي' : 'تقييم كلي';
         document.getElementById('total-score').textContent = 
-            `${evaluationType}: النتيجة ${totalScore} من ${totalItems * 4} (المتوسط: ${average} - النسبة: ${percentage}%)`;
+            `${evaluationType}: النتيجة ${totalScore} من ${totalItems * 3} (المتوسط: ${average} - النسبة: ${percentage}%)`;
         
         // عرض نقاط القوة
         const strengthsList = document.getElementById('strengths');
@@ -1146,11 +1154,14 @@ function calculateAndShowFinalResult() {
 
 // دالة الحصول على التقدير بناءً على المتوسط
 function getGrade(average) {
-    if (average >= 3.6) return 'ممتاز';
-    if (average >= 3.2) return 'جيد جدًا';
-    if (average >= 2.6) return 'جيد';
-    if (average >= 2.0) return 'مقبول';
-    return 'يحتاج إلى تحسين';
+    // تحويل المتوسط إلى نسبة مئوية للمقارنة
+    const percentage = (average / 3) * 100;
+    
+    if (percentage >= 90) return 'ممتاز';       // 2.7 من 3
+    if (percentage >= 80) return 'جيد جداً';     // 2.4 من 3
+    if (percentage >= 65) return 'جيد';         // 1.95 من 3
+    if (percentage >= 50) return 'مقبول';       // 1.5 من 3
+    return 'يحتاج إلى تحسين';                  // أقل من 1.5 من 3
 }
 
 // دالة تحميل معلومات الزيارات السابقة
@@ -1242,8 +1253,8 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 const lastVisitCurrentPercentageElement = document.getElementById('last-visit-current-percentage');
                 if (lastVisitCurrentPercentageElement) {
                     if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.average_score !== undefined && lastVisitCurrentVisitor.average_score !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية
-                        const percentage = parseFloat((lastVisitCurrentVisitor.average_score * 25).toFixed(2));
+                        // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
+                        const percentage = parseFloat(((lastVisitCurrentVisitor.average_score / 3) * 100).toFixed(2));
                         console.log("نسبة آخر زيارة للزائر الحالي (قيمة):", lastVisitCurrentVisitor.average_score);
                         console.log("نسبة آخر زيارة للزائر الحالي (نسبة):", percentage);
                         
@@ -1258,8 +1269,8 @@ function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
                 if (lastVisitAnyPercentageElement) {
                     const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
                     if (lastVisitAnyVisitor && lastVisitAnyVisitor.average_score !== undefined && lastVisitAnyVisitor.average_score !== null) {
-                        // تحويل المتوسط إلى نسبة مئوية
-                        const percentage = parseFloat((lastVisitAnyVisitor.average_score * 25).toFixed(2));
+                        // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
+                        const percentage = parseFloat(((lastVisitAnyVisitor.average_score / 3) * 100).toFixed(2));
                         console.log("نسبة آخر زيارة لأي زائر (قيمة):", lastVisitAnyVisitor.average_score);
                         console.log("نسبة آخر زيارة لأي زائر (نسبة):", percentage);
                         

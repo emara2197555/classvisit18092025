@@ -107,10 +107,13 @@ function get_recommendations_by_indicator($indicator_id) {
  * @return string التقدير المقابل للمتوسط
  */
 function get_grade($average) {
-    if ($average >= 3.6) return 'ممتاز';
-    if ($average >= 3.2) return 'جيد جدًا';
-    if ($average >= 2.6) return 'جيد';
-    if ($average >= 2.0) return 'مقبول';
+    // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
+    $percentage = ($average / 3) * 100;
+    
+    if ($percentage >= 90) return 'ممتاز';
+    if ($percentage >= 80) return 'جيد جداً';
+    if ($percentage >= 65) return 'جيد';
+    if ($percentage >= 50) return 'مقبول';
     return 'يحتاج إلى تحسين';
 }
 
@@ -239,7 +242,7 @@ function get_teacher_indicators_avg_by_visitor($teacher_id, $visitor_type_id = n
             ei.id AS indicator_id,
             ei.name AS indicator_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * 25) AS percentage_score
+            (AVG(ve.score) * (100/3)) AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -250,7 +253,7 @@ function get_teacher_indicators_avg_by_visitor($teacher_id, $visitor_type_id = n
             v.teacher_id = ? 
             {$visitor_condition}
             {$semester_condition}
-            AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
+            AND ve.score IS NOT NULL -- استثناء المؤشرات غير المقاسة
         GROUP BY 
             ei.id, ei.name
         ORDER BY 
@@ -276,7 +279,7 @@ function get_teacher_weakest_indicators($teacher_id, $threshold_score = 2.5, $li
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * 25) AS percentage_score
+            (AVG(ve.score) * (100/3)) AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -287,7 +290,7 @@ function get_teacher_weakest_indicators($teacher_id, $threshold_score = 2.5, $li
             evaluation_domains ed ON ei.domain_id = ed.id
         WHERE 
             v.teacher_id = ? 
-            AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
+            AND ve.score IS NOT NULL -- استثناء المؤشرات غير المقاسة
         GROUP BY 
             ei.id, ei.name, ed.id, ed.name
         HAVING 

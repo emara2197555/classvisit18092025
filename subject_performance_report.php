@@ -65,7 +65,7 @@ $sql = "
         COUNT(DISTINCT v.teacher_id) AS teachers_count,
         
         -- متوسط التخطيط (مجال رقم 1)
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -75,10 +75,10 @@ $sql = "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
            AND ei.domain_id = 1
-           AND ve.score > 0) AS planning_avg,
+           AND ve.score IS NOT NULL) AS planning_avg,
         
         -- متوسط تنفيذ الدرس (مجال رقم 2)
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -88,10 +88,10 @@ $sql = "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
            AND ei.domain_id = 2
-           AND ve.score > 0) AS lesson_execution_avg,
+           AND ve.score IS NOT NULL) AS lesson_execution_avg,
            
         -- متوسط الإدارة الصفية (مجال رقم 3)
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -101,10 +101,10 @@ $sql = "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
            AND ei.domain_id = 3
-           AND ve.score > 0) AS classroom_management_avg,
+           AND ve.score IS NOT NULL) AS classroom_management_avg,
            
         -- متوسط التقويم (مجال رقم 4)
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -114,10 +114,10 @@ $sql = "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
            AND ei.domain_id = 4
-           AND ve.score > 0) AS evaluation_avg,
+           AND ve.score IS NOT NULL) AS evaluation_avg,
            
         -- متوسط النشاط العملي (مجال رقم 5)
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -127,10 +127,10 @@ $sql = "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
            AND ei.domain_id = 5
-           AND ve.score > 0) AS practical_avg,
+           AND ve.score IS NOT NULL) AS practical_avg,
            
         -- المتوسط العام
-        (SELECT AVG(ve.score) * 25
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          WHERE vs.subject_id = s.id 
@@ -138,7 +138,7 @@ $sql = "
            " . ($visitor_type_id > 0 ? "AND vs.visitor_type_id = ?" : "") . "
            " . ($school_id > 0 ? "AND vs.school_id = ?" : "") . "
            " . $date_filter . "
-           AND ve.score > 0) AS overall_avg
+           AND ve.score IS NOT NULL) AS overall_avg
     FROM 
         subjects s
     LEFT JOIN 

@@ -122,6 +122,347 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
     </div>
 </div>
 
+<!-- إحصائيات تفصيلية على مستوى الوظائف -->
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+        <i class="fas fa-users-cog text-primary-500 ml-2"></i>
+        إحصائيات على مستوى الوظائف
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- المعلمين المقيمين -->
+        <div class="dashboard-card bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-blue-600 text-sm font-medium mb-1">معلمين تم تقييمهم</h3>
+                    <div class="text-2xl font-bold text-blue-800"><?= $teachers_evaluated_count ?></div>
+                    <div class="text-xs text-blue-600">من أصل <?= $total_teachers_count ?> معلم</div>
+                    <div class="text-xs text-blue-500 mt-1">نسبة التغطية: <?= $teachers_coverage_percentage ?>%</div>
+                </div>
+                <div class="h-10 w-10 bg-blue-200 rounded-full flex items-center justify-center text-blue-600">
+                    <i class="fas fa-chalkboard-teacher"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- المنسقين المقيمين -->
+        <div class="dashboard-card bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-green-600 text-sm font-medium mb-1">منسقين تم تقييمهم</h3>
+                    <div class="text-2xl font-bold text-green-800"><?= $coordinators_evaluated_count ?></div>
+                    <div class="text-xs text-green-600">من أصل <?= $total_coordinators_count ?> منسق</div>
+                    <div class="text-xs text-green-500 mt-1">نسبة التغطية: <?= $coordinators_coverage_percentage ?>%</div>
+                </div>
+                <div class="h-10 w-10 bg-green-200 rounded-full flex items-center justify-center text-green-600">
+                    <i class="fas fa-user-tie"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- الموجهين النشطين -->
+        <div class="dashboard-card bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-purple-600 text-sm font-medium mb-1">موجهين نشطين</h3>
+                    <div class="text-2xl font-bold text-purple-800"><?= $supervisors_visiting_count ?></div>
+                    <div class="text-xs text-purple-600">من أصل <?= $total_supervisors_count ?> موجه</div>
+                    <div class="text-xs text-purple-500 mt-1">يقومون بالزيارة</div>
+                </div>
+                <div class="h-10 w-10 bg-purple-200 rounded-full flex items-center justify-center text-purple-600">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- مقارنة الأداء -->
+        <div class="dashboard-card bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-orange-600 text-sm font-medium mb-1">مقارنة الأداء</h3>
+                    <div class="text-sm text-orange-700">
+                        <div>معلمين: <?= $teachers_avg_performance ?>%</div>
+                        <div>منسقين: <?= $coordinators_avg_performance ?>%</div>
+                    </div>
+                    <div class="text-xs text-orange-500 mt-1">
+                        <?php if ($coordinators_avg_performance > $teachers_avg_performance): ?>
+                            المنسقين متقدمين
+                        <?php elseif ($teachers_avg_performance > $coordinators_avg_performance): ?>
+                            المعلمين متقدمين
+                        <?php else: ?>
+                            أداء متقارب
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="h-10 w-10 bg-orange-200 rounded-full flex items-center justify-center text-orange-600">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- إحصائيات على مستوى المواد والجودة -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- إحصائيات المواد -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+            <i class="fas fa-book text-primary-500 ml-2"></i>
+            إحصائيات المواد الدراسية
+        </h2>
+        
+        <!-- المواد الأكثر زيارة -->
+        <div class="mb-4">
+            <h3 class="text-md font-medium text-gray-700 mb-2">🔸 المواد الأكثر زيارة:</h3>
+            <div class="space-y-2">
+                <?php foreach ($most_visited_subjects as $index => $subject): ?>
+                <div class="flex justify-between items-center p-2 bg-green-50 rounded">
+                    <span class="text-sm font-medium"><?= htmlspecialchars($subject['subject_name']) ?></span>
+                    <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                        <?= $subject['visits_count'] ?> زيارة
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <!-- المواد التي تحتاج اهتمام -->
+        <?php if (!empty($least_visited_subjects)): ?>
+        <div class="mb-4">
+            <h3 class="text-md font-medium text-gray-700 mb-2">⚠️ مواد تحتاج اهتمام:</h3>
+            <div class="space-y-2">
+                <?php foreach ($least_visited_subjects as $subject): ?>
+                <div class="flex justify-between items-center p-2 bg-yellow-50 rounded">
+                    <span class="text-sm font-medium"><?= htmlspecialchars($subject['subject_name']) ?></span>
+                    <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">
+                        <?= $subject['visits_count'] ?> زيارة
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- أفضل المواد أداءً -->
+        <?php if (!empty($best_subjects_performance)): ?>
+        <div>
+            <h3 class="text-md font-medium text-gray-700 mb-2">🏆 أفضل المواد أداءً:</h3>
+            <div class="space-y-2">
+                <?php foreach ($best_subjects_performance as $subject): ?>
+                <div class="flex justify-between items-center p-2 bg-blue-50 rounded">
+                    <span class="text-sm font-medium"><?= htmlspecialchars($subject['subject_name']) ?></span>
+                    <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                        <?= number_format($subject['avg_score'], 1) ?>%
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- إحصائيات الجودة والتميز -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+            <i class="fas fa-medal text-primary-500 ml-2"></i>
+            إحصائيات الجودة والتميز
+        </h2>
+        
+        <!-- مؤشرات الجودة -->
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <div class="p-3 bg-green-50 rounded-lg text-center">
+                <div class="text-green-600 text-sm mb-1">متميزين (90%+)</div>
+                <div class="text-2xl font-bold text-green-800"><?= $excellent_teachers_count ?></div>
+                <div class="text-xs text-green-600">
+                    <?= $evaluated_teachers_count > 0 ? round(($excellent_teachers_count / $evaluated_teachers_count) * 100, 1) : 0 ?>%
+                </div>
+            </div>
+            <div class="p-3 bg-red-50 rounded-lg text-center">
+                <div class="text-red-600 text-sm mb-1">يحتاج تطوير (<70%)</div>
+                <div class="text-2xl font-bold text-red-800"><?= $needs_improvement_count ?></div>
+                <div class="text-xs text-red-600">
+                    <?= $evaluated_teachers_count > 0 ? round(($needs_improvement_count / $evaluated_teachers_count) * 100, 1) : 0 ?>%
+                </div>
+            </div>
+        </div>
+
+        <!-- أكثر الزوار نشاطاً -->
+        <div>
+            <h3 class="text-md font-medium text-gray-700 mb-2">⭐ أكثر الزوار نشاطاً:</h3>
+            <div class="space-y-2">
+                <?php foreach ($most_active_visitors as $visitor): ?>
+                <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <div>
+                        <div class="text-sm font-medium"><?= htmlspecialchars($visitor['visitor_name']) ?></div>
+                        <div class="text-xs text-gray-500"><?= htmlspecialchars($visitor['visitor_type']) ?></div>
+                    </div>
+                    <span class="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full">
+                        <?= $visitor['visits_count'] ?> زيارة
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- إحصائيات المدير والنائب الأكاديمي -->
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
+        <i class="fas fa-user-crown text-primary-500 ml-2"></i>
+        إحصائيات القيادة المدرسية
+    </h2>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- إحصائيات المدير -->
+        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-5 border border-indigo-200">
+            <h3 class="text-lg font-semibold text-indigo-800 mb-3 flex items-center">
+                <i class="fas fa-user-tie text-indigo-600 ml-2"></i>
+                مدير المدرسة
+            </h3>
+            
+            <!-- إجمالي الزيارات -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center p-3 bg-white rounded-lg shadow-sm">
+                    <span class="text-gray-700 font-medium">إجمالي الزيارات</span>
+                    <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">
+                        <?= $principal_visits_count ?> زيارة
+                    </span>
+                </div>
+            </div>
+
+            <!-- متوسط أداء المعلمين الذين زارهم -->
+            <?php if ($principal_visits_count > 0): ?>
+            <div class="mb-4">
+                <div class="flex justify-between items-center p-3 bg-white rounded-lg shadow-sm">
+                    <span class="text-gray-700 font-medium">متوسط أداء من زارهم</span>
+                    <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full font-bold">
+                        <?= $principal_visited_teachers_avg ?>%
+                    </span>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- الزيارات حسب المادة -->
+            <?php if (!empty($principal_visits_by_subject)): ?>
+            <div class="mb-4">
+                <h4 class="text-sm font-semibold text-indigo-700 mb-2">الزيارات حسب المادة:</h4>
+                <div class="space-y-1">
+                    <?php foreach ($principal_visits_by_subject as $subject): ?>
+                    <div class="flex justify-between items-center text-sm p-2 bg-indigo-50 rounded">
+                        <span><?= htmlspecialchars($subject['subject_name']) ?></span>
+                        <span class="font-medium"><?= $subject['visits_count'] ?></span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- المعلمين الذين زارهم -->
+            <?php if (!empty($teachers_visited_by_principal)): ?>
+            <div>
+                <h4 class="text-sm font-semibold text-indigo-700 mb-2">المعلمين الذين تمت زيارتهم:</h4>
+                <div class="space-y-1 max-h-32 overflow-y-auto">
+                    <?php foreach ($teachers_visited_by_principal as $teacher): ?>
+                    <div class="flex justify-between items-center text-sm p-2 bg-white rounded shadow-sm">
+                        <div>
+                            <div class="font-medium"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
+                            <div class="text-xs text-gray-500">
+                                <?= htmlspecialchars($teacher['job_title']) ?> - <?= htmlspecialchars($teacher['subject_name']) ?>
+                            </div>
+                        </div>
+                        <span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full">
+                            <?= $teacher['visits_count'] ?>
+                        </span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($principal_visits_count == 0): ?>
+            <div class="text-center text-gray-500 py-4">
+                <i class="fas fa-info-circle mb-2"></i>
+                <div>لم يقم المدير بأي زيارات هذا الفصل</div>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- إحصائيات النائب الأكاديمي -->
+        <div class="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-5 border border-teal-200">
+            <h3 class="text-lg font-semibold text-teal-800 mb-3 flex items-center">
+                <i class="fas fa-user-graduate text-teal-600 ml-2"></i>
+                النائب الأكاديمي
+            </h3>
+            
+            <!-- إجمالي الزيارات -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center p-3 bg-white rounded-lg shadow-sm">
+                    <span class="text-gray-700 font-medium">إجمالي الزيارات</span>
+                    <span class="bg-teal-100 text-teal-800 px-3 py-1 rounded-full font-bold">
+                        <?= $academic_deputy_visits_count ?> زيارة
+                    </span>
+                </div>
+            </div>
+
+            <!-- متوسط أداء المعلمين الذين زارهم -->
+            <?php if ($academic_deputy_visits_count > 0): ?>
+            <div class="mb-4">
+                <div class="flex justify-between items-center p-3 bg-white rounded-lg shadow-sm">
+                    <span class="text-gray-700 font-medium">متوسط أداء من زارهم</span>
+                    <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full font-bold">
+                        <?= $deputy_visited_teachers_avg ?>%
+                    </span>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- الزيارات حسب المادة -->
+            <?php if (!empty($academic_deputy_visits_by_subject)): ?>
+            <div class="mb-4">
+                <h4 class="text-sm font-semibold text-teal-700 mb-2">الزيارات حسب المادة:</h4>
+                <div class="space-y-1">
+                    <?php foreach ($academic_deputy_visits_by_subject as $subject): ?>
+                    <div class="flex justify-between items-center text-sm p-2 bg-teal-50 rounded">
+                        <span><?= htmlspecialchars($subject['subject_name']) ?></span>
+                        <span class="font-medium"><?= $subject['visits_count'] ?></span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- المعلمين الذين زارهم -->
+            <?php if (!empty($teachers_visited_by_deputy)): ?>
+            <div>
+                <h4 class="text-sm font-semibold text-teal-700 mb-2">المعلمين الذين تمت زيارتهم:</h4>
+                <div class="space-y-1 max-h-32 overflow-y-auto">
+                    <?php foreach ($teachers_visited_by_deputy as $teacher): ?>
+                    <div class="flex justify-between items-center text-sm p-2 bg-white rounded shadow-sm">
+                        <div>
+                            <div class="font-medium"><?= htmlspecialchars($teacher['teacher_name']) ?></div>
+                            <div class="text-xs text-gray-500">
+                                <?= htmlspecialchars($teacher['job_title']) ?> - <?= htmlspecialchars($teacher['subject_name']) ?>
+                            </div>
+                        </div>
+                        <span class="bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded-full">
+                            <?= $teacher['visits_count'] ?>
+                        </span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($academic_deputy_visits_count == 0): ?>
+            <div class="text-center text-gray-500 py-4">
+                <i class="fas fa-info-circle mb-2"></i>
+                <div>لم يقم النائب الأكاديمي بأي زيارات هذا الفصل</div>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
 <!-- صف المحتوى الرئيسي -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- العمود الأول: الرسوم البيانية والإحصائيات -->
@@ -257,55 +598,174 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
         </div>
 
         <!-- إحصائيات المواد الدراسية -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-700 flex items-center">
-                <i class="fas fa-book text-primary-500 ml-2"></i>
-                إحصائيات المواد الدراسية
-            </h2>
+        <div class="bg-white shadow-lg rounded-lg overflow-hidden mb-8">
+            <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4">
+                <h2 class="text-xl font-bold text-white flex items-center">
+                    <i class="fas fa-book mr-3"></i>
+                    إحصائيات المواد الدراسية
+                </h2>
+                <p class="text-indigo-100 text-sm mt-1">تحليل شامل لأداء المواد الدراسية من حيث المعلمين والزيارات والأداء</p>
+            </div>
             
-            <div class="overflow-x-auto">
-                <table class="min-w-full bg-white border border-gray-200">
-                    <thead class="bg-gray-100">
-                        <tr>
-                            <th class="py-2 px-4 border-b text-right">المادة</th>
-                            <th class="py-2 px-4 border-b text-center">عدد المعلمين</th>
-                            <th class="py-2 px-4 border-b text-center">عدد الزيارات</th>
-                            <th class="py-2 px-4 border-b text-center">المعلمين المُزارين</th>
-                            <th class="py-2 px-4 border-b text-center">متوسط الأداء</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <div class="p-6">
+                <div class="overflow-x-auto">
+                    <table class="w-full table-auto border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700 min-w-[150px]">
+                                    <i class="fas fa-graduation-cap mr-2 text-blue-600"></i>
+                                    المادة
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                    <i class="fas fa-users mr-2 text-green-600"></i>
+                                    عدد المعلمين
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                    <i class="fas fa-clipboard-list mr-2 text-purple-600"></i>
+                                    عدد الزيارات
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[140px]">
+                                    <i class="fas fa-user-check mr-2 text-orange-600"></i>
+                                    المعلمين المُزارين
+                                </th>
+                                <th class="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700 min-w-[120px]">
+                                    <i class="fas fa-chart-line mr-2 text-red-600"></i>
+                                    متوسط الأداء
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
                         <?php foreach ($subjects_stats as $subject): ?>
-                        <tr class="hover:bg-gray-50">
-                            <td class="py-2 px-4 border-b"><?= htmlspecialchars($subject['subject_name']) ?></td>
-                            <td class="py-2 px-4 border-b text-center"><?= $subject['teachers_count'] ?></td>
-                            <td class="py-2 px-4 border-b text-center"><?= $subject['visits_count'] ?></td>
-                            <td class="py-2 px-4 border-b text-center"><?= $subject['visited_teachers_count'] ?></td>
-                            <td class="py-2 px-4 border-b text-center">
-                                <?php if ($subject['avg_performance'] > 0): ?>
-                                    <span class="inline-block <?= $subject['avg_performance'] >= 80 ? 'bg-green-100 text-green-800' : ($subject['avg_performance'] >= 70 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800') ?> text-xs px-2 py-1 rounded-full">
-                                        <?= number_format($subject['avg_performance'], 1) ?>%
+                        <tr class="hover:bg-gray-50 transition-colors duration-200">
+                            <td class="border border-gray-300 px-4 py-3 text-right">
+                                <div class="font-medium text-gray-800"><?= htmlspecialchars($subject['subject_name']) ?></div>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold">
+                                    <?= $subject['teachers_count'] ?>
+                                </span>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                <span class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full font-bold">
+                                    <?= $subject['visits_count'] ?>
+                                </span>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                <div class="flex items-center justify-center">
+                                    <span class="bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-bold">
+                                        <?= $subject['visited_teachers_count'] ?>
                                     </span>
+                                    <?php if ($subject['teachers_count'] > 0): ?>
+                                        <span class="text-xs text-gray-500 mr-2">
+                                            (<?= number_format(($subject['visited_teachers_count'] / $subject['teachers_count']) * 100, 1) ?>%)
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-3 text-center">
+                                <?php if ($subject['avg_performance'] > 0): ?>
+                                    <?php
+                                    $performance = $subject['avg_performance'];
+                                    $color_class = $performance >= 80 ? 'text-green-700 bg-green-100' : 
+                                                  ($performance >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                    ?>
+                                    <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
+                                        <?= number_format($performance, 1) ?>%
+                                    </div>
                                 <?php else: ?>
-                                    <span class="text-gray-400">-</span>
+                                    <span class="text-gray-400 font-medium">-</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                         <!-- الإجماليات -->
-                        <tr class="bg-gray-100 font-bold">
-                            <td class="py-2 px-4 border-b">الإجمالي</td>
-                            <td class="py-2 px-4 border-b text-center"><?= $total_subject_teachers ?></td>
-                            <td class="py-2 px-4 border-b text-center"><?= $total_subject_visits ?></td>
-                            <td class="py-2 px-4 border-b text-center"><?= $total_visited_teachers ?></td>
-                            <td class="py-2 px-4 border-b text-center">
-                                <span class="inline-block <?= $overall_avg_performance >= 80 ? 'bg-green-100 text-green-800' : ($overall_avg_performance >= 70 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800') ?> text-xs px-2 py-1 rounded-full">
-                                    <?= $overall_avg_performance ?>%
+                        <tr class="bg-gradient-to-r from-gray-100 to-gray-200">
+                            <td class="border border-gray-300 px-4 py-4 text-right">
+                                <div class="font-bold text-gray-800 flex items-center">
+                                    <i class="fas fa-calculator mr-2 text-blue-600"></i>
+                                    الإجمالي
+                                </div>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-4 text-center">
+                                <span class="bg-blue-200 text-blue-900 px-4 py-2 rounded-full font-bold text-lg">
+                                    <?= $total_subject_teachers ?>
                                 </span>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-4 text-center">
+                                <span class="bg-purple-200 text-purple-900 px-4 py-2 rounded-full font-bold text-lg">
+                                    <?= $total_subject_visits ?>
+                                </span>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-4 text-center">
+                                <div class="flex items-center justify-center">
+                                    <span class="bg-orange-200 text-orange-900 px-4 py-2 rounded-full font-bold text-lg">
+                                        <?= $total_visited_teachers ?>
+                                    </span>
+                                    <?php if ($total_subject_teachers > 0): ?>
+                                        <span class="text-sm text-gray-600 mr-2 font-medium">
+                                            (<?= number_format(($total_visited_teachers / $total_subject_teachers) * 100, 1) ?>%)
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-4 text-center">
+                                <?php
+                                $overall_color_class = $overall_avg_performance >= 80 ? 'text-green-700 bg-green-200' : 
+                                                      ($overall_avg_performance >= 60 ? 'text-yellow-700 bg-yellow-200' : 'text-red-700 bg-red-200');
+                                ?>
+                                <div class="inline-block px-4 py-2 rounded-full font-bold text-lg <?= $overall_color_class ?>">
+                                    <?= $overall_avg_performance ?>%
+                                </div>
                             </td>
                         </tr>
                     </tbody>
                 </table>
+                </div>
+                
+                <!-- إضافة مفتاح الألوان والإحصائيات -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- مفتاح الألوان -->
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان:</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
+                                <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
+                                <span class="text-gray-600">جيد (60% - 79%)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
+                                <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- إحصائيات سريعة -->
+                    <div class="p-4 bg-indigo-50 rounded-lg">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">إحصائيات سريعة:</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">معدل التغطية:</span>
+                                <span class="font-bold text-indigo-700">
+                                    <?= $total_subject_teachers > 0 ? number_format(($total_visited_teachers / $total_subject_teachers) * 100, 1) : 0 ?>%
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">متوسط الزيارات لكل معلم:</span>
+                                <span class="font-bold text-indigo-700">
+                                    <?= $total_visited_teachers > 0 ? number_format($total_subject_visits / $total_visited_teachers, 1) : 0 ?>
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">عدد المواد الفعالة:</span>
+                                <span class="font-bold text-indigo-700"><?= count($subjects_stats) ?></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

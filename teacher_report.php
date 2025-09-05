@@ -60,7 +60,7 @@ $visits = query("
         vt.name AS visitor_type,
         CONCAT(t.name, ' (', vt.name, ')') AS visitor_name,
         v.total_score,
-        (SELECT AVG(ve.score) FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score > 0) * 25 AS avg_percentage
+        (SELECT AVG(ve.score) FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) * (100/3) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -88,7 +88,7 @@ $domain_visits = query("
         v.visit_date,
         d.id AS domain_id,
         d.name AS domain_name,
-        AVG(ve.score) * 25 AS avg_percentage
+        AVG(ve.score) * (100/3) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -101,7 +101,7 @@ $domain_visits = query("
         v.teacher_id = ?
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
     GROUP BY 
         v.id, v.visit_date, d.id, d.name
     ORDER BY 
@@ -135,7 +135,7 @@ $domains_avg = query("
     SELECT 
         d.id,
         d.name,
-        AVG(ve.score) * 25 AS avg_percentage
+        AVG(ve.score) * (100/3) AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -148,7 +148,7 @@ $domains_avg = query("
         v.teacher_id = ?
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
     GROUP BY 
         d.id, d.name
     ORDER BY 
@@ -172,7 +172,7 @@ $weakest_indicators = query("
         i.id,
         i.name,
         AVG(ve.score) AS avg_score,
-        AVG(ve.score) * 25 AS avg_percentage,
+        AVG(ve.score) * (100/3) AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -184,11 +184,11 @@ $weakest_indicators = query("
         v.teacher_id = ?
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
     GROUP BY 
         i.id, i.name
     HAVING 
-        AVG(ve.score) < 3
+        AVG(ve.score) < 2
     ORDER BY 
         avg_score ASC
     LIMIT 5
@@ -200,7 +200,7 @@ $strongest_indicators = query("
         i.id,
         i.name,
         AVG(ve.score) AS avg_score,
-        AVG(ve.score) * 25 AS avg_percentage,
+        AVG(ve.score) * (100/3) AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -212,11 +212,11 @@ $strongest_indicators = query("
         v.teacher_id = ?
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
-        AND ve.score > 0
+        AND ve.score IS NOT NULL
     GROUP BY 
         i.id, i.name
     HAVING 
-        AVG(ve.score) >= 3
+        AVG(ve.score) >= 2.5
     ORDER BY 
         avg_score DESC
     LIMIT 5
@@ -310,7 +310,7 @@ $common_recommendations = query("
                     <div class="flex flex-col justify-center items-center h-64">
                         <div class="text-center mb-4">
                             <div class="text-5xl font-bold mb-2"><?= !is_null($overall_avg) ? number_format($overall_avg, 1) : '-' ?>%</div>
-                            <div class="text-xl"><?= !is_null($overall_avg) ? get_grade($overall_avg / 25) : '-' ?></div>
+                            <div class="text-xl"><?= !is_null($overall_avg) ? get_grade($overall_avg * 3 / 100) : '-' ?></div>
                         </div>
                         <div class="w-48 h-48">
                             <canvas id="pieChart"></canvas>

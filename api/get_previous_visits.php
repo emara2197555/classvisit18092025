@@ -52,12 +52,12 @@ try {
     $average_performance_all_query = "
         SELECT 
             AVG(v.total_score / (
-                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id), 0) * 4
+                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id AND ve2.score IS NOT NULL), 0) * 3
             )) as avg_score,
             COUNT(DISTINCT v.id) as visits_used_in_calculation
         FROM visits v 
         WHERE v.teacher_id = ?
-        AND EXISTS (SELECT 1 FROM visit_evaluations ve WHERE ve.visit_id = v.id)
+        AND EXISTS (SELECT 1 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL)
     ";
     
     $average_performance_all = query_row($average_performance_all_query, [$teacher_id]);
@@ -72,7 +72,7 @@ try {
         SELECT 
             SUM(v.total_score) as total_sum,
             SUM(
-                (SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id) * 4
+                (SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id) * 3
             ) as total_possible,
             COUNT(DISTINCT v.id) as visits_count
         FROM visits v 
@@ -91,7 +91,7 @@ try {
     $average_performance_current_visitor_query = "
         SELECT 
             AVG(v.total_score / (
-                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id), 0) * 4
+                NULLIF((SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id), 0) * 3
             )) as avg_score,
             COUNT(DISTINCT v.id) as visits_used_in_calculation
         FROM visits v 
@@ -112,7 +112,7 @@ try {
         SELECT 
             SUM(v.total_score) as total_sum,
             SUM(
-                (SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id) * 4
+                (SELECT COUNT(DISTINCT ve2.indicator_id) FROM visit_evaluations ve2 WHERE ve2.visit_id = v.id) * 3
             ) as total_possible,
             COUNT(DISTINCT v.id) as visits_count
         FROM visits v 
@@ -134,7 +134,7 @@ try {
             v.id, v.visit_date, v.general_notes, v.recommendation_notes, v.appreciation_notes, v.total_score,
             g.name as grade_name, s.name as section_name,
             (v.total_score / (
-                SELECT COUNT(DISTINCT ve2.indicator_id) * 4 
+                SELECT COUNT(DISTINCT ve2.indicator_id) * 3 
                 FROM visit_evaluations ve2 
                 WHERE ve2.visit_id = v.id
             )) as average_score,
@@ -164,7 +164,7 @@ try {
             g.name as grade_name, s.name as section_name, v.visitor_person_id,
             vt.name as visitor_type_name,
             (v.total_score / (
-                SELECT COUNT(DISTINCT ve2.indicator_id) * 4 
+                SELECT COUNT(DISTINCT ve2.indicator_id) * 3 
                 FROM visit_evaluations ve2 
                 WHERE ve2.visit_id = v.id
             )) as average_score,

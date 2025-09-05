@@ -114,9 +114,9 @@ try {
     $scores = query($scores_sql, [$visit_id]);
 
     foreach ($scores as $score_item) {
-        // نستثني المؤشرات غير المقاسة (score = 0)
-        if ((int)$score_item['score'] > 0) {
-            $total_scores += (int)$score_item['score'];
+        // نستثني المؤشرات غير المقاسة (score = NULL)
+        if ($score_item['score'] !== null) {
+            $total_scores += (float)$score_item['score'];
             $valid_indicators_count++;
         }
     }
@@ -125,8 +125,8 @@ try {
     $average_score = $valid_indicators_count > 0 ? round($total_scores / $valid_indicators_count, 2) : 0;
     $grade = get_grade($average_score);
 
-    // تحويل الدرجة إلى نسبة مئوية
-    $percentage_score = round($average_score * 25, 2); // تحويل من 4 إلى 100%
+    // تحويل الدرجة إلى نسبة مئوية (من 3 إلى 100%)
+    $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid_indicators_count * 3)) * 100, 2) : 0;
 } catch (Exception $e) {
     echo show_alert('حدث خطأ أثناء استرجاع بيانات الزيارة: ' . $e->getMessage(), 'error');
     require_once 'includes/footer.php';
@@ -227,8 +227,14 @@ if ($visit['attendance_type'] == 'remote') {
     }
     
     .score-0 {
+        background-color: #fee2e2;
+        color: #b91c1c;
+    }
+    
+    .score-null {
         background-color: #f3f4f6;
-        color: #1f2937;
+        color: #6b7280;
+        border: 2px dashed #d1d5db;
     }
     
     .indicator-table th {
@@ -414,16 +420,17 @@ if ($visit['attendance_type'] == 'remote') {
                 $bg_color = 'bg-gray-100';
                 $text_color = 'text-gray-800';
                 
-                if ($average_score >= 3.6) {
+                // تحديد الألوان بناءً على النسبة المئوية بدلاً من المتوسط
+                if ($percentage_score >= 90) {
                     $bg_color = 'bg-green-100';
                     $text_color = 'text-green-800';
-                } else if ($average_score >= 3.2) {
+                } else if ($percentage_score >= 80) {
                     $bg_color = 'bg-blue-100';
                     $text_color = 'text-blue-800';
-                } else if ($average_score >= 2.6) {
+                } else if ($percentage_score >= 65) {
                     $bg_color = 'bg-yellow-100';
                     $text_color = 'text-yellow-800';
-                } else if ($average_score >= 2.0) {
+                } else if ($percentage_score >= 50) {
                     $bg_color = 'bg-orange-100';
                     $text_color = 'text-orange-800';
                 } else {
@@ -491,31 +498,39 @@ if ($visit['attendance_type'] == 'remote') {
                                         <td class="text-sm text-gray-700"><?= htmlspecialchars($eval['indicator_text']) ?></td>
                                         <td class="text-center">
                                             <?php
-                                            $score = (int)$eval['score'];
+                                            // التعامل مع القيم NULL والرقمية بشكل صحيح
+                                            $score = $eval['score']; // الاحتفاظ بالقيمة كما هي (NULL أو رقم)
                                             $score_text = '';
                                             $score_class = '';
                                             
-                                            switch ($score) {
-                                                case 4:
-                                                    $score_text = 'ممتاز';
-                                                    $score_class = 'score-4';
-                                                    break;
-                                                case 3:
-                                                    $score_text = 'جيد جداً';
-                                                    $score_class = 'score-3';
-                                                    break;
-                                                case 2:
-                                                    $score_text = 'جيد';
-                                                    $score_class = 'score-2';
-                                                    break;
-                                                case 1:
-                                                    $score_text = 'مقبول';
-                                                    $score_class = 'score-1';
-                                                    break;
-                                                case 0:
-                                                    $score_text = 'لم يتم قياسه';
-                                                    $score_class = 'score-0';
-                                                    break;
+                                            // فحص القيمة NULL أولاً قبل التحويل إلى رقم
+                                            if ($score === null) {
+                                                $score_text = 'لم يتم قياسه';
+                                                $score_class = 'score-null';
+                                            } else {
+                                                $score = (int)$score; // تحويل إلى رقم فقط إذا لم تكن NULL
+                                                switch ($score) {
+                                                    case 3:
+                                                        $score_text = 'ممتاز';
+                                                        $score_class = 'score-3';
+                                                        break;
+                                                    case 2:
+                                                        $score_text = 'جيد';
+                                                        $score_class = 'score-2';
+                                                        break;
+                                                    case 1:
+                                                        $score_text = 'مقبول';
+                                                        $score_class = 'score-1';
+                                                        break;
+                                                    case 0:
+                                                        $score_text = 'ضعيف';
+                                                        $score_class = 'score-0';
+                                                        break;
+                                                    default:
+                                                        $score_text = 'غير مقاس';
+                                                        $score_class = 'score-null';
+                                                        break;
+                                                }
                                             }
                                             ?>
                                             <span class="score-box <?= $score_class ?>">
