@@ -818,6 +818,7 @@ const progressData = {
     datasets: [
         <?php
         // إنشاء مجموعة بيانات لكل مجال
+        $datasets = [];
         foreach ($domains_list as $domain_idx => $domain_name):
             $color_idx = $domain_idx % 5;
             $background_colors = [
@@ -834,58 +835,59 @@ const progressData = {
                 'rgba(75, 192, 192, 1)',
                 'rgba(153, 102, 255, 1)'
             ];
-        ?>
-        {
-            label: '<?= htmlspecialchars($domain_name) ?>',
-            data: [
-                <?php
-                foreach ($visits_by_domain as $visit_id => $visit_data): 
-                    $found = false;
-                    foreach ($visit_data['domains'] as $domain_id => $domain) {
-                        if ($domain['name'] == $domain_name) {
-                            echo number_format($domain['avg_percentage'], 1) . ",";
-                            $found = true;
-                            break;
-                        }
+            
+            $data_points = [];
+            foreach ($visits_by_domain as $visit_id => $visit_data): 
+                $found = false;
+                foreach ($visit_data['domains'] as $domain_id => $domain) {
+                    if ($domain['name'] == $domain_name) {
+                        $data_points[] = number_format($domain['avg_percentage'], 1);
+                        $found = true;
+                        break;
                     }
-                    if (!$found) {
-                        echo "null,";
-                    }
-                endforeach;
-                ?>
-            ],
-            backgroundColor: '<?= $background_colors[$color_idx] ?>',
-            borderColor: '<?= $border_colors[$color_idx] ?>',
-            borderWidth: 2,
-            tension: 0.3
-        },
-        <?php endforeach; ?>
+                }
+                if (!$found) {
+                    $data_points[] = "null";
+                }
+            endforeach;
+            
+            $datasets[] = "{
+                label: '" . htmlspecialchars($domain_name) . "',
+                data: [" . implode(',', $data_points) . "],
+                backgroundColor: '" . $background_colors[$color_idx] . "',
+                borderColor: '" . $border_colors[$color_idx] . "',
+                borderWidth: 2,
+                tension: 0.3
+            }";
+        endforeach;
         
         // متوسط الأداء العام
-        {
+        $avg_data_points = [];
+        foreach ($visits_by_domain as $visit_id => $visit_data): 
+            $visit_avg = 0;
+            $domains_count = 0;
+            foreach ($visit_data['domains'] as $domain) {
+                if (!is_null($domain['avg_percentage'])) {
+                    $visit_avg += $domain['avg_percentage'];
+                    $domains_count++;
+                }
+            }
+            $visit_avg = $domains_count > 0 ? $visit_avg / $domains_count : 0;
+            $avg_data_points[] = (!is_null($visit_avg) ? number_format($visit_avg, 1) : "0");
+        endforeach;
+        
+        $datasets[] = "{
             label: 'المتوسط العام',
-            data: [
-                <?php
-                foreach ($visits_by_domain as $visit_id => $visit_data): 
-                    $visit_avg = 0;
-                    $domains_count = 0;
-                    foreach ($visit_data['domains'] as $domain) {
-                        if (!is_null($domain['avg_percentage'])) {
-                            $visit_avg += $domain['avg_percentage'];
-                            $domains_count++;
-                        }
-                    }
-                    $visit_avg = $domains_count > 0 ? $visit_avg / $domains_count : 0;
-                    echo (!is_null($visit_avg) ? number_format($visit_avg, 1) : "0") . ",";
-                endforeach;
-                ?>
-            ],
+            data: [" . implode(',', $avg_data_points) . "],
             backgroundColor: 'rgba(0, 0, 0, 0.1)',
             borderColor: 'rgba(0, 0, 0, 0.8)',
             borderWidth: 3,
             borderDash: [5, 5],
             tension: 0.3
-        }
+        }";
+        
+        echo implode(',', $datasets);
+        ?>
     ]
 };
 

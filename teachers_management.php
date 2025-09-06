@@ -7,6 +7,10 @@
 
 // تضمين ملف الاتصال بقاعدة البيانات
 require_once 'includes/db_connection.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - للمديرين فقط
+protect_page(['Admin', 'Director', 'Academic Deputy']);
 
 // التحقق من وجود مدرسة مسجلة في النظام
 $school = query_row("SELECT id FROM schools LIMIT 1");
@@ -122,6 +126,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // الحصول على معرف المعلم الجديد
                 $new_teacher_id = last_insert_id();
                 
+                // إنشاء حساب مستخدم للمعلم إذا تم تحديد ذلك
+                if (isset($_POST['create_user_account']) && $_POST['create_user_account'] == '1') {
+                    $username = !empty($_POST['username']) ? $_POST['username'] : $personal_id;
+                    $password = !empty($_POST['password']) ? $_POST['password'] : $personal_id; // كلمة مرور مؤقتة
+                    
+                    // التأكد من وجود القيم
+                    if (empty($username)) $username = $personal_id;
+                    if (empty($password)) $password = $personal_id;
+                    
+                    // تحديد الدور حسب الوظيفة
+                    $role_mapping = [
+                        'مدير' => 2, // Director
+                        'النائب الأكاديمي' => 3, // Academic Deputy 
+                        'منسق المادة' => 5, // Subject Coordinator
+                        'موجه المادة' => 4, // Supervisor
+                        'معلم' => 6 // Teacher
+                    ];
+                    
+                    $role_id = $role_mapping[$job_title] ?? 6; // افتراضي: معلم
+                    
+                    // إنشاء الحساب
+                    $user_data = [
+                        'username' => $username,
+                        'password' => $password,
+                        'full_name' => $name,
+                        'email' => $email,
+                        'role_id' => $role_id,
+                        'school_id' => $school_id,
+                        'is_active' => 1
+                    ];
+                    
+                    $result = create_user($user_data);
+                    
+                    if ($result['success']) {
+                        // إضافة إلى coordinator_supervisors إذا كان منسق مادة
+                        if ($job_title == 'منسق المادة' && !empty($subjects)) {
+                            foreach ($subjects as $subject_id) {
+                                execute("INSERT INTO coordinator_supervisors (user_id, subject_id, created_at) VALUES (?, ?, NOW())", [$result['user_id'], $subject_id]);
+                            }
+                        }
+                        
+                        $success_message = "تمت إضافة المعلم وإنشاء حساب المستخدم بنجاح. (اسم المستخدم: " . htmlspecialchars($username) . "، كلمة المرور: " . htmlspecialchars($password) . ")";
+                    } else {
+                        $success_message = "تمت إضافة المعلم بنجاح، لكن فشل إنشاء الحساب: " . $result['message'];
+                    }
+                } else {
+                    $success_message = "تمت إضافة المعلم بنجاح.";
+                }
+                
                 // إضافة العلاقات مع المواد إذا كانت الوظيفة تتطلب مواد
                 if (!in_array($job_title, $roles_without_subjects) && !empty($subjects)) {
                     $sql = "INSERT INTO teacher_subjects (teacher_id, subject_id) VALUES (?, ?)";
@@ -129,8 +182,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         execute($sql, [$new_teacher_id, $subject_id]);
                     }
                 }
-                
-                $success_message = "تمت إضافة المعلم بنجاح.";
             }
             
             // إعادة تعيين النموذج
@@ -222,6 +273,9 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="display-5 fw-bold text-primary">إدارة المعلمين</h1>
             <div>
+                <a href="upload_teachers.php" class="btn btn-success me-2">
+                    <i class="bi bi-upload"></i> رفع بيانات من Excel
+                </a>
                 <a href="index.php" class="btn btn-outline-secondary me-2">
                     <i class="bi bi-house-door"></i> الرئيسية
                 </a>
@@ -312,6 +366,48 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
                                     <?php endforeach; ?>
                                 </select>
                                 <div class="form-text" id="subject-help-text">اختر المادة الدراسية</div>
+                            </div>
+                            
+                            <!-- خيار إنشاء حساب مستخدم -->
+                            <div class="card mb-3" id="user-account-section" style="display: none;">
+                                <div class="card-header bg-info text-white">
+                                    <h6 class="mb-0">إنشاء حساب مستخدم للنظام</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="create_user_account" name="create_user_account" value="1" onchange="toggleUserFields()">
+                                        <label class="form-check-label" for="create_user_account">
+                                            إنشاء حساب مستخدم للدخول إلى النظام
+                                        </label>
+                                        <div class="form-text">سيتمكن المعلم من الدخول إلى النظام وإدارة الزيارات</div>
+                                    </div>
+                                    
+                                    <div id="user-fields" style="display: none;">
+                                        <div class="mb-3">
+                                            <label for="username" class="form-label">اسم المستخدم</label>
+                                            <input type="text" class="form-control" id="username" name="username" placeholder="سيتم استخدام الرقم الشخصي افتراضياً">
+                                            <div class="form-text">اترك فارغاً لاستخدام الرقم الشخصي</div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="password" class="form-label">كلمة المرور</label>
+                                            <input type="text" class="form-control" id="password" name="password" placeholder="ستكون الرقم الشخصي افتراضياً">
+                                            <div class="form-text">اترك فارغاً لاستخدام الرقم الشخصي ككلمة مرور مؤقتة</div>
+                                        </div>
+                                        
+                                        <div class="alert alert-warning">
+                                            <small>
+                                                <i class="bi bi-info-circle"></i>
+                                                سيتم تحديد دور المستخدم تلقائياً حسب المسمى الوظيفي:
+                                                <br>• مدير → مدير النظام
+                                                <br>• النائب الأكاديمي → نائب أكاديمي
+                                                <br>• منسق المادة → منسق
+                                                <br>• موجه المادة → موجه
+                                                <br>• معلم → معلم
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             
                             <div class="d-grid gap-2">
@@ -458,45 +554,88 @@ $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NU
             const jobTitle = document.getElementById('job_title').value;
             const subjectsContainer = document.getElementById('subjects-container');
             const subjectsSelect = document.getElementById('subjects');
+            const userAccountSection = document.getElementById('user-account-section');
             const helpText = document.getElementById('subject-help-text');
             
-            // إعادة تعيين خصائص الاختيار
-            $(subjectsSelect).select2('destroy');
+            // إظهار قسم إنشاء حساب المستخدم للأدوار التي تحتاج دخول للنظام
+            const rolesNeedingAccess = ['مدير', 'النائب الأكاديمي', 'منسق المادة', 'موجه المادة'];
+            if (rolesNeedingAccess.includes(jobTitle)) {
+                userAccountSection.style.display = 'block';
+            } else {
+                userAccountSection.style.display = 'none';
+                document.getElementById('create_user_account').checked = false;
+                toggleUserFields();
+            }
             
-            // تحديد ما إذا كانت الوظيفة تتطلب مواد
-            if (jobTitle === 'مدير' || jobTitle === 'النائب الأكاديمي') {
-                // إخفاء حقل المواد للمدير والنائب الأكاديمي
+            // باقي الكود كما هو...
+            const rolesWithoutSubjects = ['مدير', 'النائب الأكاديمي', 'رئيس قسم', 'مشرف عام'];
+            
+            if (rolesWithoutSubjects.includes(jobTitle)) {
                 subjectsContainer.style.display = 'none';
                 subjectsSelect.removeAttribute('required');
-                
-                // إفراغ الاختيار
-                subjectsSelect.selectedIndex = -1;
+                helpText.textContent = 'هذا المنصب لا يتطلب تحديد مواد دراسية';
             } else {
-                // إظهار حقل المواد للمعلم والموجه والمنسق
                 subjectsContainer.style.display = 'block';
                 subjectsSelect.setAttribute('required', 'required');
                 
-                // تعديل النص المساعد
-                if (jobTitle === 'معلم') {
-                    helpText.textContent = 'اختر المادة التي يدرسها المعلم';
-                } else if (jobTitle === 'موجه المادة') {
-                    helpText.textContent = 'اختر المادة التي يوجهها';
-                } else if (jobTitle === 'منسق المادة') {
-                    helpText.textContent = 'اختر المادة التي ينسقها';
+                if (jobTitle === 'منسق المادة') {
+                    subjectsSelect.removeAttribute('multiple');
+                    subjectsSelect.setAttribute('name', 'subjects[]');
+                    // تدمير Select2 فقط إذا كان موجوداً
+                    if ($(subjectsSelect).hasClass('select2-hidden-accessible')) {
+                        $(subjectsSelect).select2('destroy');
+                    }
+                    $(subjectsSelect).select2({
+                        theme: 'bootstrap-5',
+                        dir: 'rtl',
+                        placeholder: 'اختر المادة...',
+                        allowClear: true
+                    });
+                    helpText.textContent = 'اختر المادة التي ستكون منسقاً لها';
                 } else {
-                    helpText.textContent = 'اختر المادة الدراسية';
+                    subjectsSelect.setAttribute('multiple', 'multiple');
+                    subjectsSelect.setAttribute('name', 'subjects[]');
+                    // تدمير Select2 فقط إذا كان موجوداً
+                    if ($(subjectsSelect).hasClass('select2-hidden-accessible')) {
+                        $(subjectsSelect).select2('destroy');
+                    }
+                    $(subjectsSelect).select2({
+                        theme: 'bootstrap-5',
+                        dir: 'rtl',
+                        placeholder: 'اختر المواد...',
+                        allowClear: true
+                    });
+                    helpText.textContent = 'اختر المواد الدراسية';
                 }
-                
-                // تعيين خاصية الاختيار المفرد للمعلم والموجه والمنسق
-                $(subjectsSelect).select2({
-                    theme: 'bootstrap-5',
-                    dir: 'rtl',
-                    placeholder: 'اختر المادة...',
-                    allowClear: true,
-                    maximumSelectionLength: 1
-                });
             }
         }
+        
+        // وظيفة إظهار/إخفاء حقول إنشاء المستخدم
+        function toggleUserFields() {
+            const checkbox = document.getElementById('create_user_account');
+            const userFields = document.getElementById('user-fields');
+            
+            if (checkbox.checked) {
+                userFields.style.display = 'block';
+            } else {
+                userFields.style.display = 'none';
+            }
+        }
+        
+        // تحديث اسم المستخدم تلقائياً عند تغيير الرقم الشخصي
+        document.getElementById('personal_id').addEventListener('input', function() {
+            const personalId = this.value;
+            const usernameField = document.getElementById('username');
+            const passwordField = document.getElementById('password');
+            
+            if (usernameField.value === '' || usernameField.placeholder.includes(personalId)) {
+                usernameField.placeholder = 'سيتم استخدام: ' + personalId;
+            }
+            
+            if (passwordField.value === '' || passwordField.placeholder.includes(personalId)) {
+                passwordField.placeholder = 'ستكون: ' + personalId;
+            }
+        });
     </script>
 </body>
 </html> 

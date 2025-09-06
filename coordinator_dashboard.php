@@ -19,6 +19,28 @@ $coordinator_name = $_SESSION['full_name'];
 $subject_id = $_SESSION['subject_id'];
 $school_id = $_SESSION['school_id'];
 
+// التحقق من وجود بيانات المنسق المطلوبة
+if (!$subject_id || !$school_id) {
+    // محاولة الحصول على بيانات المنسق من قاعدة البيانات
+    $coordinator_data = query_row("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs 
+        INNER JOIN users u ON cs.user_id = u.id 
+        WHERE cs.user_id = ?
+    ", [$coordinator_id]);
+    
+    if ($coordinator_data) {
+        $subject_id = $coordinator_data['subject_id'];
+        $school_id = $coordinator_data['school_id'];
+        
+        // تحديث بيانات الجلسة
+        $_SESSION['subject_id'] = $subject_id;
+        $_SESSION['school_id'] = $school_id;
+    } else {
+        die("خطأ: لا يمكن العثور على بيانات المنسق. يرجى التواصل مع الإدارة.");
+    }
+}
+
 // الحصول على اسم المادة
 $subject = query_row("SELECT name FROM subjects WHERE id = ?", [$subject_id]);
 $subject_name = $subject['name'] ?? 'غير محدد';
@@ -31,67 +53,111 @@ $school_name = $school['name'] ?? 'غير محدد';
 $stats = [];
 
 // عدد المعلمين في المادة
-$teachers_count = query_row("
-    SELECT COUNT(*) as count 
-    FROM teacher_subjects ts 
-    INNER JOIN teachers t ON ts.teacher_id = t.id 
-    WHERE ts.subject_id = ? AND t.school_id = ?
-", [$subject_id, $school_id]);
-$stats['teachers_count'] = $teachers_count['count'];
+if ($subject_id && $school_id) {
+    $teachers_count = query_row("
+        SELECT COUNT(DISTINCT t.id) as count 
+        FROM teacher_subjects ts 
+        INNER JOIN teachers t ON ts.teacher_id = t.id 
+        WHERE ts.subject_id = ? AND t.school_id = ?
+    ", [$subject_id, $school_id]);
+    $stats['teachers_count'] = $teachers_count['count'] ?? 0;
+    echo "<!-- TEACHERS COUNT RESULT: " . ($teachers_count['count'] ?? 'NULL') . " -->";
+} else {
+    $stats['teachers_count'] = 0;
+    echo "<!-- TEACHERS COUNT: MISSING DATA -->";
+}
 
 // عدد الزيارات هذا الشهر للمادة
-$visits_this_month = query_row("
-    SELECT COUNT(*) as count 
-    FROM visits v 
-    WHERE v.subject_id = ? 
-    AND v.school_id = ? 
-    AND MONTH(v.visit_date) = MONTH(CURRENT_DATE()) 
-    AND YEAR(v.visit_date) = YEAR(CURRENT_DATE())
-", [$subject_id, $school_id]);
-$stats['visits_this_month'] = $visits_this_month['count'];
+if ($subject_id && $school_id) {
+    $visits_this_month = query_row("
+        SELECT COUNT(*) as count 
+        FROM visits v 
+        WHERE v.subject_id = ? 
+        AND v.school_id = ? 
+        AND MONTH(v.visit_date) = MONTH(CURRENT_DATE()) 
+        AND YEAR(v.visit_date) = YEAR(CURRENT_DATE())
+    ", [$subject_id, $school_id]);
+    $stats['visits_this_month'] = $visits_this_month['count'] ?? 0;
+} else {
+    $stats['visits_this_month'] = 0;
+}
 
 // متوسط الأداء للمادة
-$avg_performance = query_row("
-    SELECT AVG(ve.score) as avg_score
-    FROM visits v
-    INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
-    WHERE v.subject_id = ? AND v.school_id = ?
-", [$subject_id, $school_id]);
-$stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 4) * 100, 1) : 0;
+if ($subject_id && $school_id) {
+    $avg_performance = query_row("
+        SELECT AVG(visit_scores.avg_score) as avg_score
+        FROM visits v
+        INNER JOIN (
+            SELECT ve.visit_id, AVG(ve.score) as avg_score
+            FROM visit_evaluations ve
+            GROUP BY ve.visit_id
+        ) visit_scores ON v.id = visit_scores.visit_id
+        WHERE v.subject_id = ? AND v.school_id = ?
+    ", [$subject_id, $school_id]);
+    $stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
+} else {
+    $stats['avg_performance'] = 0;
+}
 
 // الزيارات الأخيرة للمادة
-$recent_visits = query("
-    SELECT v.*, t.name as teacher_name, vt.name as visitor_type_name,
-           AVG(ve.score) as avg_score
-    FROM visits v
-    LEFT JOIN teachers t ON v.teacher_id = t.id
-    LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
-    LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
-    WHERE v.subject_id = ? AND v.school_id = ?
-    GROUP BY v.id
-    ORDER BY v.visit_date DESC, v.created_at DESC
-    LIMIT 10
-", [$subject_id, $school_id]);
+if ($subject_id && $school_id) {
+    $recent_visits = query("
+        SELECT v.*, t.name as teacher_name, vt.name as visitor_type_name,
+               AVG(ve.score) as avg_score
+        FROM visits v
+        LEFT JOIN teachers t ON v.teacher_id = t.id
+        LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
+        LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
+        WHERE v.subject_id = ? AND v.school_id = ?
+        GROUP BY v.id
+        ORDER BY v.visit_date DESC, v.created_at DESC
+        LIMIT 10
+    ", [$subject_id, $school_id]);
+} else {
+    $recent_visits = [];
+}
 
 // معلمي المادة وأدائهم
-$teachers_performance = query("
-    SELECT t.id, t.name, 
-           COUNT(v.id) as visits_count,
-           AVG(ve.score) as avg_score
-    FROM teachers t
-    INNER JOIN teacher_subjects ts ON t.id = ts.teacher_id
-    LEFT JOIN visits v ON t.id = v.teacher_id AND v.subject_id = ?
-    LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
-    WHERE ts.subject_id = ? AND t.school_id = ?
-    GROUP BY t.id, t.name
-    ORDER BY avg_score DESC
-", [$subject_id, $subject_id, $school_id]);
+if ($subject_id && $school_id) {
+    $teachers_performance = query("
+        SELECT 
+            t.id, 
+            t.name, 
+            IFNULL(COUNT(DISTINCT v.id), 0) as visits_count,
+            IFNULL(AVG(visit_scores.avg_score), 0) as avg_score
+        FROM 
+            teachers t
+        INNER JOIN 
+            teacher_subjects ts ON t.id = ts.teacher_id
+        LEFT JOIN 
+            visits v ON t.id = v.teacher_id AND v.subject_id = ?
+        LEFT JOIN (
+            SELECT 
+                ve.visit_id, 
+                AVG(ve.score) as avg_score
+            FROM 
+                visit_evaluations ve
+            GROUP BY 
+                ve.visit_id
+        ) visit_scores ON v.id = visit_scores.visit_id
+        WHERE 
+            ts.subject_id = ? AND t.school_id = ?
+        GROUP BY 
+            t.id, t.name
+        ORDER BY 
+            visits_count DESC, t.name
+    ", [$subject_id, $subject_id, $school_id]);
+} else {
+    $teachers_performance = [];
+}
 
 // الموجهين المخصصين للمنسق
 $supervisors = get_coordinator_supervisors($coordinator_id);
 
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
+
+
 ?>
 
 <!-- قسم الترويسة والملخص -->
@@ -185,12 +251,18 @@ require_once 'includes/header.php';
                             </div>
                             <div class="text-left">
                                 <?php 
-                                $score = $teacher['avg_score'] ? round($teacher['avg_score'], 1) : 0;
-                                $color = $score >= 80 ? 'green' : ($score >= 60 ? 'yellow' : 'red');
-                                ?>
-                                <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
-                                    <?= $score ?>%
-                                </span>
+                                if ($teacher['visits_count'] > 0) {
+                                    $score = $teacher['avg_score'] ? round(($teacher['avg_score'] / 3) * 100, 1) : 0;
+                                    $color = $score >= 80 ? 'green' : ($score >= 60 ? 'yellow' : 'red');
+                                    ?>
+                                    <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
+                                        <?= $score ?>%
+                                    </span>
+                                <?php } else { ?>
+                                    <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm">
+                                        لا توجد زيارات
+                                    </span>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>
@@ -229,8 +301,8 @@ require_once 'includes/header.php';
                                 <div class="text-left">
                                     <?php 
                                     $total_score = $visit['avg_score'];
-                                    $color = $total_score >= 3 ? 'green' : ($total_score >= 2 ? 'yellow' : 'red');
-                                    $percentage = ($total_score / 4) * 100; // تحويل النتيجة من 4 إلى نسبة مئوية
+                                    $color = $total_score >= 2.4 ? 'green' : ($total_score >= 1.8 ? 'yellow' : 'red');
+                                    $percentage = ($total_score / 3) * 100; // تحويل النتيجة من 3 إلى نسبة مئوية
                                     ?>
                                     <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-2 py-1 rounded text-xs font-semibold">
                                         <?= round($percentage, 1) ?>%

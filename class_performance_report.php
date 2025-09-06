@@ -5,6 +5,31 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة
+protect_page();
+
+// تحديد البيانات بناءً على دور المستخدم
+$user_role = $_SESSION['role_name'] ?? '';
+$is_coordinator = ($user_role === 'Subject Coordinator');
+$coordinator_subject_id = null;
+$coordinator_school_id = null;
+
+if ($is_coordinator) {
+    // جلب معلومات المنسق
+    $coordinator = query("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs
+        JOIN users u ON cs.user_id = u.id
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if (!empty($coordinator)) {
+        $coordinator_subject_id = $coordinator[0]['subject_id'];
+        $coordinator_school_id = $coordinator[0]['school_id'];
+    }
+}
 
 // تعيين عنوان الصفحة
 $page_title = 'تقرير مقارنة أداء المعلمين والمنسقين';
@@ -57,8 +82,18 @@ $visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id
 // تحديد المادة الدراسية (اختياري)
 $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 
+// للمنسق: تحديد مادته تلقائياً
+if ($is_coordinator && $coordinator_subject_id) {
+    $subject_id = $coordinator_subject_id;
+}
+
 // جلب قائمة المواد الدراسية
-$subjects = query("SELECT * FROM subjects ORDER BY name");
+if ($is_coordinator) {
+    // للمنسق: جلب مادته فقط
+    $subjects = query("SELECT * FROM subjects WHERE id = ? ORDER BY name", [$coordinator_subject_id]);
+} else {
+    $subjects = query("SELECT * FROM subjects ORDER BY name");
+}
 
 // استعلام لجلب بيانات المعلمين الذين لديهم زيارات
 $sql_with_visits = "
@@ -91,6 +126,11 @@ if (!empty($date_filter)) {
 $sql_with_visits .= "
     WHERE
         t.job_title IN ('معلم', 'منسق المادة')";
+
+// إضافة قيود المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_with_visits .= " AND t.school_id = ?";
+}
 
 if ($subject_id > 0) {
     $sql_with_visits .= " AND s.id = ?";
@@ -135,6 +175,11 @@ $sql_without_visits .= "
         t.job_title IN ('معلم', 'منسق المادة')
         AND v.id IS NULL";
 
+// إضافة قيود المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_without_visits .= " AND t.school_id = ?";
+}
+
 if ($subject_id > 0) {
     $sql_without_visits .= " AND s.id = ?";
 }
@@ -156,6 +201,11 @@ if (!empty($date_filter)) {
     $with_visits_params = array_merge($with_visits_params, $date_params);
 }
 
+// إضافة معاملات المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $with_visits_params[] = $coordinator_school_id;
+}
+
 if ($subject_id > 0) {
     $with_visits_params[] = $subject_id;
 }
@@ -169,6 +219,11 @@ if ($visitor_type_id > 0) {
 
 if (!empty($date_filter)) {
     $without_visits_params = array_merge($without_visits_params, $date_params);
+}
+
+// إضافة معاملات المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $without_visits_params[] = $coordinator_school_id;
 }
 
 if ($subject_id > 0) {
@@ -192,9 +247,33 @@ $sql_domain = "
     JOIN 
         visits vs ON ve.visit_id = vs.id
     JOIN 
-        evaluation_indicators ei ON ve.indicator_id = ei.id
+        evaluation_indicators ei ON ve.indicator_id = ei.id";
+
+// إضافة qیود المنسق للمجالات
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_domain .= "
+    JOIN 
+        teachers t ON vs.teacher_id = t.id";
+}
+
+if ($is_coordinator && $coordinator_subject_id) {
+    $sql_domain .= "
+    JOIN 
+        teacher_subjects ts ON vs.teacher_id = ts.teacher_id";
+}
+
+$sql_domain .= "
     WHERE 
         vs.academic_year_id = ?";
+
+// إضافة شروط المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_domain .= " AND t.school_id = ?";
+}
+
+if ($is_coordinator && $coordinator_subject_id) {
+    $sql_domain .= " AND ts.subject_id = ?";
+}
 
 if ($visitor_type_id > 0) {
     $sql_domain .= " AND vs.visitor_type_id = ?";
@@ -211,6 +290,15 @@ $sql_domain .= "
 
 // تحضير المعلمات لاستعلام المجالات
 $domain_params = [$academic_year_id];
+
+// إضافة معاملات المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $domain_params[] = $coordinator_school_id;
+}
+
+if ($is_coordinator && $coordinator_subject_id) {
+    $domain_params[] = $coordinator_subject_id;
+}
 
 if ($visitor_type_id > 0) {
     $domain_params[] = $visitor_type_id;
@@ -238,9 +326,33 @@ $sql_overall = "
     FROM 
         visit_evaluations ve 
     JOIN 
-        visits vs ON ve.visit_id = vs.id
+        visits vs ON ve.visit_id = vs.id";
+
+// إضافة قيود المنسق للمتوسط العام
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_overall .= "
+    JOIN 
+        teachers t ON vs.teacher_id = t.id";
+}
+
+if ($is_coordinator && $coordinator_subject_id) {
+    $sql_overall .= "
+    JOIN 
+        teacher_subjects ts ON vs.teacher_id = ts.teacher_id";
+}
+
+$sql_overall .= "
     WHERE 
         vs.academic_year_id = ?";
+
+// إضافة شروط المنسق
+if ($is_coordinator && $coordinator_school_id) {
+    $sql_overall .= " AND t.school_id = ?";
+}
+
+if ($is_coordinator && $coordinator_subject_id) {
+    $sql_overall .= " AND ts.subject_id = ?";
+}
 
 if ($visitor_type_id > 0) {
     $sql_overall .= " AND vs.visitor_type_id = ?";
@@ -494,6 +606,13 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
 
 <div class="mb-6">
     <h1 class="text-2xl font-bold mb-4">تقرير مقارنة أداء المعلمين</h1>
+    
+    <?php if ($is_coordinator): ?>
+        <div class="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+            <strong>مرحباً بك كمنسق مادة!</strong> 
+            أنت تعرض تقرير أداء معلمي مادتك فقط.
+        </div>
+    <?php endif; ?>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج تحديد العام الدراسي ونوع الزائر -->

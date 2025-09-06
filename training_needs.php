@@ -5,6 +5,15 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - إضافة المعلمين للصلاحيات
+protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator', 'Teacher']);
+
+// الحصول على بيانات المستخدم الحالي
+$current_user_role = $_SESSION['role_name'] ?? 'admin';
+$current_user_school_id = $_SESSION['school_id'] ?? null;
+$current_user_id = $_SESSION['user_id'] ?? null;
 
 // تعيين عنوان الصفحة
 $page_title = 'الاحتياجات التدريبية للمعلمين';
@@ -64,6 +73,36 @@ $selected_term = $_SESSION['selected_term'] ?? 'all';
 // التحقق من وجود معلم محدد
 $teacher_id = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
 
+// إذا كان المستخدم معلماً، فرض teacher_id الخاص به وإعادة توجيه إذا لزم الأمر
+if ($current_user_role === 'Teacher') {
+    // الحصول على teacher_id للمعلم المسجل دخوله
+    $current_teacher_id = $_SESSION['teacher_id'] ?? null;
+    
+    // إذا لم يكن teacher_id موجوداً في الجلسة، ابحث عنه
+    if (!$current_teacher_id) {
+        $teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$current_user_id]);
+        if ($teacher_data) {
+            $current_teacher_id = $teacher_data['id'];
+            $_SESSION['teacher_id'] = $current_teacher_id;
+        }
+    }
+    
+    // فرض teacher_id للمعلم المسجل دخوله
+    if ($current_teacher_id) {
+        // إذا حاول المعلم رؤية بيانات معلم آخر، أعد توجيهه لبياناته
+        if ($teacher_id != 0 && $teacher_id != $current_teacher_id) {
+            header("Location: training_needs.php?teacher_id=$current_teacher_id");
+            exit();
+        }
+        
+        // تعيين teacher_id للمعلم الحالي
+        $teacher_id = $current_teacher_id;
+    } else {
+        // إذا لم يتم العثور على المعلم، عرض رسالة خطأ
+        die('خطأ: لم يتم العثور على بيانات المعلم. يرجى الاتصال بالإدارة.');
+    }
+}
+
 // اختيار المادة
 $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 
@@ -73,31 +112,84 @@ $school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 // الفصل الدراسي (اختياري)
 $semester = isset($_GET['semester']) ? $_GET['semester'] : null;
 
-// جلب قائمة المدارس
-$schools = query("SELECT * FROM schools ORDER BY name");
-
-// جلب جميع المواد للاختيار الأولي (سيتم تحديثها بالجافاسكريبت)
-$subjects = [];
-if ($school_id > 0) {
-    // جلب المواد حسب المدرسة المختارة
-    $subjects = query("
-        SELECT DISTINCT s.* 
-        FROM subjects s
-        JOIN teacher_subjects ts ON s.id = ts.subject_id
-        JOIN teachers t ON ts.teacher_id = t.id
-        WHERE t.school_id = ?
-        ORDER BY s.name
-    ", [$school_id]);
+// جلب قائمة المدارس مع تطبيق قيود المنسق
+if ($current_user_role === 'Teacher') {
+    // المعلم يرى مدرسته فقط
+    if ($teacher_id) {
+        $teacher_school = query_row("SELECT school_id FROM teachers WHERE id = ?", [$teacher_id]);
+        if ($teacher_school) {
+            $schools = query("SELECT * FROM schools WHERE id = ? ORDER BY name", [$teacher_school['school_id']]);
+            $school_id = $teacher_school['school_id']; // فرض اختيار مدرسة المعلم
+        }
+    }
+} elseif ($current_user_role === 'Subject Coordinator') {
+    // منسق المادة يرى مدرسته فقط
+    $schools = query("SELECT * FROM schools WHERE id = ? ORDER BY name", [$current_user_school_id]);
+    $school_id = $current_user_school_id; // فرض اختيار مدرسة المنسق
 } else {
-    // جلب كل المواد إذا لم تختر مدرسة
-    $subjects = query("SELECT * FROM subjects ORDER BY name");
+    // المديرون والمشرفون يرون جميع المدارس
+    $schools = query("SELECT * FROM schools ORDER BY name");
 }
 
-// جلب المعلمين حسب المدرسة والمادة المختارة
+// جلب جميع المواد للاختيار الأولي مع تطبيق قيود المنسق
+$subjects = [];
+if ($current_user_role === 'Teacher') {
+    // المعلم يرى موادة فقط
+    if ($teacher_id) {
+        $subjects = query("
+            SELECT s.* 
+            FROM subjects s
+            JOIN teacher_subjects ts ON s.id = ts.subject_id
+            WHERE ts.teacher_id = ?
+            ORDER BY s.name
+        ", [$teacher_id]);
+    }
+} elseif ($current_user_role === 'Subject Coordinator') {
+    // منسق المادة يرى مادته فقط
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$current_user_id]);
+    
+    if ($coordinator_data) {
+        $subjects = query("SELECT * FROM subjects WHERE id = ? ORDER BY name", [$coordinator_data['subject_id']]);
+        $subject_id = $coordinator_data['subject_id']; // فرض اختيار مادة المنسق
+    }
+} else {
+    // المديرون والمشرفون
+    if ($school_id > 0) {
+        // جلب المواد حسب المدرسة المختارة
+        $subjects = query("
+            SELECT DISTINCT s.* 
+            FROM subjects s
+            JOIN teacher_subjects ts ON s.id = ts.subject_id
+            JOIN teachers t ON ts.teacher_id = t.id
+            WHERE t.school_id = ?
+            ORDER BY s.name
+        ", [$school_id]);
+    } else {
+        // جلب كل المواد إذا لم تختر مدرسة
+        $subjects = query("SELECT * FROM subjects ORDER BY name");
+    }
+}
+
+// جلب المعلمين حسب المدرسة والمادة المختارة مع تطبيق قيود المنسق
 $teachers = [];
-if ($school_id > 0) {
-    if ($subject_id > 0) {
-        // جلب المعلمين حسب المدرسة والمادة
+if ($current_user_role === 'Teacher') {
+    // المعلم يرى نفسه فقط
+    if ($teacher_id) {
+        $teachers = query("SELECT * FROM teachers WHERE id = ?", [$teacher_id]);
+    }
+} elseif ($current_user_role === 'Subject Coordinator') {
+    // منسق المادة يرى معلمي مادته في مدرسته فقط
+    $coordinator_data = query_row("
+        SELECT subject_id 
+        FROM coordinator_supervisors 
+        WHERE user_id = ?
+    ", [$current_user_id]);
+    
+    if ($coordinator_data) {
         $teachers = query("
             SELECT t.* 
             FROM teachers t
@@ -106,25 +198,63 @@ if ($school_id > 0) {
             AND t.school_id = ? 
             AND ts.subject_id = ?
             ORDER BY t.name
-        ", [$school_id, $subject_id]);
-    } else {
-        // جلب كل المعلمين في المدرسة
-        $teachers = query("
-            SELECT * FROM teachers 
-            WHERE job_title = 'معلم' 
-            AND school_id = ? 
-            ORDER BY name
-        ", [$school_id]);
+        ", [$current_user_school_id, $coordinator_data['subject_id']]);
     }
 } else {
-    // جلب كل المعلمين إذا لم تختر مدرسة
-    $teachers = query("SELECT * FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+    // المديرون والمشرفون
+    if ($school_id > 0) {
+        if ($subject_id > 0) {
+            // جلب المعلمين حسب المدرسة والمادة
+            $teachers = query("
+                SELECT t.* 
+                FROM teachers t
+                JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                WHERE t.job_title = 'معلم' 
+                AND t.school_id = ? 
+                AND ts.subject_id = ?
+                ORDER BY t.name
+            ", [$school_id, $subject_id]);
+        } else {
+            // جلب كل المعلمين في المدرسة
+            $teachers = query("
+                SELECT * FROM teachers 
+                WHERE job_title = 'معلم' 
+                AND school_id = ? 
+                ORDER BY name
+            ", [$school_id]);
+        }
+    } else {
+        // جلب كل المعلمين إذا لم تختر مدرسة
+        $teachers = query("SELECT * FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+    }
 }
 
-// جلب بيانات المعلم المحدد إن وجد
+// جلب بيانات المعلم المحدد إن وجد مع تطبيق قيود المنسق
 $teacher = null;
 if ($teacher_id) {
-    $teacher = query_row("SELECT * FROM teachers WHERE id = ?", [$teacher_id]);
+    if ($current_user_role === 'Subject Coordinator') {
+        // التحقق من أن المعلم ينتمي لمادة ومدرسة المنسق
+        $coordinator_data = query_row("
+            SELECT subject_id 
+            FROM coordinator_supervisors 
+            WHERE user_id = ?
+        ", [$current_user_id]);
+        
+        if ($coordinator_data) {
+            $teacher = query_row("
+                SELECT t.* 
+                FROM teachers t
+                JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                WHERE t.id = ? 
+                AND t.school_id = ? 
+                AND ts.subject_id = ?
+                AND t.job_title = 'معلم'
+            ", [$teacher_id, $current_user_school_id, $coordinator_data['subject_id']]);
+        }
+    } else {
+        // المديرون والمشرفون يستطيعون رؤية أي معلم
+        $teacher = query_row("SELECT * FROM teachers WHERE id = ?", [$teacher_id]);
+    }
 }
 
 // إذا كان هناك معلم محدد، نقوم بجلب بيانات احتياجاته التدريبية
@@ -360,7 +490,8 @@ $academic_years = query($academic_years_query);
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-<?= $current_user_role === 'Subject Coordinator' ? '4' : '6' ?> gap-4">
+                <?php if ($current_user_role !== 'Subject Coordinator'): ?>
                 <div>
                     <label for="school_id" class="block mb-1">المدرسة</label>
                     <select id="school_id" name="school_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
@@ -372,6 +503,10 @@ $academic_years = query($academic_years_query);
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php else: ?>
+                    <!-- للمنسق: إخفاء خيار المدرسة ولكن ارسال القيمة -->
+                    <input type="hidden" name="school_id" value="<?= $current_user_school_id ?>">
+                <?php endif; ?>
                 
                 <div>
                     <label for="academic_year_id" class="block mb-1">العام الدراسي</label>
@@ -393,6 +528,7 @@ $academic_years = query($academic_years_query);
                     </select>
                 </div>
                 
+                <?php if ($current_user_role !== 'Subject Coordinator'): ?>
                 <div>
                     <label for="subject_id" class="block mb-1">المادة الدراسية</label>
                     <select id="subject_id" name="subject_id" class="w-full border border-gray-300 shadow-sm rounded-md focus:border-primary-500 focus:ring focus:ring-primary-200">
@@ -404,6 +540,23 @@ $academic_years = query($academic_years_query);
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php else: ?>
+                    <!-- للمنسق: إخفاء خيار المادة ولكن ارسال القيمة -->
+                    <?php 
+                    $coordinator_data = query_row("SELECT subject_id FROM coordinator_supervisors WHERE user_id = ?", [$current_user_id]);
+                    if ($coordinator_data): ?>
+                        <input type="hidden" name="subject_id" value="<?= $coordinator_data['subject_id'] ?>">
+                        <div>
+                            <label class="block mb-1">المادة الدراسية</label>
+                            <div class="w-full border border-gray-300 shadow-sm rounded-md p-2 bg-gray-100">
+                                <?php 
+                                $subject_info = query_row("SELECT name FROM subjects WHERE id = ?", [$coordinator_data['subject_id']]);
+                                echo htmlspecialchars($subject_info['name'] ?? 'غير محدد');
+                                ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
                 
                 <div>
                     <label for="teacher_id" class="block mb-1">المعلم</label>

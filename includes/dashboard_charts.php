@@ -41,7 +41,9 @@ $domain_labels = [];
 $domain_scores = [];
 foreach ($domains_performance_data as $domain) {
     $domain_labels[] = $domain['domain_name'];
-    $domain_scores[] = number_format($domain['avg_score'], 1);
+    // التحقق من أن القيمة ليست null قبل التنسيق
+    $score = $domain['avg_score'] !== null ? (float)$domain['avg_score'] : 0;
+    $domain_scores[] = number_format($score, 1);
 }
 
 $domains_chart_data = [
@@ -142,7 +144,9 @@ foreach ($performance_over_time_data as $item) {
     $month_parts = explode('-', $item['month']);
     $month_num = $month_parts[1] ?? '01';
     $month_labels[] = $month_names[$month_num] . ' ' . ($month_parts[0] ?? '');
-    $month_scores[] = number_format($item['avg_score'], 1);
+    // التحقق من أن القيمة ليست null قبل التنسيق
+    $score = $item['avg_score'] !== null ? (float)$item['avg_score'] : 0;
+    $month_scores[] = number_format($score, 1);
 }
 
 $performance_over_time_chart_data = [
@@ -195,7 +199,9 @@ $i = 0;
 
 foreach ($level_performance_data as $level) {
     $level_labels[] = $level['level_name'];
-    $level_scores[] = number_format($level['avg_score'], 1);
+    // التحقق من أن القيمة ليست null قبل التنسيق
+    $score = $level['avg_score'] !== null ? (float)$level['avg_score'] : 0;
+    $level_scores[] = number_format($score, 1);
 }
 
 $level_chart_data = [
@@ -247,7 +253,9 @@ foreach ($weak_indicators_data as $indicator) {
         $name = mb_substr($name, 0, 40) . '...';
     }
     $indicator_labels[] = $name;
-    $indicator_scores[] = number_format($indicator['avg_score'], 1);
+    // التحقق من أن القيمة ليست null قبل التنسيق
+    $score = $indicator['avg_score'] !== null ? (float)$indicator['avg_score'] : 0;
+    $indicator_scores[] = number_format($score, 1);
     $indicator_counts[] = $indicator['teacher_count'];
 }
 

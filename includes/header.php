@@ -152,9 +152,20 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
             <nav class="hidden md:flex space-x-6 space-x-reverse">
                 <a href="index.php" class="hover:text-primary-200 <?= $current_page == 'index.php' ? 'border-b-2 border-white' : '' ?>">الرئيسية</a>
                 <a href="visits.php" class="hover:text-primary-200 <?= $current_page == 'visits.php' ? 'border-b-2 border-white' : '' ?>">الزيارات الصفية</a>
-                <a href="evaluation_form.php" class="hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'border-b-2 border-white' : '' ?>">زيارة جديدة</a>
                 
-                <!-- قائمة الإدارة -->
+                <?php 
+                $user_role = $_SESSION['role_name'] ?? '';
+                $is_coordinator = ($user_role === 'Subject Coordinator');
+                $is_teacher = ($user_role === 'Teacher');
+                
+                // إخفاء "زيارة جديدة" عن المعلمين
+                if (!$is_teacher): 
+                ?>
+                <a href="evaluation_form.php" class="hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'border-b-2 border-white' : '' ?>">زيارة جديدة</a>
+                <?php endif; ?>
+                
+                <!-- قائمة الإدارة - مخفية عن المنسقين والمعلمين -->
+                <?php if (!$is_coordinator && !$is_teacher): ?>
                 <div class="relative group">
                     <button class="hover:text-primary-200 <?= in_array($current_page, ['users_management.php', 'teachers_management.php', 'subjects_management.php', 'sections_management.php', 'school_settings.php']) ? 'border-b-2 border-white' : '' ?>">
                         الإدارة
@@ -170,6 +181,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                         <a href="recommendations_management.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-lightbulb mr-2"></i>إدارة التوصيات</a>
                     </div>
                 </div>
+                <?php endif; ?>
                 
                 <!-- قائمة الاحتياجات التدريبية -->
                 <div class="relative group">
@@ -179,12 +191,15 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                     </button>
                     <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-10">
                         <a href="training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">احتياجات المعلمين</a>
+                        <?php if (!$is_teacher): ?>
                         <a href="collective_training_needs.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">الاحتياجات الجماعية</a>
+                        <?php endif; ?>
                         <a href="expert_trainers.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">المدربين المؤهلين</a>
                     </div>
                 </div>
                 
-                <!-- قائمة التقارير -->
+                <!-- قائمة التقارير - مخفية عن المعلمين -->
+                <?php if (!$is_teacher): ?>
                 <div class="relative group reports-dropdown">
                     <button class="hover:text-primary-200 <?= in_array($current_page, ['class_performance_report.php', 'grades_performance_report.php', 'teacher_report.php', 'subject_performance_report.php']) ? 'border-b-2 border-white' : '' ?>">
                         التقارير
@@ -197,6 +212,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                         <a href="sections_reports.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">تقرير أداء الشعب</a>
                     </div>
                 </div>
+                <?php endif; ?>
             </nav>
             
             <!-- قسم المستخدم -->
@@ -214,11 +230,11 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                             <p class="text-sm font-medium text-gray-900"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></p>
                             <p class="text-xs text-gray-500"><?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
                         </div>
-                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                        <a href="profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             <i class="fas fa-user-edit ml-2"></i>الملف الشخصي
                         </a>
-                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                            <i class="fas fa-cog ml-2"></i>الإعدادات
+                        <a href="site_settings.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <i class="fas fa-cog ml-2"></i>إعدادات الموقع
                         </a>
                         <div class="border-t border-gray-200"></div>
                         <a href="logout.php" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">
@@ -247,11 +263,11 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                     </div>
                 </div>
                 <div class="mt-2 space-y-1">
-                    <a href="#" class="block py-2 text-sm text-primary-200 hover:text-white">
+                    <a href="profile.php" class="block py-2 text-sm text-primary-200 hover:text-white">
                         <i class="fas fa-user-edit ml-2"></i>الملف الشخصي
                     </a>
-                    <a href="#" class="block py-2 text-sm text-primary-200 hover:text-white">
-                        <i class="fas fa-cog ml-2"></i>الإعدادات
+                    <a href="site_settings.php" class="block py-2 text-sm text-primary-200 hover:text-white">
+                        <i class="fas fa-cog ml-2"></i>إعدادات الموقع
                     </a>
                     <a href="logout.php" class="block py-2 text-sm text-red-300 hover:text-red-100">
                         <i class="fas fa-sign-out-alt ml-2"></i>تسجيل الخروج
@@ -262,6 +278,8 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
             <a href="index.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'index.php' ? 'font-bold' : '' ?>">الرئيسية</a>
             <a href="visits.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'visits.php' ? 'font-bold' : '' ?>">الزيارات الصفية</a>
             <a href="evaluation_form.php" class="block py-2 hover:text-primary-200 <?= $current_page == 'evaluation_form.php' ? 'font-bold' : '' ?>">زيارة جديدة</a>
+            
+            <?php if (!$is_coordinator): ?>
             <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">الإدارة <i class="fas fa-caret-down mr-1"></i></a>
             <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
                 <a href="users_management.php" class="block py-1 hover:text-primary-200">إدارة المستخدمين</a>
@@ -272,6 +290,8 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                 <a href="academic_years_management.php" class="block py-1 hover:text-primary-200">إدارة الأعوام الدراسية</a>
                 <a href="add_recommendations.php" class="block py-1 hover:text-primary-200">إضافة توصيات</a>
             </div>
+            <?php endif; ?>
+            
             <a href="#" class="block py-2 hover:text-primary-200 mobile-submenu-toggle">الاحتياجات التدريبية <i class="fas fa-caret-down mr-1"></i></a>
             <div class="hidden mobile-submenu bg-primary-800 p-2 rounded mt-1 mb-2">
                 <a href="training_needs.php" class="block py-1 hover:text-primary-200">احتياجات المعلمين</a>

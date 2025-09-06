@@ -5,6 +5,10 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - للمديرين فقط
+protect_page(['Admin', 'Director', 'Academic Deputy']);
 
 // تعيين عنوان الصفحة
 $page_title = 'إدارة الأعوام الدراسية';

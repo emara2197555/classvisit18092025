@@ -4,8 +4,13 @@
  */
 
 // تضمين ملف الاتصال بقاعدة البيانات
-require_once '../includes/db_connection.php';
-require_once '../includes/auth_functions.php';
+if (file_exists('../includes/db_connection.php')) {
+    require_once '../includes/db_connection.php';
+    require_once '../includes/auth_functions.php';
+} else {
+    require_once 'includes/db_connection.php';
+    require_once 'includes/auth_functions.php';
+}
 
 // بدء الجلسة للتحقق من صلاحيات المستخدم
 session_start();
@@ -44,13 +49,7 @@ try {
     
     switch ($visitor_type['name']) {
         case 'مدير المدرسة':
-            $job_title = 'مدير';
-            if ($school_id) {
-                $additional_condition = "AND school_id = ?";
-                $params[] = $school_id;
-            }
-            break;
-        case 'المدير':
+        case 'مدير':
             $job_title = 'مدير';
             if ($school_id) {
                 $additional_condition = "AND school_id = ?";
@@ -58,6 +57,7 @@ try {
             }
             break;
         case 'نائب المدير للشؤون الأكاديمية':
+        case 'النائب الأكاديمي':
             $job_title = 'النائب الأكاديمي';
             if ($school_id) {
                 $additional_condition = "AND school_id = ?";
@@ -68,12 +68,18 @@ try {
             $job_title = 'منسق المادة';
             
             // إذا كان المستخدم الحالي منسق مادة، فقط يستطيع رؤية نفسه
-            if ($current_user_role === 'Subject Coordinator') {
-                $visitors = query("
-                    SELECT id, name 
-                    FROM teachers 
-                    WHERE id = ? AND job_title = ?
-                ", [$current_user_id, $job_title]);
+            if ($current_user_role === 'Subject Coordinator' && $current_user_id) {
+                // البحث عن بيانات المستخدم بالاسم الكامل
+                $user_info = query_row("SELECT full_name FROM users WHERE id = ?", [$current_user_id]);
+                if ($user_info) {
+                    $visitors = query("
+                        SELECT id, name 
+                        FROM teachers 
+                        WHERE name LIKE ? AND job_title = ?
+                    ", ['%' . $user_info['full_name'] . '%', $job_title]);
+                } else {
+                    $visitors = [];
+                }
                 
                 header('Content-Type: application/json');
                 echo json_encode([
@@ -85,7 +91,7 @@ try {
             }
             
             if ($subject_id) {
-                // للمنسق نتحقق من وجود المادة المحددة
+                // للمديرين والمشرفين نتحقق من وجود المادة المحددة
                 $sql = "
                     SELECT t.id, t.name 
                     FROM teachers t
@@ -98,6 +104,25 @@ try {
                 } else {
                     $visitors = query($sql, [$job_title, $subject_id]);
                 }
+                
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'message' => '',
+                    'visitors' => $visitors
+                ]);
+                exit;
+            } else {
+                // إذا لم تكن المادة محددة، نجلب جميع منسقي المواد في المدرسة
+                $sql = "SELECT t.id, t.name FROM teachers t WHERE t.job_title = ?";
+                $params = [$job_title];
+                
+                if ($school_id) {
+                    $sql .= " AND t.school_id = ?";
+                    $params[] = $school_id;
+                }
+                
+                $visitors = query($sql, $params);
                 
                 header('Content-Type: application/json');
                 echo json_encode([
@@ -150,6 +175,18 @@ try {
                     WHERE t.job_title = ? AND ts.subject_id = ?";
                 
                 $visitors = query($sql, [$job_title, $subject_id]);
+                
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'message' => '',
+                    'visitors' => $visitors
+                ]);
+                exit;
+            } else {
+                // إذا لم تكن المادة محددة، نجلب جميع موجهي المواد
+                $sql = "SELECT DISTINCT t.id, t.name FROM teachers t WHERE t.job_title = ? ORDER BY t.name";
+                $visitors = query($sql, [$job_title]);
                 
                 header('Content-Type: application/json');
                 echo json_encode([

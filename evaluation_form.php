@@ -62,15 +62,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
                 throw new Exception("لا يُسمح لمنسق المادة بإنشاء زيارات إلا لمادته المخصصة.");
             }
             
-            // التحقق من أن الزائر هو منسق المادة نفسه أو موجه مادته
+            // التحقق من أن الزائر والمعلم مناسبان لمنسق المادة
             $visitor_allowed = false;
+            $teacher_allowed = false;
+            
+            // التحقق من أن المعلم يُدرس المادة التي يُنسقها المستخدم الحالي
+            $teacher_check = query_row("
+                SELECT t.id 
+                FROM teachers t
+                JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                WHERE t.id = ? AND ts.subject_id = ?
+            ", [$teacher_id, $coordinator_data['subject_id']]);
+            
+            if ($teacher_check) {
+                $teacher_allowed = true;
+            }
             
             // التحقق من نوع الزائر
             $visitor_type = query_row("SELECT name FROM visitor_types WHERE id = ?", [$visitor_type_id]);
             
             if ($visitor_type) {
-                if ($visitor_type['name'] === 'منسق المادة' && $visitor_person_id == $current_user_id) {
-                    $visitor_allowed = true;
+                if ($visitor_type['name'] === 'منسق المادة') {
+                    // التحقق من أن المنسق الزائر يُدرس نفس المادة
+                    $coordinator_visitor_check = query_row("
+                        SELECT t.id 
+                        FROM teachers t
+                        JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                        WHERE t.id = ? AND t.job_title = 'منسق المادة' AND ts.subject_id = ?
+                    ", [$visitor_person_id, $coordinator_data['subject_id']]);
+                    
+                    if ($coordinator_visitor_check) {
+                        $visitor_allowed = true;
+                    }
                 } elseif ($visitor_type['name'] === 'موجه المادة') {
                     // التحقق من أن الموجه يُدرس نفس المادة
                     $supervisor_check = query_row("
@@ -87,7 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
             }
             
             if (!$visitor_allowed) {
-                throw new Exception("منسق المادة يُسمح له فقط بإنشاء زيارات لنفسه أو لموجه مادته.");
+                throw new Exception("الزائر المختار غير مناسب. منسق المادة يُسمح له بإنشاء زيارات لمنسقي مادته أو لموجهي مادته فقط.");
+            }
+            
+            if (!$teacher_allowed) {
+                throw new Exception("المعلم المختار خارج نطاق مادتك. منسق المادة يُسمح له فقط بزيارة المعلمين في مادته.");
             }
         }
         
@@ -202,7 +229,7 @@ try {
         // منسق المادة يرى نفسه والموجه فقط
         $visitor_types = query("
             SELECT * FROM visitor_types 
-            WHERE name IN ('منسق المادة', 'الموجه', 'Subject Coordinator', 'Supervisor') 
+            WHERE name IN ('منسق المادة', 'موجه المادة') 
             ORDER BY name
         ");
     } else {
@@ -262,7 +289,7 @@ try {
             <!-- نوع الزائر -->
             <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
                 <label class="block mb-3 font-bold text-gray-800 text-sm">نوع الزائر:</label>
-                <select id="visitor-type" name="visitor_type_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="updateVisitorName()">
+                <select id="visitor-type" name="visitor_type_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
                     <option value="">اختر نوع الزائر...</option>
                     <?php foreach ($visitor_types as $type): ?>
                         <option value="<?= $type['id'] ?>"><?= htmlspecialchars($type['name']) ?></option>
@@ -1100,9 +1127,21 @@ function loadTeachers() {
             if (isSupervisor && subjectSelect.value) {
                 // جلب منسق المادة
                 fetch(`includes/get_subject_coordinator.php?subject_id=${subjectSelect.value}&school_id=${schoolId}`)
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
                     .then(coordinators => {
-                        if (coordinators.length > 0) {
+                        // التحقق من وجود خطأ في الاستجابة
+                        if (coordinators.error) {
+                            console.error('Coordinator API error:', coordinators.error);
+                            throw new Error(coordinators.error);
+                        }
+                        
+                        // التحقق من أن coordinators مصفوفة
+                        if (Array.isArray(coordinators) && coordinators.length > 0) {
                             // إضافة منسقي المادة إلى القائمة
                             coordinators.forEach(coord => {
                                 let option = document.createElement('option');
@@ -1118,6 +1157,8 @@ function loadTeachers() {
                                 separator.textContent = '---------------------';
                                 teacherSelect.appendChild(separator);
                             }
+                        } else {
+                            console.log('No coordinators found for subject:', subjectSelect.value);
                         }
                         
                         // إضافة المعلمين إلى القائمة

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>اختبار API منسق المادة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h2 class="text-2xl font-bold mb-6">اختبار API منسق المادة</h2>
+        
+        <div class="mb-4">
+            <label class="block mb-2">المدرسة:</label>
+            <select id="school" class="w-full border border-gray-300 p-2 rounded">
+                <option value="">اختر المدرسة</option>
+                <option value="1">مدرسة 1</option>
+                <option value="2">مدرسة 2</option>
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">المادة:</label>
+            <select id="subject" class="w-full border border-gray-300 p-2 rounded">
+                <option value="">اختر المادة</option>
+                <option value="1">اللغة العربية</option>
+                <option value="2">لغة انجليزية</option>
+                <option value="3">رياضيات</option>
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">نوع الزائر:</label>
+            <select id="visitor-type" class="w-full border border-gray-300 p-2 rounded">
+                <option value="">اختر نوع الزائر</option>
+                <option value="15">منسق المادة</option>
+                <option value="16">موجه المادة</option>
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">اسم الزائر:</label>
+            <div id="visitor-name" class="min-h-12 border border-gray-300 p-2 rounded bg-gray-50">
+                اختر نوع الزائر أولاً...
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <button onclick="testAPI()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                اختبار API مباشرة
+            </button>
+        </div>
+        
+        <div id="debug-output" class="mt-4 p-4 bg-gray-100 rounded text-sm"></div>
+    </div>
+
+    <script>
+        document.getElementById('visitor-type').addEventListener('change', updateVisitorName);
+        document.getElementById('school').addEventListener('change', updateVisitorName);
+        document.getElementById('subject').addEventListener('change', updateVisitorName);
+
+        function updateVisitorName() {
+            const visitorTypeSelect = document.getElementById('visitor-type');
+            const visitorNameDiv = document.getElementById('visitor-name');
+            const subjectSelect = document.getElementById('subject');
+            const schoolSelect = document.getElementById('school');
+            
+            if (visitorTypeSelect.value) {
+                let apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
+                
+                if (subjectSelect.value) {
+                    apiUrl += `&subject_id=${subjectSelect.value}`;
+                }
+                
+                if (schoolSelect.value) {
+                    apiUrl += `&school_id=${schoolSelect.value}`;
+                }
+                
+                console.log('API URL:', apiUrl);
+                
+                fetch(apiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('API Response:', data);
+                        
+                        if (data.success && data.visitors.length > 0) {
+                            let select = document.createElement('select');
+                            select.className = 'w-full border border-gray-300 p-2 rounded';
+                            
+                            let defaultOption = document.createElement('option');
+                            defaultOption.value = '';
+                            defaultOption.textContent = 'اختر الزائر...';
+                            select.appendChild(defaultOption);
+                            
+                            data.visitors.forEach(visitor => {
+                                let option = document.createElement('option');
+                                option.value = visitor.id;
+                                option.textContent = visitor.name;
+                                select.appendChild(option);
+                            });
+                            
+                            visitorNameDiv.innerHTML = '';
+                            visitorNameDiv.appendChild(select);
+                        } else {
+                            visitorNameDiv.innerHTML = '<p class="text-red-500">لا يوجد زوار من هذا النوع</p>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        visitorNameDiv.innerHTML = '<p class="text-red-500">خطأ في جلب البيانات</p>';
+                    });
+            }
+        }
+        
+        function testAPI() {
+            const visitorTypeSelect = document.getElementById('visitor-type');
+            const subjectSelect = document.getElementById('subject');
+            const schoolSelect = document.getElementById('school');
+            const debugOutput = document.getElementById('debug-output');
+            
+            let apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
+            
+            if (subjectSelect.value) {
+                apiUrl += `&subject_id=${subjectSelect.value}`;
+            }
+            
+            if (schoolSelect.value) {
+                apiUrl += `&school_id=${schoolSelect.value}`;
+            }
+            
+            debugOutput.innerHTML = `<strong>جاري الاختبار...</strong><br>URL: ${apiUrl}`;
+            
+            fetch(apiUrl)
+                .then(response => response.text())
+                .then(text => {
+                    debugOutput.innerHTML = `<strong>الاستجابة النصية:</strong><br><pre>${text}</pre>`;
+                    return JSON.parse(text);
+                })
+                .then(data => {
+                    debugOutput.innerHTML += `<br><strong>البيانات المحللة:</strong><br><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                })
+                .catch(error => {
+                    debugOutput.innerHTML += `<br><strong>خطأ:</strong><br><pre>${error}</pre>`;
+                });
+        }
+    </script>
+</body>
+</html>

@@ -67,10 +67,27 @@ function authenticate_user($username, $password) {
         $_SESSION['teacher_id'] = null;
     }
     
-    // لمنسقي المواد: الحصول على معرف المادة
+    // لمنسقي المواد: الحصول على معرف المادة والتأكد من معرف المدرسة
     if ($user['role_name'] === 'Subject Coordinator') {
         $coordinator_data = query_row("SELECT subject_id FROM coordinator_supervisors WHERE user_id = ?", [$user['id']]);
         $_SESSION['subject_id'] = $coordinator_data ? $coordinator_data['subject_id'] : null;
+        
+        // التأكد من وجود معرف المدرسة للمنسق
+        if (!$user['school_id']) {
+            // محاولة الحصول على معرف المدرسة من بيانات المنسق أو تعيين قيمة افتراضية
+            $school_data = query_row("
+                SELECT DISTINCT t.school_id 
+                FROM coordinator_supervisors cs 
+                INNER JOIN teacher_subjects ts ON cs.subject_id = ts.subject_id 
+                INNER JOIN teachers t ON ts.teacher_id = t.id 
+                WHERE cs.user_id = ? 
+                LIMIT 1
+            ", [$user['id']]);
+            
+            if ($school_data && $school_data['school_id']) {
+                $_SESSION['school_id'] = $school_data['school_id'];
+            }
+        }
     } else {
         $_SESSION['subject_id'] = null;
     }
@@ -289,17 +306,29 @@ function get_coordinator_supervisors($coordinator_id = null) {
         $coordinator_id = $_SESSION['user_id'] ?? 0;
     }
     
-    if (!is_logged_in() || $_SESSION['role_name'] !== 'coordinator') {
+    if (!is_logged_in() || $_SESSION['role_name'] !== 'Subject Coordinator') {
         return [];
     }
     
-    $sql = "SELECT vt.*, cs.subject_id 
-            FROM coordinator_supervisors cs
-            INNER JOIN visitor_types vt ON cs.supervisor_id = vt.id
-            WHERE cs.coordinator_id = ?
+    // الحصول على معرف المادة للمنسق إما من الجلسة أو من جدول coordinator_supervisors
+    $subject_id = $_SESSION['subject_id'] ?? null;
+    
+    if (!$subject_id) {
+        $coordinator_data = query_row("SELECT subject_id FROM coordinator_supervisors WHERE user_id = ?", [$coordinator_id]);
+        
+        if (!$coordinator_data) {
+            return [];
+        }
+        
+        $subject_id = $coordinator_data['subject_id'];
+    }
+    
+    // الحصول على الموجهين المتاحين لهذه المادة
+    $sql = "SELECT vt.* 
+            FROM visitor_types vt 
             ORDER BY vt.name";
     
-    return query($sql, [$coordinator_id]);
+    return query($sql);
 }
 
 /**
@@ -387,8 +416,8 @@ function create_user($user_data) {
     $password_hash = password_hash($user_data['password'], PASSWORD_DEFAULT);
     
     // إدراج المستخدم الجديد
-    $sql = "INSERT INTO users (username, email, password_hash, full_name, role_id, school_id, subject_id, teacher_id, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO users (username, email, password_hash, full_name, role_id, school_id, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)";
     
     $params = [
         $user_data['username'],
@@ -397,8 +426,6 @@ function create_user($user_data) {
         $user_data['full_name'],
         $user_data['role_id'],
         $user_data['school_id'] ?? null,
-        $user_data['subject_id'] ?? null,
-        $user_data['teacher_id'] ?? null,
         $user_data['is_active'] ?? 1
     ];
     
@@ -462,7 +489,7 @@ function update_user($user_id, $user_data) {
         
         // تحديث كلمة المرور إذا تم توفيرها
         if (isset($user_data['password']) && !empty($user_data['password'])) {
-            $fields[] = "password = ?";
+            $fields[] = "password_hash = ?";
             $params[] = password_hash($user_data['password'], PASSWORD_DEFAULT);
         }
         

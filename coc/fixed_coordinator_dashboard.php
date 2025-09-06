@@ -1,0 +1,302 @@
+<?php
+/**
+ * لوحة تحكم المنسق
+ */
+
+// تضمين ملفات النظام
+require_once 'includes/auth_functions.php';
+require_once 'includes/functions.php';
+
+// حماية الصفحة للمنسقين فقط
+protect_page(['Subject Coordinator']);
+
+// تعيين عنوان الصفحة
+$page_title = 'لوحة تحكم المنسق - نظام الزيارات الصفية';
+
+// الحصول على بيانات المنسق
+$coordinator_id = $_SESSION['user_id'];
+$coordinator_name = $_SESSION['full_name'];
+$subject_id = $_SESSION['subject_id'];
+$school_id = $_SESSION['school_id'];
+
+// الحصول على اسم المادة
+$subject = query_row("SELECT name FROM subjects WHERE id = ?", [$subject_id]);
+$subject_name = $subject['name'] ?? 'غير محدد';
+
+// الحصول على اسم المدرسة
+$school = query_row("SELECT name FROM schools WHERE id = ?", [$school_id]);
+$school_name = $school['name'] ?? 'غير محدد';
+
+// إحصائيات سريعة للمنسق
+$stats = [];
+
+// عدد المعلمين في المادة (باستثناء المنسقين والموجهين)
+$teachers_count = query_row("
+    SELECT COUNT(*) as count 
+    FROM teacher_subjects ts 
+    INNER JOIN teachers t ON ts.teacher_id = t.id
+    INNER JOIN users u ON t.user_id = u.id
+    INNER JOIN user_roles r ON u.role_id = r.id
+    WHERE ts.subject_id = ? AND t.school_id = ?
+    AND r.name NOT IN ('Subject Coordinator', 'Subject Supervisor')
+", [$subject_id, $school_id]);
+$stats['teachers_count'] = $teachers_count['count'];
+
+// عدد الزيارات هذا الشهر للمادة
+$visits_this_month = query_row("
+    SELECT COUNT(*) as count 
+    FROM visits v 
+    WHERE v.subject_id = ? 
+    AND v.school_id = ? 
+    AND MONTH(v.visit_date) = MONTH(CURRENT_DATE()) 
+    AND YEAR(v.visit_date) = YEAR(CURRENT_DATE())
+", [$subject_id, $school_id]);
+$stats['visits_this_month'] = $visits_this_month['count'];
+
+// متوسط الأداء للمادة
+$avg_performance = query_row("
+    SELECT AVG(visit_scores.avg_score) as avg_score
+    FROM visits v
+    INNER JOIN (
+        SELECT ve.visit_id, AVG(ve.score) as avg_score
+        FROM visit_evaluations ve
+        GROUP BY ve.visit_id
+    ) visit_scores ON v.id = visit_scores.visit_id
+    WHERE v.subject_id = ? AND v.school_id = ?
+", [$subject_id, $school_id]);
+$stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
+
+// الزيارات الأخيرة للمادة
+$recent_visits = query("
+    SELECT v.*, t.name as teacher_name, vt.name as visitor_type_name,
+           AVG(ve.score) as avg_score
+    FROM visits v
+    LEFT JOIN teachers t ON v.teacher_id = t.id
+    LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
+    LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
+    WHERE v.subject_id = ? AND v.school_id = ?
+    GROUP BY v.id
+    ORDER BY v.visit_date DESC, v.created_at DESC
+    LIMIT 10
+", [$subject_id, $school_id]);
+
+// معلمي المادة وأدائهم (باستثناء المنسقين والموجهين)
+$teachers_performance = query("
+    SELECT t.id, t.name, 
+           COUNT(DISTINCT v.id) as visits_count,
+           AVG(visit_scores.avg_score) as avg_score
+    FROM teachers t
+    INNER JOIN teacher_subjects ts ON t.id = ts.teacher_id
+    INNER JOIN users u ON t.user_id = u.id
+    INNER JOIN user_roles r ON u.role_id = r.id
+    LEFT JOIN visits v ON t.id = v.teacher_id AND v.subject_id = ?
+    LEFT JOIN (
+        SELECT ve.visit_id, AVG(ve.score) as avg_score
+        FROM visit_evaluations ve
+        GROUP BY ve.visit_id
+    ) visit_scores ON v.id = visit_scores.visit_id
+    WHERE ts.subject_id = ? AND t.school_id = ?
+    AND r.name NOT IN ('Subject Coordinator', 'Subject Supervisor')
+    GROUP BY t.id, t.name
+    ORDER BY avg_score DESC
+", [$subject_id, $subject_id, $school_id]);
+
+// الموجهين المخصصين للمنسق
+$supervisors = get_coordinator_supervisors($coordinator_id);
+
+// تضمين ملف رأس الصفحة
+require_once 'includes/header.php';
+?>
+
+<!-- قسم الترويسة والملخص -->
+<div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl shadow-lg p-6 mb-6">
+    <div class="flex flex-col md:flex-row justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold mb-2">
+                <i class="fas fa-user-tie ml-3"></i>
+                مرحباً، <?= htmlspecialchars($coordinator_name) ?>
+            </h1>
+            <p class="text-purple-100">منسق مادة <?= htmlspecialchars($subject_name) ?> - <?= htmlspecialchars($school_name) ?></p>
+        </div>
+        <div class="mt-4 md:mt-0 flex space-x-4 space-x-reverse">
+            <a href="evaluation_form.php" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-3 rounded-lg font-semibold transition duration-200">
+                <i class="fas fa-plus ml-2"></i>
+                زيارة جديدة
+            </a>
+            <a href="logout.php" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold transition duration-200">
+                <i class="fas fa-sign-out-alt ml-2"></i>
+                تسجيل الخروج
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- الإحصائيات السريعة -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <!-- عدد المعلمين -->
+    <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">معلمي المادة</h3>
+                <p class="text-3xl font-bold"><?= $stats['teachers_count'] ?></p>
+                <p class="text-blue-200 text-sm mt-1">معلم في مادتك</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-users text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- الزيارات هذا الشهر -->
+    <div class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">زيارات الشهر</h3>
+                <p class="text-3xl font-bold"><?= $stats['visits_this_month'] ?></p>
+                <p class="text-green-200 text-sm mt-1">زيارة هذا الشهر</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-calendar-check text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- متوسط الأداء -->
+    <div class="bg-gradient-to-br from-orange-500 to-red-500 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">متوسط الأداء</h3>
+                <p class="text-3xl font-bold"><?= $stats['avg_performance'] ?>%</p>
+                <p class="text-orange-200 text-sm mt-1">للمادة بشكل عام</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-chart-line text-2xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- المحتوى الرئيسي -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    
+    <!-- أداء المعلمين -->
+    <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <i class="fas fa-chart-bar text-blue-600 ml-3"></i>
+            أداء معلمي المادة
+        </h2>
+        
+        <div class="space-y-4">
+            <?php if (empty($teachers_performance)): ?>
+                <p class="text-gray-500 text-center py-8">لا توجد بيانات متاحة</p>
+            <?php else: ?>
+                <?php foreach ($teachers_performance as $teacher): ?>
+                    <div class="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="font-semibold text-gray-800"><?= htmlspecialchars($teacher['name']) ?></h4>
+                                <p class="text-sm text-gray-600"><?= $teacher['visits_count'] ?> زيارة</p>
+                            </div>
+                            <div class="text-left">
+                                <?php 
+                                $score = $teacher['avg_score'] ? round(($teacher['avg_score'] / 3) * 100, 1) : 0;
+                                $color = $score >= 80 ? 'green' : ($score >= 60 ? 'yellow' : 'red');
+                                ?>
+                                <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
+                                    <?= $score ?>%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        
+        <div class="mt-4 text-left">
+            <a href="teacher_report.php?subject_id=<?= $subject_id ?>" class="text-blue-600 hover:text-blue-800 font-medium">
+                عرض التقرير المفصل
+                <i class="fas fa-arrow-left mr-2"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- الزيارات الأخيرة -->
+    <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <i class="fas fa-history text-purple-600 ml-3"></i>
+            الزيارات الأخيرة
+        </h2>
+        
+        <div class="space-y-4">
+            <?php if (empty($recent_visits)): ?>
+                <p class="text-gray-500 text-center py-8">لا توجد زيارات حديثة</p>
+            <?php else: ?>
+                <?php foreach (array_slice($recent_visits, 0, 5) as $visit): ?>
+                    <div class="border-r-4 border-purple-500 bg-purple-50 p-4 rounded-lg">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-semibold text-gray-800"><?= htmlspecialchars($visit['teacher_name']) ?></h4>
+                                <p class="text-sm text-gray-600">الزائر: <?= htmlspecialchars($visit['visitor_type_name']) ?></p>
+                                <p class="text-xs text-gray-500"><?= format_date_ar($visit['visit_date']) ?></p>
+                            </div>
+                            <?php if ($visit['avg_score']): ?>
+                                <div class="text-left">
+                                    <?php 
+                                    $total_score = $visit['avg_score'];
+                                    $color = $total_score >= 2.4 ? 'green' : ($total_score >= 1.8 ? 'yellow' : 'red');
+                                    $percentage = ($total_score / 3) * 100; // تحويل النتيجة من 3 إلى نسبة مئوية
+                                    ?>
+                                    <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-2 py-1 rounded text-xs font-semibold">
+                                        <?= round($percentage, 1) ?>%
+                                    </span>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        
+        <div class="mt-4 text-left">
+            <a href="visits.php?subject_id=<?= $subject_id ?>" class="text-purple-600 hover:text-purple-800 font-medium">
+                عرض جميع الزيارات
+                <i class="fas fa-arrow-left mr-2"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- قسم الروابط السريعة -->
+<div class="mt-8 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl p-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+        <i class="fas fa-link text-gray-600 ml-3"></i>
+        الروابط السريعة
+    </h2>
+    
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="evaluation_form.php" class="bg-white hover:bg-gray-50 p-4 rounded-lg text-center transition shadow">
+            <i class="fas fa-plus text-green-600 text-2xl mb-2"></i>
+            <p class="font-semibold text-gray-800">زيارة جديدة</p>
+        </a>
+        
+        <a href="visits.php?subject_id=<?= $subject_id ?>" class="bg-white hover:bg-gray-50 p-4 rounded-lg text-center transition shadow">
+            <i class="fas fa-list text-blue-600 text-2xl mb-2"></i>
+            <p class="font-semibold text-gray-800">جميع الزيارات</p>
+        </a>
+        
+        <a href="training_needs.php?subject_id=<?= $subject_id ?>" class="bg-white hover:bg-gray-50 p-4 rounded-lg text-center transition shadow">
+            <i class="fas fa-chart-line text-purple-600 text-2xl mb-2"></i>
+            <p class="font-semibold text-gray-800">الاحتياجات التدريبية</p>
+        </a>
+        
+        <a href="teachers_management.php?subject_id=<?= $subject_id ?>" class="bg-white hover:bg-gray-50 p-4 rounded-lg text-center transition shadow">
+            <i class="fas fa-users text-orange-600 text-2xl mb-2"></i>
+            <p class="font-semibold text-gray-800">إدارة المعلمين</p>
+        </a>
+    </div>
+</div>
+
+<?php
+// تضمين ملف ذيل الصفحة
+require_once 'includes/footer.php';
+?>

@@ -5,6 +5,10 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة
+protect_page();
 
 // تعيين عنوان الصفحة
 $page_title = 'الاحتياجات التدريبية الجماعية';
@@ -86,20 +90,60 @@ if (!isset($_SESSION['selected_academic_year'])) {
 
 // جلب المعلومات من النموذج
 $academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : $_SESSION['selected_academic_year'];
-$school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
-$subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
+
+// تحديد البيانات بناءً على دور المستخدم
+$user_role = $_SESSION['role_name'] ?? '';
+$is_coordinator = ($user_role === 'Subject Coordinator');
+$coordinator_subject_id = null;
+$coordinator_school_id = null;
+
+if ($is_coordinator) {
+    // جلب معلومات المنسق
+    $coordinator = query("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs
+        JOIN users u ON cs.user_id = u.id
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if (!empty($coordinator)) {
+        $coordinator_subject_id = $coordinator[0]['subject_id'];
+        $coordinator_school_id = $coordinator[0]['school_id'];
+    }
+}
+
+$school_id = $is_coordinator ? $coordinator_school_id : (isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0);
+$subject_id = $is_coordinator ? $coordinator_subject_id : (isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0);
+
+// للمنسق: تحديد المادة تلقائياً إذا لم تكن محددة في الرابط
+if ($is_coordinator && $coordinator_subject_id && !isset($_GET['subject_id'])) {
+    $subject_id = $coordinator_subject_id;
+    $school_id = $coordinator_school_id;
+}
+
 $semester = isset($_GET['semester']) ? $_GET['semester'] : null;
 $visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id'] : 0;
 
 // جلب قائمة الأعوام الأكاديمية
 $academic_years = query("SELECT * FROM academic_years ORDER BY is_current DESC, name DESC");
 
-// جلب قائمة المدارس
-$schools = query("SELECT * FROM schools ORDER BY name");
+// جلب قائمة المدارس (للمديرين فقط)
+$schools = [];
+if (!$is_coordinator) {
+    $schools = query("SELECT * FROM schools ORDER BY name");
+}
 
 // جلب قائمة المواد حسب المدرسة
 $subjects = [];
-if ($school_id > 0) {
+if ($is_coordinator) {
+    // للمنسق: جلب مادته فقط
+    $subjects = query("
+        SELECT s.* 
+        FROM subjects s
+        WHERE s.id = ?
+        ORDER BY s.name
+    ", [$coordinator_subject_id]);
+} elseif ($school_id > 0) {
     $subjects = query("
         SELECT DISTINCT s.* 
         FROM subjects s
@@ -109,15 +153,20 @@ if ($school_id > 0) {
         ORDER BY s.name
     ", [$school_id]);
 } else {
-$subjects = query("SELECT * FROM subjects ORDER BY name");
+    $subjects = query("SELECT * FROM subjects ORDER BY name");
 }
 
 // جلب قائمة أنواع الزائرين
 $visitor_types = query("SELECT * FROM visitor_types ORDER BY id");
 
-// إذا تم اختيار مادة محددة
+// إذا تم اختيار مادة محددة أو إذا كان المستخدم منسقاً
 $teachers_data = [];
 $collective_needs = [];
+
+// للمنسق: استخدام مادته مباشرة
+if ($is_coordinator && $coordinator_subject_id) {
+    $subject_id = $coordinator_subject_id;
+}
 
 if ($subject_id) {
     // بناء شرط الفصل الدراسي (اختياري)
@@ -139,6 +188,13 @@ if ($subject_id) {
         $params[] = $visitor_type_id;
     }
     
+    // بناء شرط المدرسة للمنسق
+    $school_condition = '';
+    if ($is_coordinator && $coordinator_school_id) {
+        $school_condition = "AND t.school_id = ?";
+        $params[] = $coordinator_school_id;
+    }
+    
     // جلب قائمة المعلمين للمادة المحددة
     $teachers_sql = "
         SELECT DISTINCT 
@@ -152,7 +208,7 @@ if ($subject_id) {
         JOIN 
             visits v ON v.teacher_id = t.id
         WHERE 
-            ts.subject_id = ? {$visitor_condition} {$semester_condition}
+            ts.subject_id = ? {$visitor_condition} {$semester_condition} {$school_condition}
         ORDER BY 
             t.name
     ";
@@ -160,6 +216,15 @@ if ($subject_id) {
     $teachers = query($teachers_sql, $params);
     
     // إعداد استعلام لجلب متوسط درجات المؤشرات لجميع المعلمين في المادة المحددة
+    // إعداد المعاملات للاستعلام الثاني
+    $indicators_params = [$subject_id];
+    if ($visitor_type_id) {
+        $indicators_params[] = $visitor_type_id;
+    }
+    if ($is_coordinator && $coordinator_school_id) {
+        $indicators_params[] = $coordinator_school_id;
+    }
+    
     $indicators_sql = "
         SELECT 
             ei.id AS indicator_id,
@@ -178,8 +243,10 @@ if ($subject_id) {
             evaluation_domains ed ON ei.domain_id = ed.id
         JOIN 
             teacher_subjects ts ON ts.teacher_id = v.teacher_id
+        JOIN 
+            teachers t ON v.teacher_id = t.id
         WHERE 
-            ts.subject_id = ? {$visitor_condition} {$semester_condition}
+            ts.subject_id = ? {$visitor_condition} {$semester_condition} {$school_condition}
             AND ve.score > 0 -- استثناء المؤشرات غير المقاسة
         GROUP BY 
             ei.id, ei.name, ed.id, ed.name
@@ -187,7 +254,7 @@ if ($subject_id) {
             avg_score ASC
     ";
     
-    $indicators_data = query($indicators_sql, $params);
+    $indicators_data = query($indicators_sql, $indicators_params);
     
     // تجهيز بيانات الاحتياجات التدريبية المشتركة
     foreach ($indicators_data as $indicator) {
@@ -284,6 +351,19 @@ if ($subject_id) {
 ?>
 
 <div class="mb-6">
+    <?php if (isset($_GET['debug']) && $_GET['debug'] == '1'): ?>
+        <div class="bg-yellow-100 p-4 rounded mb-4">
+            <h4>معلومات التشخيص:</h4>
+            <p>المستخدم: <?= $_SESSION['username'] ?? 'غير محدد' ?></p>
+            <p>الدور: <?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
+            <p>هل منسق؟ <?= $is_coordinator ? 'نعم' : 'لا' ?></p>
+            <p>معرف المادة: <?= $coordinator_subject_id ?? 'غير محدد' ?></p>
+            <p>معرف المدرسة: <?= $coordinator_school_id ?? 'غير محدد' ?></p>
+            <p>المادة المحددة حالياً: <?= $subject_id ?? 'غير محدد' ?></p>
+            <p>عدد المواد المتاحة: <?= count($subjects) ?></p>
+        </div>
+    <?php endif; ?>
+    
     <div class="flex justify-between items-center mb-4">
         <h1 class="text-2xl font-bold">الاحتياجات التدريبية الجماعية</h1>
         <a href="expert_trainers.php" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
@@ -293,8 +373,15 @@ if ($subject_id) {
     </div>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <?php if ($is_coordinator): ?>
+            <div class="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+                <strong>مرحباً بك كمنسق مادة!</strong> 
+                أنت تعرض البيانات الخاصة بمادتك فقط.
+            </div>
+        <?php endif; ?>
+        
         <form action="" method="get" class="mb-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-<?= $is_coordinator ? '4' : '6' ?> gap-4 mb-4">
                 <!-- العام الأكاديمي -->
                 <div>
                     <label for="academic_year_id" class="block mb-1">العام الأكاديمي</label>
@@ -307,6 +394,7 @@ if ($subject_id) {
                     </select>
                 </div>
 
+                <?php if (!$is_coordinator): ?>
                 <!-- المدرسة -->
                 <div>
                     <label for="school_id" class="block mb-1">المدرسة</label>
@@ -332,6 +420,29 @@ if ($subject_id) {
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php else: ?>
+                    <!-- عرض المادة للمنسق كمعلومة فقط -->
+                    <div>
+                        <label class="block mb-1">المادة</label>
+                        <div class="w-full p-2 bg-gray-100 border border-gray-300 rounded-md">
+                            <?php 
+                            $coordinator_subject_name = 'غير محددة';
+                            if ($coordinator_subject_id) {
+                                foreach ($subjects as $subject) {
+                                    if ($subject['id'] == $coordinator_subject_id) {
+                                        $coordinator_subject_name = $subject['name'];
+                                        break;
+                                    }
+                                }
+                            }
+                            echo htmlspecialchars($coordinator_subject_name);
+                            ?>
+                        </div>
+                        <!-- حقول مخفية للمنسق -->
+                        <input type="hidden" name="school_id" value="<?= $coordinator_school_id ?>">
+                        <input type="hidden" name="subject_id" value="<?= $coordinator_subject_id ?>">
+                    </div>
+                <?php endif; ?>
                 
                 <!-- نوع الزائر -->
                 <div>

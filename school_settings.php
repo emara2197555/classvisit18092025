@@ -7,6 +7,10 @@
 
 // تضمين ملف الاتصال بقاعدة البيانات
 require_once 'includes/db_connection.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - للمديرين فقط
+protect_page(['Admin', 'Director', 'Academic Deputy']);
 
 // التحقق مما إذا كان النموذج قد تم إرساله
 $success_message = '';

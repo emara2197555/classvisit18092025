@@ -5,10 +5,58 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - إضافة المعلمين للصلاحيات
+protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator', 'Teacher']);
+
+// تحديد البيانات بناءً على دور المستخدم
+$user_role = $_SESSION['role_name'] ?? '';
+$is_coordinator = ($user_role === 'Subject Coordinator');
+$is_teacher = ($user_role === 'Teacher');
 
 // تعيين عنوان الصفحة
-$page_title = 'المعلمين المتميزين المؤهلين للتدريب';
+if ($is_teacher) {
+    $page_title = 'تميزي في التدريب - نقاط قوتك التدريبية';
+} else {
+    $page_title = 'المعلمين المتميزين المؤهلين للتدريب';
+}
 $current_page = 'expert_trainers.php';
+
+$coordinator_subject_id = null;
+$coordinator_school_id = null;
+$current_teacher_id = null;
+
+if ($is_coordinator) {
+    // جلب معلومات المنسق
+    $coordinator = query("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs
+        JOIN users u ON cs.user_id = u.id
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if (!empty($coordinator)) {
+        $coordinator_subject_id = $coordinator[0]['subject_id'];
+        $coordinator_school_id = $coordinator[0]['school_id'];
+    }
+} elseif ($is_teacher) {
+    // جلب معلومات المعلم
+    $current_teacher_id = $_SESSION['teacher_id'] ?? null;
+    
+    // إذا لم يكن teacher_id موجوداً في الجلسة، ابحث عنه
+    if (!$current_teacher_id) {
+        $teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$_SESSION['user_id']]);
+        if ($teacher_data) {
+            $current_teacher_id = $teacher_data['id'];
+            $_SESSION['teacher_id'] = $current_teacher_id;
+        }
+    }
+    
+    if (!$current_teacher_id) {
+        die('خطأ: لم يتم العثور على بيانات المعلم. يرجى الاتصال بالإدارة.');
+    }
+}
 
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
@@ -82,7 +130,22 @@ $expert_trainers_sql = "
         v.academic_year_id = ?
         " . (!empty($date_condition) ? $date_condition : "") . "
         AND ve.score IS NOT NULL
-        AND t.job_title = 'معلم'
+        AND t.job_title = 'معلم'";
+
+// إضافة قيود المنسق
+if ($is_coordinator && $coordinator_subject_id) {
+    $expert_trainers_sql .= " AND s.id = ?";
+}
+if ($is_coordinator && $coordinator_school_id) {
+    $expert_trainers_sql .= " AND t.school_id = ?";
+}
+
+// إضافة قيود المعلم - يرى نفسه فقط
+if ($is_teacher && $current_teacher_id) {
+    $expert_trainers_sql .= " AND t.id = ?";
+}
+
+$expert_trainers_sql .= "
     GROUP BY 
         ei.id, ei.name, ed.id, ed.name, t.id, t.name, s.name
     HAVING 
@@ -92,10 +155,20 @@ $expert_trainers_sql = "
         ed.id, ei.id, percentage_score DESC, visits_count DESC
 ";
 
-$params = [$selected_year_id, $expert_threshold];
+$params = [$selected_year_id];
 if (!empty($date_params)) {
-    array_splice($params, 1, 0, $date_params);
+    $params = array_merge($params, $date_params);
 }
+if ($is_coordinator && $coordinator_subject_id) {
+    $params[] = $coordinator_subject_id;
+}
+if ($is_coordinator && $coordinator_school_id) {
+    $params[] = $coordinator_school_id;
+}
+if ($is_teacher && $current_teacher_id) {
+    $params[] = $current_teacher_id;
+}
+$params[] = $expert_threshold;
 
 $expert_trainers = query($expert_trainers_sql, $params);
 
@@ -175,12 +248,33 @@ $top_domain_count = !empty($domain_stats) ? reset($domain_stats) : 0;
                 <i class="fas fa-chart-line mr-2"></i>
                 احتياجات المعلمين
             </a>
+            <?php if (!$is_teacher): ?>
             <a href="collective_training_needs.php" class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors">
                 <i class="fas fa-users mr-2"></i>
                 الاحتياجات الجماعية
             </a>
+            <?php endif; ?>
         </div>
     </div>
+    
+    <?php if ($is_coordinator): ?>
+        <div class="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+            <strong>مرحباً بك كمنسق مادة!</strong> 
+            أنت تعرض المدربين المؤهلين في مادتك فقط.
+        </div>
+    <?php elseif ($is_teacher): ?>
+        <div class="mb-4 p-3 bg-green-100 text-green-800 rounded">
+            <strong>مرحباً بك كمعلم متميز!</strong> 
+            هذه صفحتك الشخصية لعرض نقاط قوتك التدريبية والمؤشرات التي تتميز فيها.
+            <?php if (empty($expert_trainers)): ?>
+                <br><br><span class="text-orange-600">
+                <i class="fas fa-info-circle mr-1"></i>
+                لم تصل بعد للحد الأدنى للتميز في أي مؤشر (85% مع زيارتين على الأقل). 
+                استمر في التطوير لتصبح مدرباً معتمداً!
+                </span>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- إحصائيات عامة -->

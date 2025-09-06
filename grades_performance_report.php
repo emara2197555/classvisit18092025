@@ -5,6 +5,31 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة
+protect_page();
+
+// تحديد البيانات بناءً على دور المستخدم
+$user_role = $_SESSION['role_name'] ?? '';
+$is_coordinator = ($user_role === 'Subject Coordinator');
+$coordinator_subject_id = null;
+$coordinator_school_id = null;
+
+if ($is_coordinator) {
+    // جلب معلومات المنسق
+    $coordinator = query("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs
+        JOIN users u ON cs.user_id = u.id
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if (!empty($coordinator)) {
+        $coordinator_subject_id = $coordinator[0]['subject_id'];
+        $coordinator_school_id = $coordinator[0]['school_id'];
+    }
+}
 
 // تعيين عنوان الصفحة
 $page_title = 'تقرير مقارنة أداء الصفوف والشعب';
@@ -54,7 +79,11 @@ $visitor_type_id = isset($_GET['visitor_type_id']) ? (int)$_GET['visitor_type_id
 
 // تحديد المدرسة
 $school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
-if (!$school_id) {
+
+// للمنسق: تحديد مدرسته تلقائياً
+if ($is_coordinator && $coordinator_school_id) {
+    $school_id = $coordinator_school_id;
+} elseif (!$school_id && !$is_coordinator) {
     $default_school = query_row("SELECT id FROM schools LIMIT 1");
     $school_id = $default_school ? $default_school['id'] : 0;
 }
@@ -62,14 +91,46 @@ if (!$school_id) {
 // تحديد المادة الدراسية
 $subject_id = isset($_GET['subject_id']) ? (int)$_GET['subject_id'] : 0;
 
+// للمنسق: تحديد مادته تلقائياً
+if ($is_coordinator && $coordinator_subject_id) {
+    $subject_id = $coordinator_subject_id;
+}
+
 // تحديد المعلم
 $teacher_id = isset($_GET['teacher_id']) ? (int)$_GET['teacher_id'] : 0;
 
 // جلب قوائم الخيارات للنماذج
 $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
-$schools = query("SELECT id, name FROM schools ORDER BY name");
-$subjects = query("SELECT id, name FROM subjects ORDER BY name");
-$teachers = query("SELECT id, name FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+
+// للمديرين: جلب جميع المدارس، للمنسقين: لا حاجة للمدارس
+if (!$is_coordinator) {
+    $schools = query("SELECT id, name FROM schools ORDER BY name");
+} else {
+    $schools = [];
+}
+
+// للمنسقين: جلب مادتهم فقط، للمديرين: جلب جميع المواد
+if ($is_coordinator && $coordinator_subject_id) {
+    $subjects = query("SELECT id, name FROM subjects WHERE id = ? ORDER BY name", [$coordinator_subject_id]);
+} else {
+    $subjects = query("SELECT id, name FROM subjects ORDER BY name");
+}
+
+// للمنسقين: جلب معلمي مادتهم ومدرستهم فقط
+if ($is_coordinator && $coordinator_subject_id && $coordinator_school_id) {
+    $teachers = query("
+        SELECT DISTINCT t.id, t.name 
+        FROM teachers t
+        JOIN teacher_subjects ts ON t.id = ts.teacher_id
+        WHERE t.job_title = 'معلم' 
+        AND ts.subject_id = ? 
+        AND t.school_id = ?
+        ORDER BY t.name
+    ", [$coordinator_subject_id, $coordinator_school_id]);
+} else {
+    $teachers = query("SELECT id, name FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+}
+
 $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
 
 // تعديل استعلام جلب البيانات ليشمل جميع الفلاتر
@@ -273,6 +334,13 @@ if ($visitor_type_id > 0) {
 
 <div class="mb-6">
     <h1 class="text-2xl font-bold mb-4">تقرير مقارنة أداء الصفوف والشعب</h1>
+    
+    <?php if ($is_coordinator): ?>
+        <div class="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+            <strong>مرحباً بك كمنسق مادة!</strong> 
+            أنت تعرض تقرير أداء الصفوف في مادتك ومدرستك فقط.
+        </div>
+    <?php endif; ?>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج تحديد العام الدراسي ونوع الزائر -->

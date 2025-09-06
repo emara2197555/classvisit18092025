@@ -7,8 +7,8 @@ require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
 
-// حماية الصفحة - الوصول للمديرين والمشرفين ومنسقي المواد فقط
-protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
+// حماية الصفحة - الوصول للمديرين والمشرفين ومنسقي المواد والمعلمين
+protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator', 'Teacher']);
 
 // الحصول على معلومات المستخدم
 $user_id = $_SESSION['user_id'];
@@ -108,6 +108,36 @@ if ($user_role_name === 'Subject Coordinator') {
     } else {
         // إذا لم يكن هناك مادة مخصصة، لا تظهر أي زيارات
         $search_condition .= " AND 1 = 0";
+    }
+}
+
+// إضافة قيود المعلم - يرى زياراته فقط
+if ($user_role_name === 'Teacher') {
+    // الحصول على teacher_id من الجلسة أو من قاعدة البيانات
+    $teacher_id = $_SESSION['teacher_id'] ?? null;
+    
+    // إذا لم يكن teacher_id موجود في الجلسة، ابحث عنه
+    if (!$teacher_id) {
+        $teacher_data = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user_id]);
+        if ($teacher_data) {
+            $teacher_id = $teacher_data['id'];
+            $_SESSION['teacher_id'] = $teacher_id; // حفظ في الجلسة للمرات القادمة
+        }
+    }
+    
+    if ($teacher_id) {
+        $search_condition .= " AND v.teacher_id = ?";
+        $search_params[] = $teacher_id;
+    } else {
+        // إذا لم يتم العثور على المعلم، لا تظهر أي زيارات
+        $search_condition .= " AND 1 = 0";
+    }
+    
+    // إذا تم تمرير teacher_id في الرابط، تأكد أنه نفس المعلم المسجل دخوله
+    if (isset($_GET['teacher_id']) && $_GET['teacher_id'] != $teacher_id) {
+        // إعادة توجيه المعلم لزياراته فقط
+        header("Location: visits.php?teacher_id=$teacher_id");
+        exit();
     }
 }
 
@@ -282,6 +312,7 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
         
         <hr class="my-6 border-gray-300">
         
+        <?php if ($user_role_name !== 'Teacher'): ?>
         <form action="" method="get" class="space-y-4">
             <!-- الصف الثاني - فلترة المدرسة والمادة والمعلم -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -361,6 +392,7 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                 </a>
             </div>
         </form>
+        <?php endif; ?>
     </div>
     
     <!-- رسالة تنبيه إذا وجدت -->
@@ -424,23 +456,28 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                                             </svg>
                                         </a>
                                         
+                                        <?php if ($user_role_name !== 'Teacher'): ?>
                                         <a href="edit_visit.php?id=<?= $visit['id'] ?>" class="text-green-600 hover:text-green-800" title="تعديل">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                             </svg>
                                         </a>
+                                        <?php endif; ?>
                                         
                                         <a href="print_visit.php?id=<?= $visit['id'] ?>" class="text-gray-600 hover:text-gray-800" title="طباعة">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                             </svg>
                                         </a>
+                                        
+                                        <?php if ($user_role_name !== 'Teacher'): ?>
                                         <a href="delete_visit.php?id=<?= $visit['id'] ?>" class="text-red-600 hover:text-red-800" 
                                            onclick="return confirm('هل أنت متأكد من حذف هذه الزيارة؟');" title="حذف">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
                                         </a>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

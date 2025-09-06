@@ -7,6 +7,10 @@
 
 // تضمين ملف الاتصال بقاعدة البيانات
 require_once 'includes/db_connection.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة - للمديرين فقط
+protect_page(['Admin', 'Director', 'Academic Deputy']);
 
 // التحقق من وجود مدرسة مسجلة في النظام
 $school = query_row("SELECT id FROM schools LIMIT 1");

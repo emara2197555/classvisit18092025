@@ -14,9 +14,25 @@ protect_page(['Teacher']);
 $page_title = 'لوحة تحكم المعلم - نظام الزيارات الصفية';
 
 // الحصول على بيانات المعلم
-$teacher_id = $_SESSION['teacher_id'];
+$teacher_id = $_SESSION['teacher_id'] ?? null;
 $teacher_name = $_SESSION['full_name'];
-$school_id = $_SESSION['school_id'];
+$school_id = $_SESSION['school_id'] ?? null;
+
+// إذا لم يكن teacher_id موجوداً في الجلسة، ابحث عنه في قاعدة البيانات
+if (!$teacher_id && isset($_SESSION['user_id'])) {
+    $teacher_data = query_row("SELECT * FROM teachers WHERE user_id = ?", [$_SESSION['user_id']]);
+    if ($teacher_data) {
+        $teacher_id = $teacher_data['id'];
+        $school_id = $teacher_data['school_id'] ?? $school_id;
+        $_SESSION['teacher_id'] = $teacher_id; // تحديث الجلسة
+        $_SESSION['school_id'] = $school_id; // تحديث الجلسة
+    }
+}
+
+// التحقق من وجود teacher_id
+if (!$teacher_id) {
+    die('خطأ: لم يتم العثور على بيانات المعلم. يرجى تسجيل الدخول مرة أخرى.');
+}
 
 // الحصول على اسم المدرسة
 $school = query_row("SELECT name FROM schools WHERE id = ?", [$school_id]);
@@ -48,44 +64,32 @@ $stats['visits_this_month'] = $visits_this_month['count'];
 
 // متوسط الأداء العام
 $avg_performance = query_row("
-    SELECT AVG((ve.lesson_execution + ve.classroom_management) / 2) as avg_score
+    SELECT AVG(ve.score) as avg_score
     FROM visits v
     INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
     WHERE v.teacher_id = ?
 ", [$teacher_id]);
-$stats['avg_performance'] = $avg_performance['avg_score'] ? round($avg_performance['avg_score'], 1) : 0;
+$stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
 
-// متوسط أداء تنفيذ الدرس
-$avg_lesson = query_row("
-    SELECT AVG(ve.lesson_execution) as avg_score
-    FROM visits v
-    INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
-    WHERE v.teacher_id = ?
-", [$teacher_id]);
-$stats['avg_lesson'] = $avg_lesson['avg_score'] ? round($avg_lesson['avg_score'], 1) : 0;
-
-// متوسط أداء الإدارة الصفية
-$avg_management = query_row("
-    SELECT AVG(ve.classroom_management) as avg_score
-    FROM visits v
-    INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
-    WHERE v.teacher_id = ?
-", [$teacher_id]);
-$stats['avg_management'] = $avg_management['avg_score'] ? round($avg_management['avg_score'], 1) : 0;
+// متوسط أداء المؤشرات (simplified - no separate lesson/management breakdown since the new structure is different)
+// We'll calculate overall average from all indicators
+$stats['avg_lesson'] = $stats['avg_performance']; // Use same value since we can't separate by old categories
+$stats['avg_management'] = $stats['avg_performance']; // Use same value since we can't separate by old categories
 
 // آخر الزيارات
 $recent_visits = query("
     SELECT v.*, s.name as subject_name, vt.name as visitor_name,
            sec.name as section_name, g.name as grade_name,
-           ve.lesson_execution, ve.classroom_management
+           AVG(ve.score) as avg_score
     FROM visits v
     LEFT JOIN subjects s ON v.subject_id = s.id
-    LEFT JOIN visitor_types vt ON v.visitor_id = vt.id
+    LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
     LEFT JOIN sections sec ON v.section_id = sec.id
     LEFT JOIN grades g ON sec.grade_id = g.id
     LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
     WHERE v.teacher_id = ?
-    ORDER BY v.visit_date DESC, v.visit_time DESC
+    GROUP BY v.id
+    ORDER BY v.visit_date DESC, v.created_at DESC
     LIMIT 10
 ", [$teacher_id]);
 
@@ -277,24 +281,23 @@ require_once 'includes/header.php';
                                     </div>
                                     <div class="text-sm text-gray-600">
                                         <p><i class="fas fa-user ml-1"></i> الزائر: <?= htmlspecialchars($visit['visitor_name']) ?></p>
-                                        <p><i class="fas fa-calendar ml-1"></i> <?= format_date_ar($visit['visit_date']) ?> - <?= $visit['visit_time'] ?></p>
+                                        <p><i class="fas fa-calendar ml-1"></i> <?= format_date_ar($visit['visit_date']) ?></p>
                                     </div>
                                 </div>
                                 
-                                <?php if ($visit['lesson_execution'] && $visit['classroom_management']): ?>
+                                <?php if ($visit['avg_score']): ?>
                                     <div class="text-left">
                                         <div class="mb-2">
                                             <?php 
-                                            $total_score = ($visit['lesson_execution'] + $visit['classroom_management']) / 2;
+                                            $total_score = ($visit['avg_score'] / 3) * 100; // Convert from 3-point scale to percentage
                                             $color = $total_score >= 80 ? 'green' : ($total_score >= 60 ? 'yellow' : 'red');
                                             ?>
                                             <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
                                                 <?= round($total_score, 1) ?>%
                                             </span>
                                         </div>
-                                        <div class="text-xs text-gray-500 space-y-1">
-                                            <div>تنفيذ الدرس: <?= $visit['lesson_execution'] ?>%</div>
-                                            <div>الإدارة الصفية: <?= $visit['classroom_management'] ?>%</div>
+                                        <div class="text-xs text-gray-500">
+                                            <div>متوسط الأداء: <?= round($visit['avg_score'], 2) ?>/3</div>
                                         </div>
                                     </div>
                                 <?php endif; ?>

@@ -63,16 +63,23 @@ function query_row($sql, $params = []) {
 }
 
 /**
- * دالة تنفيذ استعلام SQL لإدخال أو تحديث أو حذف البيانات وإرجاع عدد الصفوف المتأثرة
+ * دالة تنفيذ استعلام SQL لإدخال أو تحديث أو حذف البيانات وإرجاع معرف السجل المُدرج أو عدد الصفوف المتأثرة
  *
  * @param string $sql استعلام SQL مع علامات استفهام للمتغيرات
  * @param array $params مصفوفة المتغيرات المستخدمة في الاستعلام
- * @return int عدد الصفوف المتأثرة
+ * @return int معرف السجل المُدرج (للـ INSERT) أو عدد الصفوف المتأثرة
  */
 function execute($sql, $params = []) {
     global $pdo;
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
+    
+    // إذا كان استعلام INSERT، أرجع آخر معرف مُدرج
+    if (stripos(trim($sql), 'INSERT') === 0) {
+        return $pdo->lastInsertId();
+    }
+    
+    // وإلا أرجع عدد الصفوف المتأثرة
     return $stmt->rowCount();
 }
 

@@ -5,6 +5,35 @@ ob_start();
 // تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'includes/auth_functions.php';
+
+// حماية الصفحة
+protect_page();
+
+// تحديد البيانات بناءً على دور المستخدم
+$user_role = $_SESSION['role_name'] ?? '';
+$is_coordinator = ($user_role === 'Subject Coordinator');
+$coordinator_subject_id = null;
+$coordinator_school_id = null;
+
+if ($is_coordinator) {
+    // جلب معلومات المنسق
+    $coordinator = query("
+        SELECT cs.subject_id, u.school_id 
+        FROM coordinator_supervisors cs
+        JOIN users u ON cs.user_id = u.id
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if (!empty($coordinator)) {
+        $coordinator_subject_id = $coordinator[0]['subject_id'];
+        $coordinator_school_id = $coordinator[0]['school_id'];
+        
+        // جلب اسم المادة لإظهارها في الإشعار
+        $subject_data = query("SELECT name FROM subjects WHERE id = ?", [$coordinator_subject_id]);
+        $coordinator_subject_name = !empty($subject_data) ? $subject_data[0]['name'] : '';
+    }
+}
 
 // تعيين عنوان الصفحة
 $page_title = 'تقارير الشعب الدراسية';
@@ -19,6 +48,11 @@ $grade_id = isset($_GET['grade_id']) ? (int)$_GET['grade_id'] : 0;
 $academic_year_id = isset($_GET['academic_year_id']) ? (int)$_GET['academic_year_id'] : 0;
 $school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
 $term = isset($_GET['term']) ? $_GET['term'] : 'all';
+
+// للمنسق: تحديد مدرسته تلقائياً
+if ($is_coordinator && $coordinator_school_id) {
+    $school_id = $coordinator_school_id;
+}
 
 // تحديد العام الدراسي النشط إذا لم يتم تحديد عام
 $year = null;
@@ -55,8 +89,12 @@ $educational_levels = query("SELECT * FROM educational_levels ORDER BY id");
 // جلب الأعوام الدراسية للاختيار
 $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
 
-// جلب قائمة المدارس للاختيار
-$schools = query("SELECT id, name FROM schools ORDER BY name");
+// جلب قائمة المدارس للاختيار (للمديرين فقط)
+if (!$is_coordinator) {
+    $schools = query("SELECT id, name FROM schools ORDER BY name");
+} else {
+    $schools = [];
+}
 
 // إذا تم تحديد مرحلة، جلب الصفوف الخاصة بها
 $grades = [];
@@ -77,6 +115,7 @@ $sql = "
         sch.name AS school_name,
         (SELECT COUNT(DISTINCT v.id) 
          FROM visits v 
+         " . ($is_coordinator ? "JOIN teachers t ON v.teacher_id = t.id JOIN teacher_subjects ts ON t.id = ts.teacher_id AND ts.subject_id = ?" : "") . "
          WHERE v.section_id = s.id 
          AND v.grade_id = g.id
          " . ($academic_year_id > 0 ? " AND v.academic_year_id = ?" : "") . "
@@ -93,6 +132,7 @@ $sql = "
         schools sch ON s.school_id = sch.id
     WHERE 
         1=1
+        " . ($is_coordinator ? " AND sch.id = ?" : "") . "
         " . ($level_id > 0 ? " AND e.id = ?" : "") . "
         " . ($grade_id > 0 ? " AND g.id = ?" : "") . "
         " . ($school_id > 0 ? " AND sch.id = ?" : "") . "
@@ -102,6 +142,12 @@ $sql = "
 
 // تحضير المعلمات للاستعلام
 $query_params = [];
+
+// إضافة معامل subject_id لمنسق المادة (في استعلام فرعي لعدد الزيارات)
+if ($is_coordinator) {
+    $query_params[] = $coordinator_subject_id;
+}
+
 if ($academic_year_id > 0) {
     $query_params[] = $academic_year_id;
 }
@@ -111,6 +157,12 @@ if ($school_id > 0) {
 if (!empty($date_filter)) {
     $query_params = array_merge($query_params, $date_params);
 }
+
+// إضافة معامل school_id لمنسق المادة (في WHERE الرئيسي)
+if ($is_coordinator) {
+    $query_params[] = $coordinator_school_id;
+}
+
 if ($level_id > 0) {
     $query_params[] = $level_id;
 }
@@ -157,6 +209,27 @@ if ($school_id > 0) {
 
 <div class="container mx-auto py-6 px-4">
     <h1 class="text-2xl font-bold mb-4">تقارير الشعب الدراسية</h1>
+    
+    <?php if ($is_coordinator): ?>
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-blue-700">
+                        <strong>تنبيه لمنسق المادة:</strong> 
+                        تظهر لك فقط الشعب الدراسية من مدرستك والتي تحتوي على معلمين يدرسون مادتك 
+                        <?php if (isset($coordinator_subject_name)): ?>
+                            <strong>(<?= htmlspecialchars($coordinator_subject_name) ?>)</strong>
+                        <?php endif; ?>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <!-- نموذج التصفية -->

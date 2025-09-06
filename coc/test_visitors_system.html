@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار نظام الزوار</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-lg">
+        <h2 class="text-xl font-bold mb-4">اختبار نظام الزوار</h2>
+        
+        <div class="mb-4">
+            <label class="block mb-2 font-bold text-gray-800">نوع الزائر:</label>
+            <select id="visitor-type" class="w-full border-2 border-slate-300 p-3 rounded-lg">
+                <option value="">اختر نوع الزائر...</option>
+                <option value="15">منسق المادة</option>
+                <option value="16">موجه المادة</option>
+            </select>
+        </div>
+        
+        <div id="visitor-name" class="mt-4"></div>
+        <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
+        
+        <div id="result" class="mt-4 p-3 bg-gray-50 rounded-lg hidden">
+            <h3 class="font-bold">النتيجة:</h3>
+            <div id="result-content"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('visitor-type').addEventListener('change', function() {
+            const visitorTypeSelect = this;
+            const visitorNameDiv = document.getElementById('visitor-name');
+            const visitorPersonIdInput = document.getElementById('visitor-person-id');
+            const resultDiv = document.getElementById('result');
+            const resultContent = document.getElementById('result-content');
+            
+            if (visitorTypeSelect.value) {
+                const apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
+                
+                fetch(apiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        resultDiv.classList.remove('hidden');
+                        resultContent.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                        
+                        if (data.success && data.visitors.length > 0) {
+                            let select = document.createElement('select');
+                            select.id = 'visitor-person';
+                            select.className = 'w-full border-2 border-slate-300 p-3 rounded-lg';
+                            select.required = true;
+                            
+                            let defaultOption = document.createElement('option');
+                            defaultOption.value = '';
+                            defaultOption.textContent = 'اختر الزائر...';
+                            select.appendChild(defaultOption);
+                            
+                            data.visitors.forEach(visitor => {
+                                let option = document.createElement('option');
+                                option.value = visitor.id;
+                                option.textContent = visitor.name;
+                                select.appendChild(option);
+                            });
+                            
+                            visitorNameDiv.innerHTML = '';
+                            visitorNameDiv.appendChild(select);
+                            
+                            select.addEventListener('change', function() {
+                                visitorPersonIdInput.value = this.value;
+                            });
+                        } else {
+                            visitorNameDiv.innerHTML = '<p class="text-red-500">لا يوجد زوار من هذا النوع</p>';
+                            visitorPersonIdInput.value = '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        visitorNameDiv.innerHTML = '<p class="text-red-500">حدث خطأ في تحميل بيانات الزوار</p>';
+                        visitorPersonIdInput.value = '';
+                        
+                        resultDiv.classList.remove('hidden');
+                        resultContent.innerHTML = `<span class="text-red-500">خطأ: ${error.message}</span>`;
+                    });
+            } else {
+                visitorNameDiv.innerHTML = '';
+                visitorPersonIdInput.value = '';
+                resultDiv.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
