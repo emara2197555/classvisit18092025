@@ -439,7 +439,7 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                                     </a>
                                 </td>
                                 <td class="px-4 py-2 border">
-                                    <a href="subject_performance_report.php?subject_id=<?= $visit['subject_id'] ?>" class="text-blue-600 hover:text-blue-800">
+                                    <a href="subject_detailed_report.php?subject_id=<?= $visit['subject_id'] ?>" class="text-blue-600 hover:text-blue-800">
                                         <?= htmlspecialchars($visit['subject_name']) ?>
                                     </a>
                                 </td>

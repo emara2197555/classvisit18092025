@@ -123,6 +123,8 @@ function get_dashboard_url($role_name) {
             return 'coordinator_dashboard.php';
         case 'teacher':
             return 'teacher_dashboard.php';
+        case 'E-Learning Coordinator':
+            return 'elearning_coordinator_dashboard.php';
         default:
             return 'index.php';
     }

@@ -201,7 +201,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                 <!-- قائمة التقارير - مخفية عن المعلمين -->
                 <?php if (!$is_teacher): ?>
                 <div class="relative group reports-dropdown">
-                    <button class="hover:text-primary-200 <?= in_array($current_page, ['class_performance_report.php', 'grades_performance_report.php', 'teacher_report.php', 'subject_performance_report.php']) ? 'border-b-2 border-white' : '' ?>">
+                    <button class="hover:text-primary-200 <?= in_array($current_page, ['class_performance_report.php', 'grades_performance_report.php', 'teacher_report.php', 'subject_performance_report.php', 'subject_detailed_report.php']) ? 'border-b-2 border-white' : '' ?>">
                         التقارير
                         <i class="fas fa-caret-down mr-1"></i>
                     </button>

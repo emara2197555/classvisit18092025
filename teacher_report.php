@@ -92,6 +92,16 @@ $teacher_subjects = query("
 // جلب الأعوام الدراسية للاختيار
 $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
 
+// جلب بيانات العام الدراسي المحدد
+$selected_academic_year = null;
+if ($academic_year_id > 0) {
+    $selected_academic_year = query_row("SELECT id, name FROM academic_years WHERE id = ?", [$academic_year_id]);
+}
+// إذا لم يتم العثور على العام المحدد، استخدم العام الأول من القائمة
+if (!$selected_academic_year && !empty($academic_years)) {
+    $selected_academic_year = $academic_years[0];
+}
+
 // جلب زيارات المعلم
 $visits = query("
     SELECT 
@@ -290,11 +300,53 @@ $common_recommendations = query("
 ?>
 
 <div class="mb-6">
-    <h1 class="text-2xl font-bold mb-4">تقرير أداء المعلم</h1>
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">تقرير أداء المعلم</h1>
+        
+        <!-- أزرار الطباعة -->
+        <div class="flex gap-3 no-print">
+            <button onclick="printReport()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors duration-200">
+                <i class="fas fa-print"></i>
+                طباعة تقرير أداء المعلم
+            </button>
+            <button onclick="generatePDF()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors duration-200">
+                <i class="fas fa-file-pdf"></i>
+                حفظ كملف PDF
+            </button>
+        </div>
+    </div>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <!-- معلومات المعلم للطباعة -->
+        <div class="teacher-info mb-4">
+            <h3 class="text-lg font-semibold mb-3">معلومات المعلم</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <strong>اسم المعلم:</strong> <?= htmlspecialchars($teacher['name']) ?>
+                </div>
+                <div>
+                    <strong>العام الدراسي:</strong> 
+                    <?= $selected_academic_year ? htmlspecialchars($selected_academic_year['name']) : 'غير محدد' ?>
+                </div>
+                <div>
+                    <strong>عدد الزيارات:</strong> <?= count($visits) ?> زيارة
+                </div>
+            </div>
+            <?php if (!empty($teacher_subjects)): ?>
+            <div class="mt-3">
+                <strong>المواد التي يدرسها:</strong>
+                <?php 
+                $subject_names = array_map(function($subject) { 
+                    return $subject['name']; 
+                }, $teacher_subjects);
+                echo htmlspecialchars(implode(', ', $subject_names));
+                ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        
         <!-- نموذج تحديد الفلاتر -->
-        <form action="" method="get" class="mb-6">
+        <form action="" method="get" class="mb-6 no-print">
             <input type="hidden" name="teacher_id" value="<?= $teacher_id ?>">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -337,42 +389,170 @@ $common_recommendations = query("
         </div>
         
         <!-- ملخص الأداء -->
-        <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4">ملخص الأداء</h2>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- مخطط متوسطات المجالات -->
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3">متوسط الأداء حسب المجال</h3>
-                    <canvas id="domainsChart" width="400" height="300"></canvas>
+                </div>
+        
+        <!-- إحصائيات تطور الأداء -->
+        <?php if (!empty($progress_stats)): ?>
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">📈 إحصائيات تطور الأداء</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-lg border-l-4 border-blue-500">
+                    <div class="text-sm text-blue-600 font-medium">نسبة التحسن العامة</div>
+                    <div class="text-2xl font-bold text-blue-700">
+                        <?= $progress_stats['improvement'] >= 0 ? '+' : '' ?><?= number_format($progress_stats['improvement_percentage'], 1) ?>%
+                    </div>
+                    <div class="text-xs text-blue-600 mt-1">
+                        من أول زيارة (<?= number_format($progress_stats['first_visit'], 1) ?>%) إلى آخر زيارة (<?= number_format($progress_stats['last_visit'], 1) ?>%)
+                    </div>
                 </div>
                 
-                <!-- المتوسط العام -->
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3">المتوسط العام للأداء</h3>
-                    <div class="flex flex-col justify-center items-center h-64">
-                        <div class="text-center mb-4">
-                            <div class="text-5xl font-bold mb-2"><?= !is_null($overall_avg) ? number_format($overall_avg, 1) : '-' ?>%</div>
-                            <div class="text-xl"><?= !is_null($overall_avg) ? get_grade($overall_avg * 3 / 100) : '-' ?></div>
-                        </div>
-                        <div class="w-48 h-48">
-                            <canvas id="pieChart"></canvas>
+                <div class="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-lg border-l-4 border-green-500">
+                    <div class="text-sm text-green-600 font-medium">المجالات المتحسنة</div>
+                    <div class="text-2xl font-bold text-green-700"><?= $improved_domains ?></div>
+                    <div class="text-xs text-green-600 mt-1">
+                        من أصل <?= count($domain_progress) ?> مجال (<?= count($domain_progress) > 0 ? number_format(($improved_domains / count($domain_progress)) * 100, 0) : 0 ?>%)
+                    </div>
+                </div>
+                
+                <div class="bg-gradient-to-r from-red-50 to-red-100 p-4 rounded-lg border-l-4 border-red-500">
+                    <div class="text-sm text-red-600 font-medium">المجالات المتراجعة</div>
+                    <div class="text-2xl font-bold text-red-700"><?= $declined_domains ?></div>
+                    <div class="text-xs text-red-600 mt-1">
+                        من أصل <?= count($domain_progress) ?> مجال (<?= count($domain_progress) > 0 ? number_format(($declined_domains / count($domain_progress)) * 100, 0) : 0 ?>%)
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ملاحظة التطور -->
+            <div class="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg border border-indigo-200">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-lightbulb text-indigo-500 text-lg"></i>
+                    </div>
+                    <div class="mr-3">
+                        <div class="text-sm font-medium text-indigo-800">ملاحظة:</div>
+                        <div class="text-sm text-indigo-700 mt-1">
+                            <?php if ($progress_stats['improvement'] > 0): ?>
+                                أداء المعلم يظهر تحسناً ملحوظاً منذ بداية الزيارات. استمر في الاستراتيجيات الحالية.
+                            <?php elseif ($progress_stats['improvement'] < 0): ?>
+                                هناك تراجع في أداء المعلم يتطلب مراجعة الاستراتيجيات المتبعة وتطوير خطط تحسين.
+                            <?php else: ?>
+                                أداء المعلم مستقر، يُنصح بتطوير استراتيجيات جديدة لتحقيق نمو إضافي.
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- تطور أداء المعلم -->
+        <?php endif; ?>
+
+        <!-- الرسوم البيانية -->
         <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4">تطور أداء المعلم</h2>
+            <h2 class="text-xl font-bold mb-4">الرسوم البيانية</h2>
             
-            <div class="grid grid-cols-1 gap-6">
-                <!-- رسم بياني لتطور الأداء -->
+            <!-- السطر الأول: مخطط المجالات + المتوسط العام -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- مخطط متوسطات المجالات -->
                 <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3">مخطط تطور الأداء عبر الزيارات</h3>
-                    <canvas id="progressChart" width="800" height="400"></canvas>
+                    <h3 class="text-lg font-semibold mb-3">متوسط الأداء حسب المجال</h3>
+                    <canvas id="domainsChart" width="400" height="300"></canvas>
+                    
+                    <!-- نسخة للطباعة -->
+                    <div class="chart-print-version">
+                        <h4 style="font-weight: bold; margin-bottom: 8px;">متوسط الأداء حسب المجال</h4>
+                        <?php foreach ($domains_avg as $index => $domain): ?>
+                            <div style="margin: 3px 0; padding: 2px; background: <?= $index % 2 == 0 ? '#f8fafc' : 'white' ?>;">
+                                <strong><?= htmlspecialchars($domain['name']) ?>:</strong> 
+                                <span style="color: <?= $domain['avg_percentage'] >= 80 ? '#16a34a' : ($domain['avg_percentage'] >= 60 ? '#ca8a04' : '#dc2626') ?>;">
+                                    <?= number_format($domain['avg_percentage'], 1) ?>%
+                                </span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
+                
+                <!-- المتوسط العام - الرسم الدائري -->
+                <div class="bg-white p-4 rounded-lg border border-gray-200">
+                    <h3 class="text-lg font-semibold mb-3">المتوسط العام للأداء</h3>
+                    <div class="flex flex-col justify-center items-center h-64">
+                        <div class="text-center mb-4">
+                            <div class="text-5xl font-bold mb-2 text-blue-600"><?= !is_null($overall_avg) ? number_format($overall_avg, 1) : '-' ?>%</div>
+                            <div class="text-xl text-gray-600"><?= !is_null($overall_avg) ? get_grade($overall_avg * 3 / 100) : '-' ?></div>
+                        </div>
+                        <div class="w-48 h-48">
+                            <canvas id="pieChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- نسخة للطباعة -->
+                    <div class="chart-print-version">
+                        <h4 style="font-weight: bold; margin-bottom: 10px; text-align: center;">المتوسط العام للأداء</h4>
+                        <div style="text-align: center; padding: 15px; background: linear-gradient(90deg, #dbeafe, #eff6ff); border: 2px solid #3b82f6; border-radius: 8px;">
+                            <div style="font-size: 24px; font-weight: bold; color: #1e40af; margin-bottom: 5px;">
+                                <?= !is_null($overall_avg) ? number_format($overall_avg, 1) : '-' ?>%
+                            </div>
+                            <div style="font-size: 14px; color: #374151; font-weight: bold;">
+                                <?= !is_null($overall_avg) ? get_grade($overall_avg * 3 / 100) : '-' ?>
+                            </div>
+                            <div style="margin-top: 8px; font-size: 9px; color: #6b7280;">
+                                من أصل <?= count($visits) ?> زيارة إشرافية
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- السطر الثاني: مخطط تطور الأداء -->
+            <div class="grid grid-cols-1 gap-6">
+                <div class="bg-white p-4 rounded-lg border border-gray-200">
+                    <h3 class="text-lg font-semibold mb-3">تطور الأداء عبر الزيارات</h3>
+                    <canvas id="progressChart" width="800" height="400"></canvas>
+                    
+                    <!-- نسخة للطباعة -->
+                    <div class="chart-print-version">
+                        <h4 style="font-weight: bold; margin-bottom: 8px;">تطور الأداء عبر الزيارات</h4>
+                        <?php if (!empty($visits)): ?>
+                            <table style="width: 100%; font-size: 8px; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f3f4f6;">
+                                        <th style="border: 1px solid #d1d5db; padding: 3px;">التاريخ</th>
+                                        <th style="border: 1px solid #d1d5db; padding: 3px;">المادة</th>
+                                        <th style="border: 1px solid #d1d5db; padding: 3px;">النسبة</th>
+                                        <th style="border: 1px solid #d1d5db; padding: 3px;">التقدير</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($visits as $visit): ?>
+                                        <tr>
+                                            <td style="border: 1px solid #d1d5db; padding: 2px;">
+                                                <?= date('Y/m/d', strtotime($visit['visit_date'])) ?>
+                                            </td>
+                                            <td style="border: 1px solid #d1d5db; padding: 2px;">
+                                                <?= htmlspecialchars($visit['subject_name']) ?>
+                                            </td>
+                                            <td style="border: 1px solid #d1d5db; padding: 2px; text-align: center; color: <?= $visit['avg_percentage'] >= 80 ? '#16a34a' : ($visit['avg_percentage'] >= 60 ? '#ca8a04' : '#dc2626') ?>;">
+                                                <?= number_format($visit['avg_percentage'], 1) ?>%
+                                            </td>
+                                            <td style="border: 1px solid #d1d5db; padding: 2px;">
+                                                <?= get_grade($visit['avg_percentage'] * 3 / 100) ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <div style="text-align: center; padding: 20px; color: #6b7280;">
+                                لا توجد زيارات مسجلة
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- متوسطات المجالات -->
+        <div class="mb-8">
+            <h2 class="text-xl font-bold mb-4">متوسطات المجالات</h2>
                 
                 <!-- إحصائيات تحسن الأداء -->
                 <?php if (count($visits_by_domain) >= 2): ?>
@@ -926,41 +1106,312 @@ const progressChart = new Chart(progressCtx, {
         }
     }
 });
+</script>
 
-// إنشاء مخطط دائري للمتوسط العام
-const pieCtx = document.getElementById('pieChart').getContext('2d');
-const pieChart = new Chart(pieCtx, {
-    type: 'doughnut',
-    data: {
-        labels: ['نسبة الأداء', 'متبقي'],
-        datasets: [{
-            data: [
-                <?= !is_null($overall_avg) ? number_format($overall_avg, 1) : 0 ?>,
-                <?= !is_null($overall_avg) ? number_format(100 - $overall_avg, 1) : 100 ?>
-            ],
-            backgroundColor: [
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(220, 220, 220, 0.5)'
-            ],
-            borderColor: [
-                'rgba(75, 192, 192, 1)',
-                'rgba(220, 220, 220, 1)'
-            ],
-            borderWidth: 1
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '70%',
-        plugins: {
-            legend: {
-                display: false
-            },
-            tooltip: {
-                enabled: false
-            }
+<!-- CSS خاص بالطباعة المتقدمة -->
+<style>
+@media print {
+    /* ضبط الصفحة - A4 */
+    @page {
+        size: A4;
+        margin: 15mm 10mm;
+        orientation: portrait;
+    }
+    
+    /* إخفاء العناصر غير المرغوب فيها فقط */
+    .no-print, form, .filter-form {
+        display: none !important;
+    }
+    
+    /* إظهار المحتوى الأساسي */
+    body, .container, .max-w-7xl, .bg-white, .grid, .grid > div,
+    h1, h2, h3, h4, table, thead, tbody, tr, td, th, div, span, p {
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    /* CSS خاص بالطباعة المتقدمة */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    
+    body {
+        font-family: 'Arial', sans-serif !important;
+        font-size: 11px !important;
+        line-height: 1.3 !important;
+        color: #000 !important;
+        background: white !important;
+        margin: 0 !important;
+        padding: 10px !important;
+    }
+    
+    .container, .max-w-7xl {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* العناوين */
+    h1 {
+        font-size: 16px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+        margin: 0 0 15px 0 !important;
+        border-bottom: 2px solid #2563eb !important;
+        padding: 8px !important;
+        background: linear-gradient(90deg, #3b82f6, #1d4ed8) !important;
+        color: white !important;
+        display: block !important;
+    }
+    
+    h2 {
+        font-size: 13px !important;
+        font-weight: bold !important;
+        margin: 12px 0 6px 0 !important;
+        border-bottom: 1px solid #3b82f6 !important;
+        padding-bottom: 3px !important;
+        color: #1e40af !important;
+        display: block !important;
+    }
+    
+    h3 {
+        font-size: 12px !important;
+        font-weight: bold !important;
+        margin: 8px 0 4px 0 !important;
+        color: #1e40af !important;
+        display: block !important;
+    }
+    
+    /* معلومات المعلم */
+    .teacher-info {
+        background: #eff6ff !important;
+        border: 1px solid #3b82f6 !important;
+        padding: 8px !important;
+        margin: 5px 0 !important;
+        border-radius: 4px !important;
+        display: block !important;
+    }
+    
+    /* البطاقات والخلفيات */
+    .bg-white {
+        background: white !important;
+        border: 1px solid #e5e7eb !important;
+        margin: 4px 0 !important;
+        padding: 6px !important;
+        display: block !important;
+    }
+    
+    /* الجداول */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin: 6px 0 !important;
+        font-size: 10px !important;
+        display: table !important;
+    }
+    
+    thead {
+        display: table-header-group !important;
+    }
+    
+    tbody {
+        display: table-row-group !important;
+    }
+    
+    tr {
+        display: table-row !important;
+    }
+    
+    th, td {
+        display: table-cell !important;
+        border: 1px solid #374151 !important;
+        padding: 3px !important;
+        text-align: right !important;
+    }
+    
+    th {
+        background: #f3f4f6 !important;
+        color: #1f2937 !important;
+        font-weight: bold !important;
+    }
+    
+    /* إخفاء الرسوم البيانية التفاعلية فقط */
+    canvas {
+        display: none !important;
+    }
+    
+    /* إظهار النسخ المطبوعة للرسوم البيانية */
+    .chart-print-version {
+        display: block !important;
+        visibility: visible !important;
+        text-align: center !important;
+        padding: 8px !important;
+        background: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        margin: 4px 0 !important;
+        font-size: 9px !important;
+    }
+    
+    /* تنسيق الشبكة */
+    .grid {
+        display: block !important;
+    }
+    
+    .grid > div {
+        margin-bottom: 6px !important;
+        break-inside: avoid !important;
+        display: block !important;
+        width: 100% !important;
+    }
+    
+    /* الألوان النصية */
+    .text-blue-600 { color: #2563eb !important; }
+    .text-green-600 { color: #16a34a !important; }
+    .text-red-600 { color: #dc2626 !important; }
+    .text-yellow-600 { color: #ca8a04 !important; }
+    .text-purple-600 { color: #9333ea !important; }
+    .text-gray-600 { color: #4b5563 !important; }
+    
+    /* تخفيض الهوامش */
+    .mb-8, .mb-6, .mb-4 {
+        margin-bottom: 4px !important;
+    }
+    
+    .p-6, .p-4 {
+        padding: 4px !important;
+    }
+    
+    /* إزالة الظلال */
+    .shadow-md, .shadow-lg, .shadow-sm {
+        box-shadow: none !important;
+    }
+    
+    /* التأكد من ظهور النصوص */
+    strong, b {
+        font-weight: bold !important;
+        display: inline !important;
+    }
+    
+    span, div {
+        display: inline-block !important;
+    }
+    
+    /* تنسيق خاص للمحتوى الداخلي */
+    .teacher-info > div {
+        display: block !important;
+        margin: 2px 0 !important;
+    }
+}
+
+/* للشاشة العادية - إخفاء النسخ المطبوعة */
+@media screen {
+    .chart-print-version {
+        display: none !important;
+    }
+}
+</style>
+
+<script>
+// دالة طباعة التقرير
+function printReport() {
+    // إزالة جميع كلاسات الإخفاء مؤقتاً
+    const elementsToShow = document.querySelectorAll('*');
+    elementsToShow.forEach(el => {
+        if (el.style.display === 'none') {
+            el.setAttribute('data-original-display', 'none');
+            el.style.display = '';
         }
+    });
+    
+    // إضافة معلومات إضافية للطباعة
+    const printInfo = document.createElement('div');
+    printInfo.className = 'print-info';
+    printInfo.style.cssText = 'display: none;';
+    printInfo.innerHTML = `
+        <div style="text-align: center; margin: 15px 0; font-size: 9px; border-top: 1px solid #ccc; padding-top: 8px; page-break-inside: avoid;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>تم طباعة التقرير في: ${new Date().toLocaleDateString('ar-SA')} - ${new Date().toLocaleTimeString('ar-SA')}</div>
+                <div>نظام زيارات المشرفين التربويين</div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(printInfo);
+    
+    // إظهار معلومات الطباعة فقط عند الطباعة
+    const style = document.createElement('style');
+    style.textContent = `
+        @media print {
+            .print-info { display: block !important; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // طباعة التقرير
+    window.print();
+    
+    // إعادة الحالة الأصلية بعد الطباعة
+    setTimeout(() => {
+        if (printInfo && printInfo.parentNode) {
+            printInfo.parentNode.removeChild(printInfo);
+        }
+        if (style && style.parentNode) {
+            style.parentNode.removeChild(style);
+        }
+        
+        // إعادة إخفاء العناصر التي كانت مخفية
+        elementsToShow.forEach(el => {
+            if (el.getAttribute('data-original-display') === 'none') {
+                el.style.display = 'none';
+                el.removeAttribute('data-original-display');
+            }
+        });
+    }, 1000);
+}
+
+// دالة إنشاء PDF
+function generatePDF() {
+    // إشعار المستخدم
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed; top: 20px; right: 20px; z-index: 9999;
+        background: #3b82f6; color: white; padding: 15px 20px;
+        border-radius: 8px; font-size: 14px; font-weight: bold;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+    notification.innerHTML = `
+        <i class="fas fa-file-pdf" style="margin-left: 8px;"></i>
+        اضغط Ctrl+P واختر "حفظ كـ PDF"
+    `;
+    notification.style.background = '#16a34a';
+    document.body.appendChild(notification);
+    
+    // فتح نافذة الطباعة
+    setTimeout(() => {
+        printReport();
+        
+        // إزالة الإشعار
+        setTimeout(() => {
+            if (notification && notification.parentNode) {
+                document.body.removeChild(notification);
+            }
+        }, 5000);
+    }, 500);
+}
+
+// إضافة اختصارات لوحة المفاتيح
+document.addEventListener('keydown', function(e) {
+    // Ctrl+P للطباعة
+    if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        printReport();
+    }
+    
+    // Ctrl+S لـ PDF
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        generatePDF();
     }
 });
 </script>

@@ -114,6 +114,7 @@ try {
             visit_evaluations ve ON ve.indicator_id = ei.id AND ve.visit_id = ?
         WHERE 
             EXISTS (SELECT 1 FROM visit_evaluations WHERE visit_id = ? AND indicator_id = ei.id)
+            " . (($visit['has_lab'] ?? 0) == 0 ? " AND ei.domain_id <> 5" : "") . "
         GROUP BY
             ei.id, ei.name, ei.domain_id, ed.name
         ORDER BY
@@ -142,12 +143,22 @@ try {
     $valid_indicators_count = 0;
 
     // استعلام لجلب جميع التقييمات لهذه الزيارة
-    $scores_sql = "
-        SELECT score 
-        FROM visit_evaluations 
-        WHERE visit_id = ?
-    ";
-    $scores = query($scores_sql, [$visit_id]);
+    if (($visit['has_lab'] ?? 0) == 0) {
+        $scores_sql = "
+            SELECT ve.score
+            FROM visit_evaluations ve
+            JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
+            WHERE ve.visit_id = ? AND ei.domain_id <> 5
+        ";
+        $scores = query($scores_sql, [$visit_id]);
+    } else {
+        $scores_sql = "
+            SELECT score 
+            FROM visit_evaluations 
+            WHERE visit_id = ?
+        ";
+        $scores = query($scores_sql, [$visit_id]);
+    }
 
     foreach ($scores as $score_item) {
         // نستثني المؤشرات غير المقاسة (score = NULL)

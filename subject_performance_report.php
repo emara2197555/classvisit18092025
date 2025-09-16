@@ -405,7 +405,11 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
                     <tbody>
                         <?php foreach ($subjects_data as $subject): ?>
                             <tr class="hover:bg-gray-50">
-                                <td class="py-2 px-4 border text-center font-semibold"><?= htmlspecialchars($subject['subject_name']) ?></td>
+                                <td class="py-2 px-4 border text-center font-semibold">
+                                    <a href="subject_detailed_report.php?subject_id=<?= $subject['subject_id'] ?>" class="text-blue-600 hover:text-blue-800">
+                                        <?= htmlspecialchars($subject['subject_name']) ?>
+                                    </a>
+                                </td>
                                 <td class="py-2 px-4 border text-center"><?= $subject['teachers_count'] ?></td>
                                 <td class="py-2 px-4 border text-center"><?= $subject['visits_count'] ?></td>
                                 <td class="py-2 px-4 border text-center">
@@ -497,11 +501,13 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
     tr.bg-green-100 {
         background-color: #d1fae5 !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
     
     thead.bg-gray-100 {
         background-color: #f3f4f6 !important;
         -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 </style>
 

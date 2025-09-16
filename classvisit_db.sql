@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: Sep 06, 2025 at 01:19 AM
+-- Generation Time: Sep 10, 2025 at 04:07 AM
 -- Server version: 9.1.0
 -- PHP Version: 8.3.16
 
@@ -25,7 +25,7 @@ DELIMITER $$
 --
 -- Procedures
 --
-CREATE PROCEDURE `safe_delete_subject` (IN `subject_id` INT, OUT `can_delete` BOOLEAN, OUT `message` VARCHAR(255))   BEGIN
+CREATE DEFINER=`root`@`localhost` PROCEDURE `safe_delete_subject` (IN `subject_id` INT, OUT `can_delete` BOOLEAN, OUT `message` VARCHAR(255))   BEGIN
     DECLARE visit_count INT;
     DECLARE teacher_count INT;
     
@@ -49,7 +49,7 @@ CREATE PROCEDURE `safe_delete_subject` (IN `subject_id` INT, OUT `can_delete` BO
     END IF;
 END$$
 
-CREATE PROCEDURE `update_subject` (IN `p_subject_id` INT, IN `p_name` VARCHAR(255), IN `p_school_id` INT, IN `p_is_school_specific` TINYINT(1), IN `p_updated_by` INT, OUT `success` BOOLEAN, OUT `message` VARCHAR(255))   BEGIN
+CREATE DEFINER=`root`@`localhost` PROCEDURE `update_subject` (IN `p_subject_id` INT, IN `p_name` VARCHAR(255), IN `p_school_id` INT, IN `p_is_school_specific` TINYINT(1), IN `p_updated_by` INT, OUT `success` BOOLEAN, OUT `message` VARCHAR(255))   BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET success = FALSE;
@@ -163,6 +163,73 @@ INSERT INTO `educational_levels` (`id`, `name`, `created_at`, `updated_at`) VALU
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `elearning_attendance`
+--
+
+CREATE TABLE `elearning_attendance` (
+  `id` int NOT NULL,
+  `academic_year_id` int NOT NULL,
+  `school_id` int NOT NULL,
+  `subject_id` int NOT NULL,
+  `teacher_id` int NOT NULL,
+  `grade_id` int NOT NULL,
+  `section_id` int NOT NULL,
+  `lesson_date` date NOT NULL,
+  `lesson_number` int NOT NULL,
+  `num_students` int NOT NULL DEFAULT '0',
+  `attendance_students` int NOT NULL DEFAULT '0',
+  `attendance_type` enum('direct','remote') COLLATE utf8mb4_general_ci DEFAULT 'direct',
+  `elearning_tools` json DEFAULT NULL,
+  `lesson_topic` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `attendance_rating` enum('excellent','very_good','good','acceptable','poor') COLLATE utf8mb4_general_ci DEFAULT 'poor',
+  `coordinator_id` int NOT NULL,
+  `notes` text COLLATE utf8mb4_general_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `elearning_attendance`
+--
+
+INSERT INTO `elearning_attendance` (`id`, `academic_year_id`, `school_id`, `subject_id`, `teacher_id`, `grade_id`, `section_id`, `lesson_date`, `lesson_number`, `num_students`, `attendance_students`, `attendance_type`, `elearning_tools`, `lesson_topic`, `attendance_rating`, `coordinator_id`, `notes`, `created_at`, `updated_at`) VALUES
+(4, 2, 1, 16, 394, 12, 18, '2025-09-09', 1, 25, 14, 'direct', '[\"qatar_system\", \"tablets\", \"interactive_display\", \"interactive_websites\"]', 'jhgfdedwq', 'excellent', 325, 'kiujytrewdwsq', '2025-09-09 09:10:23', '2025-09-09 09:10:23'),
+(5, 2, 1, 18, 398, 12, 15, '2025-09-09', 2, 25, 16, 'direct', '[\"qatar_system\", \"tablets\", \"interactive_display\", \"ai_applications\", \"interactive_websites\"]', 'تفقثس سثق سيلس يل', 'excellent', 325, 'بيل سيلسيل', '2025-09-09 09:22:16', '2025-09-09 09:22:16'),
+(6, 2, 1, 3, 340, 10, 14, '2025-09-09', 3, 33, 25, 'direct', '[\"interactive_display\"]', 'awj,dg kaushdsakjgh', 'acceptable', 325, 'ksdjg fksjdghfkshdg', '2025-09-09 10:09:12', '2025-09-09 10:09:12');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `elearning_attendance_old`
+--
+
+CREATE TABLE `elearning_attendance_old` (
+  `id` int NOT NULL,
+  `academic_year_id` int NOT NULL,
+  `term` enum('first','second') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `date` date NOT NULL,
+  `subject_id` int NOT NULL,
+  `teacher_id` int NOT NULL,
+  `class_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lesson_topic` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lesson_time` time NOT NULL,
+  `lesson_duration` int NOT NULL DEFAULT '45' COMMENT 'مدة الحصة بالدقائق',
+  `attendance_type` enum('live','recorded','interactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `platform_used` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'المنصة المستخدمة',
+  `total_students` int NOT NULL,
+  `present_students` int NOT NULL,
+  `absent_students` int NOT NULL,
+  `interaction_level` enum('high','medium','low') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `technical_issues` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_by` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `evaluation_domains`
 --
 
@@ -270,6 +337,87 @@ INSERT INTO `grades` (`id`, `name`, `level_id`, `created_at`, `updated_at`) VALU
 (10, 'الصف العاشر', 3, '2025-05-14 14:48:51', '2025-05-14 14:48:51'),
 (11, 'الصف الحادي عشر', 3, '2025-05-14 14:48:51', '2025-05-14 14:48:51'),
 (12, 'الصف الثاني عشر', 3, '2025-05-14 14:48:51', '2025-05-14 14:48:51');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `qatar_system_criteria`
+--
+
+CREATE TABLE `qatar_system_criteria` (
+  `id` int NOT NULL,
+  `category` enum('lesson_building','assessment_management') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `criterion_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `qatar_system_criteria`
+--
+
+INSERT INTO `qatar_system_criteria` (`id`, `category`, `criterion_name`, `description`, `sort_order`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, 'lesson_building', 'إضافة الدروس وفقاً للخطة الفصلية', 'إضافة الدروس بما يتوافق مع الخطة الفصلية للمادة، بحيث يكون لكل حصة دراسية درس خاص بها على النظام', 1, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(2, 'lesson_building', 'كتابة عنوان الدرس واختيار التاريخ والحصة', 'كتابة عنوان الدرس واختيار التاريخ والحصة الدراسية بشكل صحيح', 2, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(3, 'lesson_building', 'إضافة أهداف الدرس', 'إضافة أهداف الدرس بشكل مختصر في خانة الوصف في بطاقة الدرس', 3, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(4, 'lesson_building', 'رفع صورة معبرة', 'رفع صورة معبرة عن الدرس في بطاقة الدرس، ووضعها بدلاً من الصورة التلقائية', 4, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(5, 'lesson_building', 'إضافة الدرس قبل الموعد', 'إضافة الدرس قبل موعد الدرس بيومين على الأقل', 5, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(6, 'lesson_building', 'الالتزام بإعدادات الدروس', 'الالتزام بإعدادات الدروس وعدم تغييرها، والتأكد بأن جميع الدروس مرتبة زمنياً من الأقدم إلى الأحدث', 6, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(7, 'lesson_building', 'ربط الدروس بنتاجات التعلم', 'ربط جميع الدروس بنتاجات التعلم المناسبة', 7, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(8, 'lesson_building', 'تفعيل تلعيب التعلم', 'تفعيل \"تلعيب التعلم\" بتفعيل لعبة \"نجوم المادة\" ومنحهم النقاط والشارات والشهادات', 8, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(9, 'lesson_building', 'العرض التقديمي المناسب', 'العرض التقديمي مناسب للدرس وأهدافه وموجه للطالب ويتناسب مع أسلوب التعلم الذاتي', 9, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(10, 'lesson_building', 'إضافة فيديو للدرس', 'فيديو للدرس من الدروس المصورة الموجودة في مكتبة المصادر في حال توفره', 10, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(11, 'lesson_building', 'مصادر التعلم الرقمية', 'مصادر تعلم رقمية (ورقة عمل تفاعلية – رابط ويب – لعبة تفاعلية – فيديو إثرائي...إلخ) لكل هدف', 11, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(12, 'lesson_building', 'إرفاق خطة الدرس', 'إرفاق خطة الدرس من تبويب ملاحظات الدرس', 12, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(13, 'assessment_management', 'التقييم الختامي', 'تقييم ختامي واحد، يغطي أهداف الدرس ويكون من فئة التقييمات البنائية / الختامية', 1, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(14, 'assessment_management', 'تحديد تواريخ التقييم', 'تحديد تاريخ البدء، وتاريخ الاستحقاق، وفئة التقييم المناسبة', 2, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(15, 'assessment_management', 'ربط التقييمات بنتاجات التعلم', 'ربط التقييمات بنتاجات التعلم المناسبة', 3, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(16, 'assessment_management', 'تصحيح التقييمات في الوقت المحدد', 'تصحيح التقييمات خلال 3 أيام من تاريخ الاستحقاق', 4, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(17, 'assessment_management', 'إنشاء بنوك الأسئلة', 'إنشاء بنوك الأسئلة لجميع الوحدات بتسميات واضحة ومشاركتها في مكتبة المدرسة', 5, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(18, 'assessment_management', 'تفعيل تلعيب التعلم في التقييمات', 'تفعيل \"تلعيب التعلم\" بتفعيل لعبة \"نجوم المادة\" ومنحهم النقاط والشارات والشهادات', 6, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(19, 'assessment_management', 'متابعة تحليلات الصف', 'الاطلاع على تحليلات الصف ودفتر الدرجات والتقييمات لمتابعة أداء الطلبة ومدى تقدمهم', 7, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13'),
+(20, 'assessment_management', 'إدخال الجدول الدراسي', 'إدخال الجدول الدراسي لكل معلم وتحديثه وفقاً لمتغيرات الجدول المدرسي', 8, 1, '2025-09-09 07:01:13', '2025-09-09 07:01:13');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `qatar_system_performance`
+--
+
+CREATE TABLE `qatar_system_performance` (
+  `id` int NOT NULL,
+  `academic_year_id` int NOT NULL,
+  `term` enum('first','second') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `teacher_id` int NOT NULL,
+  `subject_id` int NOT NULL,
+  `evaluation_date` date NOT NULL,
+  `evaluator_id` int NOT NULL COMMENT 'منسق التعليم الإلكتروني',
+  `criteria_scores` json NOT NULL COMMENT 'درجات المعايير - مصفوفة {criterion_id: score}',
+  `total_score` decimal(5,2) NOT NULL,
+  `performance_level` enum('excellent','very_good','good','needs_improvement','poor') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strengths` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `improvement_areas` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `recommendations` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `follow_up_date` date DEFAULT NULL,
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `qatar_system_performance`
+--
+
+INSERT INTO `qatar_system_performance` (`id`, `academic_year_id`, `term`, `teacher_id`, `subject_id`, `evaluation_date`, `evaluator_id`, `criteria_scores`, `total_score`, `performance_level`, `strengths`, `improvement_areas`, `recommendations`, `follow_up_date`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 2, 'first', 343, 3, '2025-09-09', 325, '{\"1\": 1, \"2\": 5, \"3\": 5, \"4\": 5, \"5\": 5, \"6\": 5, \"7\": 5, \"8\": 3, \"9\": 5, \"10\": 1, \"11\": 5, \"12\": 5, \"13\": 5, \"14\": 5, \"15\": 2, \"16\": 4, \"17\": 1, \"18\": 5, \"19\": 5, \"20\": 5}', 4.10, 'very_good', 'فغقافقثصضي', 'عةفغقثبيص', 'فغقالاثبصي', '2025-09-30', 'ف7تتا6فلقبيصض', '2025-09-09 07:18:07', '2025-09-09 07:18:07'),
+(3, 2, 'first', 396, 16, '2025-09-09', 325, '{\"1\": 5, \"2\": 5, \"3\": 5, \"4\": 5, \"5\": 4, \"6\": 5, \"7\": 4, \"8\": 5, \"9\": 5, \"10\": 4, \"11\": 5, \"12\": 4, \"13\": 5, \"14\": 5, \"15\": 5, \"16\": 5, \"17\": 5, \"18\": 4, \"19\": 5, \"20\": 4}', 4.70, 'excellent', 'عغغىللابريؤس', 'تلابلايؤس', 'البلايؤس', '2025-09-30', 'بىلفلايسؤءش', '2025-09-09 07:28:45', '2025-09-09 07:28:45'),
+(4, 2, 'first', 334, 1, '2024-12-19', 325, '{\"1\": 4, \"2\": 5, \"3\": 3}', 4.00, 'good', 'معلم متميز', 'يحتاج تطوير', 'المتابعة', NULL, 'ملاحظات', '2025-09-09 07:29:21', '2025-09-09 07:29:21'),
+(5, 2, 'first', 389, 4, '2025-09-09', 325, '{\"1\": 1, \"2\": 2, \"3\": 3, \"4\": 4, \"5\": 5, \"6\": 4, \"7\": 3, \"8\": 2, \"9\": 1, \"10\": 3, \"11\": 4, \"12\": 5, \"13\": 5, \"14\": 4, \"15\": 3, \"16\": 2, \"17\": 1, \"18\": 2, \"19\": 3, \"20\": 5}', 3.10, 'good', 'خمعهغنتفقلثصبيض', 'مزخهنغافلثصيسض', 'زتنوتةاغىلقبثيصس', '2025-09-30', 'اتلبلايرؤسءش', '2025-09-09 09:24:25', '2025-09-09 09:24:25'),
+(6, 2, 'first', 342, 3, '2025-09-09', 325, '{\"1\": 5, \"2\": 4, \"3\": 3, \"4\": 2, \"5\": 1, \"6\": 2, \"7\": 3, \"8\": 4, \"9\": 5, \"10\": 4, \"11\": 3, \"12\": 2, \"13\": 1, \"14\": 2, \"15\": 3, \"16\": 4, \"17\": 5, \"18\": 4, \"19\": 3, \"20\": 2}', 3.10, 'good', '7jythgrfedw', 'jgmnhytbrvedw', 'jmunhygtvrfdws', '2025-09-09', 'hnfgbdvcsgf ndsvcs', '2025-09-09 09:36:05', '2025-09-09 09:36:05'),
+(7, 2, 'first', 395, 16, '2025-09-09', 325, '{\"1\": 1, \"2\": 2, \"3\": 3, \"4\": 4, \"5\": 5, \"6\": 4, \"7\": 3, \"8\": 2, \"9\": 1, \"10\": 2, \"11\": 3, \"12\": 4, \"13\": 5, \"14\": 4, \"15\": 3, \"16\": 2, \"17\": 1, \"18\": 2, \"19\": 3, \"20\": 4}', 2.90, 'needs_improvement', 'sjayd tkjastydruasytutasd', 'df hhzfkudfyatkudsytkuays', 'sm htsjdtasfjdtyfjash', '2025-09-30', 'cvxjkhcxedgf kuxdy', '2025-09-09 10:10:24', '2025-09-09 10:10:24');
 
 -- --------------------------------------------------------
 
@@ -415,12 +563,12 @@ INSERT INTO `recommendations` (`id`, `indicator_id`, `text`, `created_at`, `upda
 -- (See below for the actual view)
 --
 CREATE TABLE `roles` (
-`created_at` timestamp
-,`description` text
-,`display_name` varchar(100)
-,`id` int
+`id` int
 ,`name` varchar(50)
+,`display_name` varchar(100)
+,`description` text
 ,`permissions` json
+,`created_at` timestamp
 ,`updated_at` timestamp
 );
 
@@ -488,7 +636,13 @@ INSERT INTO `sections` (`id`, `name`, `grade_id`, `school_id`, `created_at`, `up
 (18, '4', 12, 1, '2025-05-16 08:01:02', '2025-05-16 08:01:02'),
 (19, '5', 12, 1, '2025-05-16 08:01:06', '2025-05-16 08:01:06'),
 (20, '6', 12, 1, '2025-05-16 08:01:10', '2025-05-16 08:01:10'),
-(21, '7', 12, 1, '2025-05-16 08:01:16', '2025-05-16 08:01:16');
+(21, '7', 12, 1, '2025-05-16 08:01:16', '2025-05-16 08:01:16'),
+(22, 'أ', 1, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57'),
+(23, 'ب', 1, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57'),
+(24, 'أ', 2, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57'),
+(25, 'ب', 2, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57'),
+(26, 'أ', 3, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57'),
+(27, 'ب', 3, 1, '2025-09-09 07:51:57', '2025-09-09 07:51:57');
 
 -- --------------------------------------------------------
 
@@ -806,17 +960,17 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `full_name`, `role_id`, `school_id`, `is_active`, `last_login`, `password_reset_token`, `password_reset_expires`, `created_at`, `updated_at`) VALUES
-(1, 'admin_user', 'admin@school.edu', '$2y$10$L0Uo60GyAXjKryjF4qO9ZusWC5kqqt4.oYnW1LaBnGLfnBN7PXEsy', 'مدير النظام', 1, 1, 1, '2025-09-05 21:20:27', NULL, NULL, '2025-09-05 14:09:14', '2025-09-05 21:20:27'),
+(1, 'admin_user', 'admin@school.edu', '$2y$10$lULwHbg87xgcdGnb2Dzqm..OTmKcL/N8aDk6X6G7RYRkTt7xw.Lam', 'مدير النظام', 1, 1, 1, '2025-09-07 15:06:10', NULL, NULL, '2025-09-05 14:09:14', '2025-09-09 06:46:56'),
 (235, 'j.al-meraikhi2112', 'j.al-meraikhi2112', '$2y$10$BhljEBgxrNl06LexrFeZDu4Pzcg/Z4sJcTNRMozvTDVmQ8pGGyPKa', 'جاسم جمعه عبدالله  المريخى', 2, 1, 1, '2025-09-05 21:17:51', NULL, NULL, '2025-09-05 18:31:36', '2025-09-05 21:17:51'),
 (236, 's.al-naimi0801', 's.al-naimi0801', '$2y$10$lL7B75hDhBT1qBPK6Lcfr.keMeDntthjKN9b7Wwnl5CP/XlsXiGuq', 'سيف محمد سيف الجفالى النعيمى', 3, 1, 1, '2025-09-05 21:17:00', NULL, NULL, '2025-09-05 18:31:36', '2025-09-05 21:17:00'),
 (237, 'y.abdelrahman1005', 'y.abdelrahman1005', '$2y$10$JxKlzNMmC/ZTikFyVAVez.T.FpioCfPcVP86ODDhgOpMmfRGp5u2G', 'ياسر محمد أحمد عبد الرحمن', 2, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:36', '2025-09-05 18:31:36'),
-(238, 'w.emara2109', 'w.emara2109', '$2y$10$9Lfj16Jy6Y1bRWbrhEE2P.3Jtvu.N.V4msAsbufxaApBmj.Xruh8G', 'وليد فوزي محمد عماره', 2, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
+(238, 'w.emara2109', 'w.emara2109@education.qa', '$2y$10$9Lfj16Jy6Y1bRWbrhEE2P.3Jtvu.N.V4msAsbufxaApBmj.Xruh8G', 'وليد فوزي محمد عماره', 1, 1, 1, '2025-09-09 06:42:44', NULL, NULL, '2025-09-05 18:31:37', '2025-09-09 06:42:44'),
 (239, 'm.ammar0504', 'm.ammar0504', '$2y$10$NYUpCacwsMMcdVj7aUadTepwKsB3/0Y9hvOBJiLnTUoRz2EM7gA1G', 'محمد رياض عمار', 2, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
 (240, 'm.ali0308', 'm.ali0308', '$2y$10$BAJFCr.WoAHc2Gvj/b6JDOX7BkaN09F5YFiuIKgNn0FFN1nqjmx.C', 'محمد مصطفى عبداللطيف  علي', 5, 1, 1, '2025-09-06 01:03:39', NULL, NULL, '2025-09-05 18:31:37', '2025-09-06 01:03:39'),
 (241, 'r.eldisouky0612', 'r.eldisouky0612', '$2y$10$apWQ7hoDrtCZCg1A8vmVUuRB6fwUZLG4gvd4YnFz3iAJSTW3KL0GK', 'رضا فتحي عبدالمقصود  الدسوقى', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
 (242, 'k.aljabr0902', 'k.aljabr0902', '$2y$10$xIWx0QZn3kKXKPtTKbaD0OogiCzO.hau4uW6nC5kFe0XlZ0/KAu.2', 'خالد خميس المحمد  الجبر', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
 (243, 'a.alqudah1402', 'a.alqudah1402', '$2y$10$3z6thoLhRLJ.aKA2vOZ2Wux4m8HTqKhbCNnKW3M5BV6PgR0jyRVxW', 'عواد علي عواد  القضاه', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
-(244, 'a.aly2202', 'a.aly2202', '$2y$10$v9Em03TmCi8rEfNaO.45lunR3T8suwimIeY.m4AC8l3qoCTGD3/4.', 'عبدالعزيز معوض عبدالعزيز  علي', 6, 1, 1, '2025-09-05 23:52:16', NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 23:52:16'),
+(244, 'a.aly2202', 'a.aly2202', '$2y$10$v9Em03TmCi8rEfNaO.45lunR3T8suwimIeY.m4AC8l3qoCTGD3/4.', 'عبدالعزيز معوض عبدالعزيز  علي', 6, 1, 1, '2025-09-07 14:32:02', NULL, NULL, '2025-09-05 18:31:37', '2025-09-07 14:32:02'),
 (245, 'm.al-mohannadi010112', 'm.al-mohannadi010112', '$2y$10$X6JyIIHD.kBxGzT3xh3unefDXgm.G4EhgACPPwdyJ3lpapOtYwa0q', 'محمد عيسى احمد الحسن المهندى', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:37', '2025-09-05 18:31:37'),
 (246, 'b.almqassqas2802', 'b.almqassqas2802', '$2y$10$imTDp1G.D8HdsRa8g/6Die.TkJLaIIKk1Wy.u908brcFLt2nul3aW', 'باسم عبدالكريم فالح المقصقص', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:38', '2025-09-05 18:31:38'),
 (247, 'i.algharabli2701', 'i.algharabli2701', '$2y$10$qlIeTZTIyXXhD5sLAih3E.NwVZgcxh8JUZLi6KkUXlSzP9/HjfCq.', 'عماد جمعه خميس  الغرابلي', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:38', '2025-09-05 18:31:38'),
@@ -859,7 +1013,7 @@ INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `full_name`, `r
 (284, 'o.khaleel0108', 'o.khaleel0108', '$2y$10$6BnJwTN7OkUxz9YTLR/R5ezbvAMg9CDuQA7rhvZPbetx1CwlP2Ki6', 'عمر راشد حسن خليل', 5, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:43', '2025-09-05 18:31:43'),
 (285, 'm.sayedali1501', 'm.sayedali1501', '$2y$10$qeehsyMBdVMpCCuOroK43.fiBfIqRp/wh1fQ2RA671X6mofJ.VILK', 'محمد علي ابراهيم السيدعلي', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:43', '2025-09-05 18:31:43'),
 (286, 't.mohamed2605', 't.mohamed2605', '$2y$10$pGg2u0P7M2Tfze94ptpKwuNF87l/rRJdQvsHk5nJpk2Te2RPDxCl2', 'تامر سالم مشرف سالم محمد', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:44', '2025-09-05 18:31:44'),
-(287, 's.quraiba0911', 's.quraiba0911', '$2y$10$twLuVZ5gn7P1VgVPor5B/.HZdMeZMduOIxIlk3Jx1YQkdIa7vcYgC', 'صباح نصر صباح  قريبه', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:44', '2025-09-05 18:31:44'),
+(287, 's.quraiba0911', 's.quraiba0911', '$2y$10$twLuVZ5gn7P1VgVPor5B/.HZdMeZMduOIxIlk3Jx1YQkdIa7vcYgC', 'صباح نصر صباح  قريبه', 6, 1, 1, '2025-09-07 05:35:10', NULL, NULL, '2025-09-05 18:31:44', '2025-09-07 05:35:10'),
 (288, 'r.baker3007', 'r.baker3007', '$2y$10$VFSu5tTdXQtIECzYKQufcOeNabiLPxN4cYse/zqj07myTVL1NSpzG', 'رايلي مصطفى سليمان بني بكر', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:44', '2025-09-05 18:31:44'),
 (289, 'a.kaheet20011', 'a.kaheet20011', '$2y$10$/KG7yvpa0.gzSOYcvYKgqODyWQO9fCnKq3f6Qx2lcybKyWAVuXDZO', 'عمار اسود   كحيط', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:44', '2025-09-05 18:31:44'),
 (290, 'a.elhandawy0504', 'a.elhandawy0504', '$2y$10$cbTThzBVc..084OwZkZQk.3C6lbz10gNy/HcMQAUO61EhvyqsAWae', 'اشرف عبدالمنصف محمد  الهنداوى', 6, 1, 1, NULL, NULL, NULL, '2025-09-05 18:31:44', '2025-09-05 18:31:44'),
@@ -896,7 +1050,8 @@ INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `full_name`, `r
 (321, 'teacher_420', NULL, '$2y$10$586xMTt2GuJTs3t2Us1HK.81ag7BU.5LkzUTlU6TFIb4hyfFpewy2', 'موجه علوم اجتماعية', 3, 1, 1, NULL, NULL, NULL, '2025-09-05 23:58:42', '2025-09-05 23:58:42'),
 (322, 'teacher_421', NULL, '$2y$10$mnVOsjajX8EtuHL2WA89R.vBeDZppkJY4c/tpIHuJXjLUEavAi7Ri', 'موجه فيزياء', 3, 1, 1, NULL, NULL, NULL, '2025-09-05 23:58:42', '2025-09-05 23:58:42'),
 (323, 'teacher_422', NULL, '$2y$10$t/Wzbz2m61faJUrjJy56muxQ3gs9qTIKwA5TEqP7i.SjjSz10tB1K', 'موجه كيمياء', 3, 1, 1, NULL, NULL, NULL, '2025-09-05 23:58:42', '2025-09-05 23:58:42'),
-(324, 'teacher_423', NULL, '$2y$10$LKgG4p7nuWHQCgHBlyJiwufs6LoIwRoSE9ZX/DS/IhcDeDRw2uSOe', 'موجه لغة إنجليزية', 3, 1, 1, NULL, NULL, NULL, '2025-09-05 23:58:42', '2025-09-05 23:58:42');
+(324, 'teacher_423', NULL, '$2y$10$LKgG4p7nuWHQCgHBlyJiwufs6LoIwRoSE9ZX/DS/IhcDeDRw2uSOe', 'موجه لغة إنجليزية', 3, 1, 1, NULL, NULL, NULL, '2025-09-05 23:58:42', '2025-09-05 23:58:42'),
+(325, 'elearning_coordinator', 'elearning@school.edu', '$2y$10$pJuIl54s5jP5A5x12IKIUuJMh9l6udSODpjOwsHl3QlGzYPZ0bsKO', 'منسق التعليم الإلكتروني', 7, 1, 1, '2025-09-10 04:07:02', NULL, NULL, '2025-09-09 07:05:59', '2025-09-10 04:07:02');
 
 -- --------------------------------------------------------
 
@@ -976,7 +1131,36 @@ INSERT INTO `user_activity_log` (`id`, `user_id`, `action`, `table_name`, `recor
 (52, 263, 'login', 'users', 263, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 00:54:27'),
 (53, 263, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:03:25'),
 (54, 240, 'login', 'users', 240, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:03:39'),
-(55, 240, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:05:58');
+(55, 240, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:05:58'),
+(56, 1, 'login', 'users', 1, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:42:28'),
+(57, 1, 'update_user', 'users', 1, '{\"id\":1,\"username\":\"admin_user\",\"email\":\"admin@school.edu\",\"password_hash\":\"$2y$10$L0Uo60GyAXjKryjF4qO9ZusWC5kqqt4.oYnW1LaBnGLfnBN7PXEsy\",\"full_name\":\"\\u0645\\u062f\\u064a\\u0631 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645\",\"role_id\":1,\"school_id\":1,\"is_active\":1,\"last_login\":\"2025-09-06 04:42:28\",\"password_reset_token\":null,\"password_reset_expires\":null,\"created_at\":\"2025-09-05 17:09:14\",\"updated_at\":\"2025-09-06 04:42:28\"}', '{\"full_name\":\"\\u0645\\u062f\\u064a\\u0631 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645\",\"email\":\"admin@school.edu\",\"role_id\":1,\"school_id\":1,\"is_active\":1,\"password\":\"123456\"}', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-06 01:46:35'),
+(59, 244, 'login', 'users', 244, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 05:33:57'),
+(60, 244, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 05:34:18'),
+(61, 287, 'login', 'users', 287, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 05:35:10'),
+(62, 287, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 05:36:05'),
+(63, 244, 'login', 'users', 244, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 05:36:11'),
+(64, 244, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 09:02:39'),
+(65, 238, 'login', 'users', 238, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 09:03:36'),
+(66, 238, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 14:31:37'),
+(67, 244, 'login', 'users', 244, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 14:32:02'),
+(68, 244, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 14:36:21'),
+(69, 238, 'login', 'users', 238, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 14:36:41'),
+(71, 1, 'login', 'users', 1, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 15:06:10'),
+(72, 1, 'update_user', 'users', 238, '{\"id\":238,\"username\":\"w.emara2109\",\"email\":\"w.emara2109\",\"password_hash\":\"$2y$10$9Lfj16Jy6Y1bRWbrhEE2P.3Jtvu.N.V4msAsbufxaApBmj.Xruh8G\",\"full_name\":\"\\u0648\\u0644\\u064a\\u062f \\u0641\\u0648\\u0632\\u064a \\u0645\\u062d\\u0645\\u062f \\u0639\\u0645\\u0627\\u0631\\u0647\",\"role_id\":2,\"school_id\":1,\"is_active\":1,\"last_login\":\"2025-09-07 17:36:41\",\"password_reset_token\":null,\"password_reset_expires\":null,\"created_at\":\"2025-09-05 21:31:37\",\"updated_at\":\"2025-09-07 17:36:41\"}', '{\"full_name\":\"\\u0648\\u0644\\u064a\\u062f \\u0641\\u0648\\u0632\\u064a \\u0645\\u062d\\u0645\\u062f \\u0639\\u0645\\u0627\\u0631\\u0647\",\"email\":\"w.emara2109@education.qa\",\"role_id\":1,\"school_id\":1,\"is_active\":1}', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 15:07:28'),
+(73, 1, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 15:07:34'),
+(74, 238, 'login', 'users', 238, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-07 15:07:54'),
+(75, 238, 'login', 'users', 238, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 06:42:44'),
+(76, 238, 'update_user', 'users', 1, '{\"id\":1,\"username\":\"admin_user\",\"email\":\"admin@school.edu\",\"password_hash\":\"$2y$10$lNoedogYLoqNcBheT0b8J.qr4xNe3T6uDL\\/meP.qQg0aWuD\\/RuX\\/C\",\"full_name\":\"\\u0645\\u062f\\u064a\\u0631 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645\",\"role_id\":1,\"school_id\":1,\"is_active\":1,\"last_login\":\"2025-09-07 18:06:10\",\"password_reset_token\":null,\"password_reset_expires\":null,\"created_at\":\"2025-09-05 17:09:14\",\"updated_at\":\"2025-09-07 18:06:10\"}', '{\"full_name\":\"\\u0645\\u062f\\u064a\\u0631 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645\",\"email\":\"admin@school.edu\",\"role_id\":1,\"school_id\":1,\"is_active\":1,\"password\":\"123456\"}', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 06:46:56'),
+(77, 238, 'update_user', 'users', 325, '{\"id\":325,\"username\":\"elearning_coordinator\",\"email\":\"elearning@school.edu\",\"password_hash\":\"$2y$10$morkk20uU.e01vHS20X1ie.UKJLL\\/nmQvqA9UYii8aktLPAhVpb7e\",\"full_name\":\"\\u0645\\u0646\\u0633\\u0642 \\u0627\\u0644\\u062a\\u0639\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0625\\u0644\\u0643\\u062a\\u0631\\u0648\\u0646\\u064a\",\"role_id\":7,\"school_id\":1,\"is_active\":1,\"last_login\":null,\"password_reset_token\":null,\"password_reset_expires\":null,\"created_at\":\"2025-09-09 10:05:59\",\"updated_at\":\"2025-09-09 10:05:59\"}', '{\"full_name\":\"\\u0645\\u0646\\u0633\\u0642 \\u0627\\u0644\\u062a\\u0639\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0625\\u0644\\u0643\\u062a\\u0631\\u0648\\u0646\\u064a\",\"email\":\"elearning@school.edu\",\"role_id\":7,\"school_id\":1,\"is_active\":1,\"password\":\"123456\"}', NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 07:14:26'),
+(78, 238, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 07:14:41'),
+(79, 325, 'login', 'users', 325, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 07:14:47'),
+(80, 325, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 07:52:34'),
+(81, 325, 'login', 'users', 325, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 07:52:40'),
+(82, 325, 'login', 'users', 325, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 10:07:18'),
+(83, 325, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 15:36:39'),
+(84, 325, 'login', 'users', 325, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 15:36:45'),
+(85, 325, 'logout', NULL, NULL, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-09 19:58:20'),
+(86, 325, 'login', 'users', 325, NULL, NULL, NULL, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36', '2025-09-10 04:07:02');
 
 -- --------------------------------------------------------
 
@@ -1004,7 +1188,8 @@ INSERT INTO `user_roles` (`id`, `name`, `display_name`, `description`, `permissi
 (3, 'Academic Deputy', 'النائب الأكاديمي', 'صلاحيات كاملة على جميع أجزاء النظام', '{\"all\": true}', '2025-09-05 14:09:14', '2025-09-05 14:09:14'),
 (4, 'Supervisor', 'مشرف تربوي', 'صلاحيات على جميع المواد والمعلمين', '{\"full_access\": true}', '2025-09-05 14:09:14', '2025-09-05 14:09:14'),
 (5, 'Subject Coordinator', 'منسق المادة', 'صلاحيات على مادة محددة والمعلمين والموجهين المرتبطين بها', '{\"reports_view\": true, \"visit_creation\": true, \"subject_management\": true}', '2025-09-05 14:09:14', '2025-09-05 14:09:14'),
-(6, 'Teacher', 'معلم', 'صلاحيات محدودة لعرض الزيارات والتقارير الشخصية فقط', '{\"view_own_visits\": true, \"view_own_reports\": true}', '2025-09-05 14:09:14', '2025-09-05 14:09:14');
+(6, 'Teacher', 'معلم', 'صلاحيات محدودة لعرض الزيارات والتقارير الشخصية فقط', '{\"view_own_visits\": true, \"view_own_reports\": true}', '2025-09-05 14:09:14', '2025-09-05 14:09:14'),
+(7, 'E-Learning Coordinator', 'منسق التعليم الإلكتروني', 'صلاحيات إدارة حضور التعليم الإلكتروني ومتابعة أداء المعلمين على نظام قطر للتعليم', '{\"view_reports\": true, \"manage_attendance\": true, \"elearning_attendance\": true, \"qatar_system_monitoring\": true}', '2025-09-09 07:01:13', '2025-09-09 07:01:13');
 
 -- --------------------------------------------------------
 
@@ -1082,7 +1267,6 @@ INSERT INTO `visits` (`id`, `school_id`, `teacher_id`, `subject_id`, `grade_id`,
 (20, 1, 343, 3, 11, 7, 3, 18, 334, '2025-09-05', 2, 'full', 'physical', 0, '', 'بالاهتمام الزائد بالاسئلة للطلاب الضعاف', 'مجهودة و تركيزه و مهاراته ', 68.00, '2025-09-05 18:57:00', '2025-09-05 18:59:17'),
 (21, 1, 343, 3, 11, 7, 3, 17, 335, '2025-09-03', 2, 'full', 'physical', 0, '', 'الاهتمام اكثر و اكثر', 'شكرا', 58.00, '2025-09-05 19:03:31', '2025-09-05 19:03:31'),
 (22, 1, 343, 3, 11, 8, 3, 15, 339, '2025-08-31', 2, 'full', 'physical', 0, '', 'تطوير ', 'المجهود', 58.00, '2025-09-05 19:05:54', '2025-09-05 19:05:54'),
-(23, 1, 343, 3, 11, 8, 3, 16, 417, '2025-09-07', 2, 'full', 'physical', 0, '', 'بالتريث', 'الثقة و المادة العلمية القوية', 65.00, '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
 (24, 1, 342, 3, 10, 14, 3, 16, 417, '2025-09-05', 2, 'full', 'physical', 0, '', 'يجب أن تراعي الأنشطة التدرج والتسلسل في تحقيق أهداف الدرس.\r\n\r\nيجب أن ترتبط أنشطة التمهيد بخبرات الطلبة الحياتية وتجاربهم السابقة.\r\n\r\nيجب تفعيل السبورة التفاعلية بما يخدم الموقف التعليمي.\r\n\r\nيجب أن يربط المعلّم بين محاور المادة ومهاراتها بصورة فاعلة.\r\n\r\nيجب تقديم أنشطة وتدريبات تراعي أنماط التعلم (سمعي، بصري، حركي...).\r\n\r\nيجب تقديم التعليمات اللازمة لإنجاز الطلبة للأعمال الكتابية بدقة ووضوح والتأكد من فهمها.\r\n\r\nيجب أن تكون القوانين الصفية ثابتة وواضحة ويعي الطلبة ما يترتب عليها من إجراءات في حالة المخالفة.\r\n\r\nيجب استخدام وسائل مختلفة لضمان الالتزام بالزمن المحدد للأنشطة (مثل المؤقت أو العد التنازلي ــ الخ ...).', '', 57.00, '2025-09-05 21:49:39', '2025-09-05 21:49:39'),
 (25, 1, 346, 3, 10, 2, 3, 15, 339, '2025-09-05', 2, 'full', 'physical', 0, '', 'تمام', 'تمام التمام', 58.00, '2025-09-05 21:54:34', '2025-09-05 21:54:34'),
 (26, 1, 345, 3, 12, 15, 3, 15, 339, '2025-09-05', 2, 'full', 'physical', 0, '', 'يجب أن يكون مكان الدرس جاهزا للتعليم والتعلم (نظافة – ترتيب ــ تهوية ــ إضاءة...).\r\n\r\nيجب توجيه الطلبة إلى مراعاة قواعد الأمن والسلامة في الصف والمختبر ومعامل الحاسب.\r\n\r\nيجب أن تكون طريقة جلوس الطلاب منظمة وتسهل التواصل والتعلم داخل الصف.\r\n\r\nيجب توجيه تعليمات واضحة ومحددة قبل بدء النشاط وأثناء تنفيذه.\r\n\r\nيجب متابعة استجابة الطلبة للتوجيهات وتنفيذها.\r\n\r\nيجب أن تكون القوانين الصفية ثابتة وواضحة ويعي الطلبة ما يترتب عليها من إجراءات في حالة المخالفة.\r\n\r\nيجب مراعاة الوقت الكافي والمخصص لكل مراحل الدرس (التهيئة ــ العرض –الغلق).', '', 16.00, '2025-09-05 21:55:43', '2025-09-05 21:55:43'),
@@ -1200,36 +1384,6 @@ INSERT INTO `visit_evaluations` (`id`, `visit_id`, `indicator_id`, `score`, `rec
 (583, 22, 27, NULL, NULL, '', '2025-09-05 19:05:54', '2025-09-05 19:05:54'),
 (584, 22, 28, NULL, NULL, '', '2025-09-05 19:05:54', '2025-09-05 19:05:54'),
 (585, 22, 29, NULL, NULL, '', '2025-09-05 19:05:54', '2025-09-05 19:05:54'),
-(586, 23, 1, 3.00, 247, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(587, 23, 2, 3.00, 249, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(588, 23, 3, 3.00, 253, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(589, 23, 4, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(590, 23, 5, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(591, 23, 6, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(592, 23, 7, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(593, 23, 8, 2.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(594, 23, 9, 2.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(595, 23, 10, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(596, 23, 11, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(597, 23, 12, 1.00, 298, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(598, 23, 12, 1.00, 299, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(599, 23, 13, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(600, 23, 14, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(601, 23, 15, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(602, 23, 16, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(603, 23, 17, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(604, 23, 18, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(605, 23, 19, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(606, 23, 20, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(607, 23, 21, 3.00, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(608, 23, 22, 3.00, 344, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(609, 23, 23, 3.00, 347, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(610, 23, 24, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(611, 23, 25, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(612, 23, 26, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(613, 23, 27, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(614, 23, 28, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
-(615, 23, 29, NULL, NULL, '', '2025-09-05 20:09:23', '2025-09-05 20:09:23'),
 (616, 24, 1, 3.00, NULL, '', '2025-09-05 21:49:39', '2025-09-05 21:49:39'),
 (617, 24, 2, 3.00, NULL, '', '2025-09-05 21:49:39', '2025-09-05 21:49:39'),
 (618, 24, 3, 2.00, 253, '', '2025-09-05 21:49:39', '2025-09-05 21:49:39'),
@@ -1395,7 +1549,7 @@ INSERT INTO `visit_evaluations` (`id`, `visit_id`, `indicator_id`, `score`, `rec
 --
 DROP TABLE IF EXISTS `roles`;
 
-CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `roles`  AS SELECT `user_roles`.`id` AS `id`, `user_roles`.`name` AS `name`, `user_roles`.`display_name` AS `display_name`, `user_roles`.`description` AS `description`, `user_roles`.`permissions` AS `permissions`, `user_roles`.`created_at` AS `created_at`, `user_roles`.`updated_at` AS `updated_at` FROM `user_roles` ;
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `roles`  AS SELECT `user_roles`.`id` AS `id`, `user_roles`.`name` AS `name`, `user_roles`.`display_name` AS `display_name`, `user_roles`.`description` AS `description`, `user_roles`.`permissions` AS `permissions`, `user_roles`.`created_at` AS `created_at`, `user_roles`.`updated_at` AS `updated_at` FROM `user_roles` ;
 
 --
 -- Indexes for dumped tables
@@ -1423,6 +1577,31 @@ ALTER TABLE `educational_levels`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `elearning_attendance`
+--
+ALTER TABLE `elearning_attendance`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `academic_year_id` (`academic_year_id`),
+  ADD KEY `grade_id` (`grade_id`),
+  ADD KEY `section_id` (`section_id`),
+  ADD KEY `coordinator_id` (`coordinator_id`),
+  ADD KEY `idx_date` (`lesson_date`),
+  ADD KEY `idx_teacher` (`teacher_id`),
+  ADD KEY `idx_subject` (`subject_id`),
+  ADD KEY `idx_school` (`school_id`);
+
+--
+-- Indexes for table `elearning_attendance_old`
+--
+ALTER TABLE `elearning_attendance_old`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `academic_year_id` (`academic_year_id`),
+  ADD KEY `subject_id` (`subject_id`),
+  ADD KEY `teacher_id` (`teacher_id`),
+  ADD KEY `created_by` (`created_by`),
+  ADD KEY `date_index` (`date`);
+
+--
 -- Indexes for table `evaluation_domains`
 --
 ALTER TABLE `evaluation_domains`
@@ -1443,6 +1622,24 @@ ALTER TABLE `evaluation_indicators`
 ALTER TABLE `grades`
   ADD PRIMARY KEY (`id`),
   ADD KEY `level_id` (`level_id`);
+
+--
+-- Indexes for table `qatar_system_criteria`
+--
+ALTER TABLE `qatar_system_criteria`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `qatar_system_performance`
+--
+ALTER TABLE `qatar_system_performance`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_evaluation` (`teacher_id`,`subject_id`,`academic_year_id`,`term`,`evaluation_date`),
+  ADD KEY `academic_year_id` (`academic_year_id`),
+  ADD KEY `teacher_id` (`teacher_id`),
+  ADD KEY `subject_id` (`subject_id`),
+  ADD KEY `evaluator_id` (`evaluator_id`),
+  ADD KEY `evaluation_date_index` (`evaluation_date`);
 
 --
 -- Indexes for table `recommendations`
@@ -1585,6 +1782,18 @@ ALTER TABLE `educational_levels`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
+-- AUTO_INCREMENT for table `elearning_attendance`
+--
+ALTER TABLE `elearning_attendance`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+--
+-- AUTO_INCREMENT for table `elearning_attendance_old`
+--
+ALTER TABLE `elearning_attendance_old`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `evaluation_domains`
 --
 ALTER TABLE `evaluation_domains`
@@ -1603,6 +1812,18 @@ ALTER TABLE `grades`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
+-- AUTO_INCREMENT for table `qatar_system_criteria`
+--
+ALTER TABLE `qatar_system_criteria`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+
+--
+-- AUTO_INCREMENT for table `qatar_system_performance`
+--
+ALTER TABLE `qatar_system_performance`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
 -- AUTO_INCREMENT for table `recommendations`
 --
 ALTER TABLE `recommendations`
@@ -1618,7 +1839,7 @@ ALTER TABLE `schools`
 -- AUTO_INCREMENT for table `sections`
 --
 ALTER TABLE `sections`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
 
 --
 -- AUTO_INCREMENT for table `subjects`
@@ -1648,19 +1869,19 @@ ALTER TABLE `teacher_subjects`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=325;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=326;
 
 --
 -- AUTO_INCREMENT for table `user_activity_log`
 --
 ALTER TABLE `user_activity_log`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=56;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=87;
 
 --
 -- AUTO_INCREMENT for table `user_roles`
 --
 ALTER TABLE `user_roles`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `user_sessions`
@@ -1699,10 +1920,40 @@ ALTER TABLE `coordinator_supervisors`
   ADD CONSTRAINT `coord_sup_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
+-- Constraints for table `elearning_attendance`
+--
+ALTER TABLE `elearning_attendance`
+  ADD CONSTRAINT `elearning_attendance_ibfk_1` FOREIGN KEY (`academic_year_id`) REFERENCES `academic_years` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_2` FOREIGN KEY (`school_id`) REFERENCES `schools` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_3` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_4` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_5` FOREIGN KEY (`grade_id`) REFERENCES `grades` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_6` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`),
+  ADD CONSTRAINT `elearning_attendance_ibfk_7` FOREIGN KEY (`coordinator_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `elearning_attendance_old`
+--
+ALTER TABLE `elearning_attendance_old`
+  ADD CONSTRAINT `elearning_attendance_old_ibfk_1` FOREIGN KEY (`academic_year_id`) REFERENCES `academic_years` (`id`),
+  ADD CONSTRAINT `elearning_attendance_old_ibfk_2` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`),
+  ADD CONSTRAINT `elearning_attendance_old_ibfk_3` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`),
+  ADD CONSTRAINT `elearning_attendance_old_ibfk_4` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+
+--
 -- Constraints for table `evaluation_indicators`
 --
 ALTER TABLE `evaluation_indicators`
   ADD CONSTRAINT `evaluation_indicators_ibfk_1` FOREIGN KEY (`domain_id`) REFERENCES `evaluation_domains` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `qatar_system_performance`
+--
+ALTER TABLE `qatar_system_performance`
+  ADD CONSTRAINT `qatar_system_performance_ibfk_1` FOREIGN KEY (`academic_year_id`) REFERENCES `academic_years` (`id`),
+  ADD CONSTRAINT `qatar_system_performance_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`),
+  ADD CONSTRAINT `qatar_system_performance_ibfk_3` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`),
+  ADD CONSTRAINT `qatar_system_performance_ibfk_4` FOREIGN KEY (`evaluator_id`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `recommendations`

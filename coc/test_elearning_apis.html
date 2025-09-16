@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار APIs نظام التعليم الإلكتروني</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">اختبار APIs نظام التعليم الإلكتروني</h1>
+        
+        <!-- نموذج اختبار -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">نموذج اختبار</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">المدرسة</label>
+                    <select id="school_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="">اختر المدرسة</option>
+                        <option value="1">مدرسة عبد الله بن على المسند الثانوية للبنين</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">المادة</label>
+                    <select id="subject_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="">اختر المادة</option>
+                        <option value="1">اللغة العربية</option>
+                        <option value="2">الرياضيات</option>
+                        <option value="3">الفيزياء</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">المعلم</label>
+                    <select id="teacher_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="">اختر المعلم</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">الصف</label>
+                    <select id="grade_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="">اختر الصف</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">الشعبة</label>
+                    <select id="section_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="">اختر الشعبة</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- مخرجات الاختبار -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">مخرجات الاختبار</h2>
+            <div id="output" class="bg-gray-100 rounded p-4 h-64 overflow-y-auto font-mono text-sm"></div>
+        </div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString('ar-SA');
+            output.innerHTML += `[${timestamp}] ${message}<br>`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        // تحديث المعلمين والصفوف عند اختيار المدرسة
+        document.getElementById('school_id').addEventListener('change', function() {
+            const schoolId = this.value;
+            log(`تم اختيار مدرسة: ${schoolId}`);
+            
+            if (schoolId) {
+                updateGrades(schoolId);
+                updateTeachers();
+            } else {
+                document.getElementById('teacher_id').innerHTML = '<option value="">اختر المعلم</option>';
+                document.getElementById('grade_id').innerHTML = '<option value="">اختر الصف</option>';
+                document.getElementById('section_id').innerHTML = '<option value="">اختر الشعبة</option>';
+            }
+        });
+        
+        // تحديث المعلمين عند اختيار المادة
+        document.getElementById('subject_id').addEventListener('change', function() {
+            log(`تم اختيار مادة: ${this.value}`);
+            updateTeachers();
+        });
+        
+        // تحديث الشعب عند اختيار الصف
+        document.getElementById('grade_id').addEventListener('change', function() {
+            const gradeId = this.value;
+            const schoolId = document.getElementById('school_id').value;
+            log(`تم اختيار صف: ${gradeId}`);
+            
+            const sectionSelect = document.getElementById('section_id');
+            sectionSelect.innerHTML = '<option value="">اختر الشعبة</option>';
+            
+            if (gradeId && schoolId) {
+                log(`جلب الشعب للمدرسة ${schoolId} والصف ${gradeId}`);
+                fetch(`api/get_sections_by_school_grade.php?school_id=${schoolId}&grade_id=${gradeId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        log(`API الشعب: ${JSON.stringify(data)}`);
+                        if (data.success && data.sections) {
+                            data.sections.forEach(section => {
+                                const option = document.createElement('option');
+                                option.value = section.id;
+                                option.textContent = section.name;
+                                sectionSelect.appendChild(option);
+                            });
+                            log(`تم تحميل ${data.sections.length} شعبة`);
+                        } else {
+                            log(`خطأ في جلب الشعب: ${data.message || 'غير معروف'}`);
+                        }
+                    })
+                    .catch(error => {
+                        log(`خطأ شبكة في جلب الشعب: ${error.message}`);
+                    });
+            }
+        });
+        
+        function updateGrades(schoolId) {
+            log(`جلب الصفوف للمدرسة ${schoolId}`);
+            const gradeSelect = document.getElementById('grade_id');
+            gradeSelect.innerHTML = '<option value="">اختر الصف</option>';
+            
+            fetch(`api/get_grades_by_school.php?school_id=${schoolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    log(`API الصفوف: ${JSON.stringify(data)}`);
+                    if (data.success && data.grades) {
+                        data.grades.forEach(grade => {
+                            const option = document.createElement('option');
+                            option.value = grade.id;
+                            option.textContent = grade.name;
+                            gradeSelect.appendChild(option);
+                        });
+                        log(`تم تحميل ${data.grades.length} صف`);
+                    } else {
+                        log(`خطأ في جلب الصفوف: ${data.message || 'غير معروف'}`);
+                    }
+                })
+                .catch(error => {
+                    log(`خطأ شبكة في جلب الصفوف: ${error.message}`);
+                });
+        }
+        
+        function updateTeachers() {
+            const schoolId = document.getElementById('school_id').value;
+            const subjectId = document.getElementById('subject_id').value;
+            const teacherSelect = document.getElementById('teacher_id');
+            
+            teacherSelect.innerHTML = '<option value="">اختر المعلم</option>';
+            
+            if (schoolId && subjectId) {
+                log(`جلب المعلمين للمدرسة ${schoolId} والمادة ${subjectId}`);
+                fetch(`api/get_teachers_by_school_subject.php?school_id=${schoolId}&subject_id=${subjectId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        log(`API المعلمين: ${JSON.stringify(data)}`);
+                        if (data.success && data.teachers) {
+                            data.teachers.forEach(teacher => {
+                                const option = document.createElement('option');
+                                option.value = teacher.id;
+                                option.textContent = teacher.name;
+                                teacherSelect.appendChild(option);
+                            });
+                            log(`تم تحميل ${data.teachers.length} معلم`);
+                        } else {
+                            log(`خطأ في جلب المعلمين: ${data.message || 'غير معروف'}`);
+                        }
+                    })
+                    .catch(error => {
+                        log(`خطأ شبكة في جلب المعلمين: ${error.message}`);
+                    });
+            } else {
+                if (!schoolId) log('المدرسة غير محددة');
+                if (!subjectId) log('المادة غير محددة');
+            }
+        }
+        
+        log('تم تحميل صفحة الاختبار');
+    </script>
+</body>
+</html>

@@ -59,29 +59,33 @@ try {
         throw new Exception('الزيارة غير موجودة');
     }
     
-    // جلب تفاصيل التقييم لهذه الزيارة
+    // جلب تفاصيل التقييم لهذه الزيارة (صف واحد لكل مؤشر)، مع استبعاد مجال المعمل إذا لم يكن مُفعلاً
     $evaluation_sql = "
         SELECT 
-            ve.*,
+            ei.id as indicator_id,
             ei.name as indicator_text,
             ei.domain_id,
             ed.name as domain_name,
-            r.text as recommendation_text
+            MAX(ve.score) as score,
+            MAX(ve.custom_recommendation) as custom_recommendation,
+            MAX(r.text) as recommendation_text
         FROM 
-            visit_evaluations ve
-        JOIN 
-            evaluation_indicators ei ON ve.indicator_id = ei.id
+            evaluation_indicators ei
         JOIN 
             evaluation_domains ed ON ei.domain_id = ed.id
         LEFT JOIN 
+            visit_evaluations ve ON ve.indicator_id = ei.id AND ve.visit_id = ?
+        LEFT JOIN 
             recommendations r ON ve.recommendation_id = r.id
         WHERE 
-            ve.visit_id = ?
+            EXISTS (SELECT 1 FROM visit_evaluations WHERE visit_id = ? AND indicator_id = ei.id)
+        GROUP BY
+            ei.id, ei.name, ei.domain_id, ed.name
         ORDER BY
-            ed.id, ei.id
+            ei.domain_id, ei.id
     ";
     
-    $evaluations = query($evaluation_sql, [$visit_id]);
+    $evaluations = query($evaluation_sql, [$visit_id, $visit_id]);
     
     // تجميع التقييمات حسب المجال
     $evaluations_by_domain = [];
@@ -127,13 +131,23 @@ $date_formatted = $date_obj->format('Y/m/d');
 $total_scores = 0;
 $valid_indicators_count = 0;
 
-// استعلام لجلب جميع التقييمات لهذه الزيارة
-$scores_sql = "
-    SELECT score 
-    FROM visit_evaluations 
-    WHERE visit_id = ?
-";
-$scores = query($scores_sql, [$visit_id]);
+// استعلام لجلب جميع التقييمات لهذه الزيارة (مع استبعاد مجال المعمل إذا لم يكن مُفعلاً)
+if (($visit['has_lab'] ?? 0) == 0) {
+    $scores_sql = "
+        SELECT ve.score 
+        FROM visit_evaluations ve
+        JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
+        WHERE ve.visit_id = ? AND ei.domain_id <> 5
+    ";
+    $scores = query($scores_sql, [$visit_id]);
+} else {
+    $scores_sql = "
+        SELECT score 
+        FROM visit_evaluations 
+        WHERE visit_id = ?
+    ";
+    $scores = query($scores_sql, [$visit_id]);
+}
 
 foreach ($scores as $score_item) {
     // نستثني المؤشرات غير المقاسة (score = NULL)
@@ -169,9 +183,9 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             body {
                 margin: 0;
                 font-family: 'Cairo', sans-serif;
-                font-size: 6pt;
+                font-size: 8pt; /* تكبير لتعبئة مساحة الصفحة */
                 color: #333;
-                line-height: 1.1;
+                line-height: 1.25;
             }
             
             h1, h2, h3, h4 {
@@ -184,7 +198,7 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 0px;
+                margin-bottom: 6px; /* فراغ بسيط بين الجداول */
             }
             
             table, th, td {
@@ -192,7 +206,7 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             }
             
             th, td {
-                padding: 2px;
+                padding: 4px; /* زيادة الحشوة لتمدد الصفوف عمودياً */
                 text-align: right;
             }
             
@@ -203,13 +217,13 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             
             .print-header {
                 text-align: center;
-                margin-bottom: 5px;
-                padding-bottom: 5px;
+                margin-bottom: 8px;
+                padding-bottom: 6px;
                 border-bottom: 1px solid #000;
             }
             
             .print-section {
-                margin-bottom: 5px;
+                margin-bottom: 8px;
             }
             
             .print-footer {
@@ -242,9 +256,9 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             }
             
             .main-heading {
-                font-size: 10pt;
+                font-size: 11pt;
                 font-weight: bold;
-                margin-bottom: 5px;
+                margin-bottom: 6px;
                 text-align: center;
             }
             
@@ -255,12 +269,13 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
             .indicator-table th {
                 text-align: center;
                 font-weight: bold;
+                padding: 4px;
             }
             
             .domain-heading {
                 background-color: #ddd;
                 font-weight: bold;
-                padding: 0px;
+                padding: 2px;
                 text-align: center;
             }
             
@@ -505,10 +520,10 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
                    <th rowspan="2" style="width: 40%;">التوصية</th>
                 </tr>
                 <tr>
-                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة مستكملة وفاعلة</th>
-                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر معظم الأدلة</th>
-                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">تتوفر بعض الأدلة</th>
-                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">الأدلة غير متوفرة</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">ممتاز</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">جيد</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">مقبول</th>
+                    <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">ضعيف</th>
                     <th style="writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; width: 30px;">لم يتم قياسه</th>
                 </tr>
                 
@@ -519,6 +534,7 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
                 
                 foreach ($evaluations as $index => $eval): 
                     $current_domain = $eval['domain_name'];
+                    $is_last_in_domain = (!isset($evaluations[$index + 1]) || $evaluations[$index + 1]['domain_name'] != $current_domain);
                     
                     // إذا تغير المجال، نعرض صف جديد للمجال
                     if ($current_domain != $previous_domain):
@@ -538,20 +554,34 @@ $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid
                     <td class="text-center"><?= ($eval['score'] == 3) ? '✓' : '' ?></td>
                     <td class="text-center"><?= ($eval['score'] == 2) ? '✓' : '' ?></td>
                     <td class="text-center"><?= ($eval['score'] == 1) ? '✓' : '' ?></td>
-                    <td class="text-center"><?= ($eval['score'] == 0 && !is_null($eval['score'])) ? '✓' : '' ?></td>
-                    <td class="text-center"><?= (is_null($eval['score']) || $eval['score'] === null || $eval['score'] === '') ? '✓' : '' ?></td>
-                    <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 0 && $eval['score'] !== null) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] === null) ? '✓' : '' ?></td>
+                    <td><?= htmlspecialchars(($eval['custom_recommendation'] ?? '') !== '' ? $eval['custom_recommendation'] : ($eval['recommendation_text'] ?? '')) ?></td>
                 </tr>
+                <?php if ((int)$eval['domain_id'] === 3 && $is_last_in_domain): ?>
+                <tr>
+                    <td colspan="8" style="border:0; padding:0; height:0;">
+                        <div class="page-break" style="page-break-after: always;"></div>
+                    </td>
+                </tr>
+                <?php endif; ?>
                 <?php else: ?>
                 <tr>
                     <td><?= htmlspecialchars($eval['indicator_text']) ?></td>
                     <td class="text-center"><?= ($eval['score'] == 3) ? '✓' : '' ?></td>
                     <td class="text-center"><?= ($eval['score'] == 2) ? '✓' : '' ?></td>
                     <td class="text-center"><?= ($eval['score'] == 1) ? '✓' : '' ?></td>
-                    <td class="text-center"><?= ($eval['score'] == 0 && !is_null($eval['score'])) ? '✓' : '' ?></td>
-                    <td class="text-center"><?= (is_null($eval['score']) || $eval['score'] === null || $eval['score'] === '') ? '✓' : '' ?></td>
-                    <td><?= htmlspecialchars($eval['recommendation_text'] ?: '') ?></td>
+                    <td class="text-center"><?= ($eval['score'] == 0 && $eval['score'] !== null) ? '✓' : '' ?></td>
+                    <td class="text-center"><?= ($eval['score'] === null) ? '✓' : '' ?></td>
+                    <td><?= htmlspecialchars(($eval['custom_recommendation'] ?? '') !== '' ? $eval['custom_recommendation'] : ($eval['recommendation_text'] ?? '')) ?></td>
                 </tr>
+                <?php if ((int)$eval['domain_id'] === 3 && $is_last_in_domain): ?>
+                <tr>
+                    <td colspan="8" style="border:0; padding:0; height:0;">
+                        <div class="page-break" style="page-break-after: always;"></div>
+                    </td>
+                </tr>
+                <?php endif; ?>
                 <?php 
                     endif;
                     $previous_domain = $current_domain;

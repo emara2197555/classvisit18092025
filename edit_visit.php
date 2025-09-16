@@ -58,23 +58,34 @@ if (!$visit) {
 // استرجاع تقييمات الزيارة
 $evaluations_query = "
     SELECT 
-        ve.*,
+        ve.id,
+        ve.visit_id,
+        ve.indicator_id,
+        ve.score,
+        ve.recommendation_id,
+        ve.custom_recommendation,
         ei.name AS indicator_name,
         ed.id AS domain_id,
         ed.name AS domain_name
     FROM 
-        visit_evaluations ve
-    JOIN 
-        evaluation_indicators ei ON ve.indicator_id = ei.id
+        evaluation_indicators ei
     JOIN 
         evaluation_domains ed ON ei.domain_id = ed.id
-    WHERE 
-        ve.visit_id = ?
+    LEFT JOIN 
+        visit_evaluations ve ON ve.indicator_id = ei.id AND ve.visit_id = ?
     ORDER BY 
         ed.id, ei.id
 ";
 
 $evaluations = query($evaluations_query, [$visit_id]);
+
+// خريطة ربط: evaluation_id => domain_id لتحديد مجال كل تقييم
+$evaluation_domain_map = [];
+foreach ($evaluations as $ev) {
+    if (isset($ev['id']) && isset($ev['domain_id'])) {
+        $evaluation_domain_map[(int)$ev['id']] = (int)$ev['domain_id'];
+    }
+}
 
 // معالجة النموذج عند إرساله
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -124,23 +135,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($_POST as $key => $value) {
             if (strpos($key, 'score_') === 0) {
                 $evaluation_id = (int)substr($key, strlen('score_'));
-                $score = (int)$value;
+                // السماح بقيمة فارغة لتعني NULL (لم يتم قياسه)
+                $score = ($value === '' ? null : (int)$value);
                 $notes = $_POST['notes_' . $evaluation_id] ?? '';
                 $recommendation_id = $_POST['recommendation_' . $evaluation_id] ?? null;
                 
-                // تحديث التقييم
-                $update_evaluation_query = "
-                    UPDATE visit_evaluations 
-                    SET 
-                        score = ?,
-                        custom_recommendation = ?,
-                        recommendation_id = ?,
-                        updated_at = NOW()
-                    WHERE 
-                        id = ?
-                ";
+                // إذا لم يكن هناك معمل، نتجاهل مؤشرات مجال المعمل (domain_id = 5)
+                if ((int)($visit['has_lab'] ?? 0) === 0) {
+                    $domain_for_eval = $evaluation_domain_map[$evaluation_id] ?? null;
+                    if ($domain_for_eval === 5) {
+                        continue;
+                    }
+                }
                 
-                execute($update_evaluation_query, [$score, $notes, $recommendation_id ?: null, $evaluation_id]);
+                // تحديث التقييم
+                $update_evaluation_query = (
+                    $score === null
+                    ? "UPDATE visit_evaluations SET score = NULL, custom_recommendation = ?, recommendation_id = ?, updated_at = NOW() WHERE id = ?"
+                    : "UPDATE visit_evaluations SET score = ?, custom_recommendation = ?, recommendation_id = ?, updated_at = NOW() WHERE id = ?"
+                );
+
+                $params = ($score === null)
+                    ? [$notes, $recommendation_id ?: null, $evaluation_id]
+                    : [$score, $notes, $recommendation_id ?: null, $evaluation_id];
+
+                execute($update_evaluation_query, $params);
             }
         }
 
@@ -181,9 +200,10 @@ foreach ($domains as $domain) {
 
 // لم نعد بحاجة لجلب التوصيات هنا، سنقوم بجلبها مباشرة في كل مؤشر أداء
 
-// تنظيم التقييمات حسب المؤشر
+// تنظيم التقييمات حسب المؤشر (جلب الموجود فعلياً لهذه الزيارة لضمان المطابقة مع صفحة العرض)
 $evaluations_by_indicator = [];
-foreach ($evaluations as $evaluation) {
+$existing_evals = query("SELECT ve.*, ei.domain_id FROM visit_evaluations ve JOIN evaluation_indicators ei ON ve.indicator_id = ei.id WHERE ve.visit_id = ? ORDER BY ve.id", [$visit_id]);
+foreach ($existing_evals as $evaluation) {
     $evaluations_by_indicator[$evaluation['indicator_id']] = $evaluation;
 }
 
@@ -335,6 +355,12 @@ require_once 'includes/header.php';
             <h2 class="text-xl font-semibold mb-4">نموذج التقييم</h2>
             
             <?php foreach ($domains as $domain): ?>
+                <?php 
+                // إذا لم يكن هناك معمل (has_lab = 0) نتخطى عرض مجال المعمل (id = 5)
+                if (($visit['has_lab'] ?? 0) == 0 && (int)$domain['id'] === 5) { 
+                    continue; 
+                } 
+                ?>
                 <div class="mb-6">
                     <h3 class="text-lg font-medium mb-3 bg-primary-100 p-2 rounded-md"><?= $domain['name'] ?></h3>
                     
@@ -354,20 +380,22 @@ require_once 'includes/header.php';
                                         <?php 
                                         // الحصول على بيانات التقييم بشكل آمن
                                         $evaluation = $evaluations_by_indicator[$indicator['id']] ?? null;
-                                        $score = $evaluation ? $evaluation['score'] : 0;
-                                        $notes = $evaluation && isset($evaluation['notes']) ? $evaluation['notes'] : '';
+                                        // في قاعدة البيانات: NULL = لم يتم قياسه، 0=ضعيف، 1=مقبول، 2=جيد، 3=ممتاز
+                                        $score = ($evaluation && $evaluation['score'] !== null) ? (int)$evaluation['score'] : null;
+                                        // عرض الملاحظات من الحقل الصحيح في قاعدة البيانات
+                                        $notes = $evaluation && isset($evaluation['custom_recommendation']) ? $evaluation['custom_recommendation'] : '';
                                         $recommendation_id = $evaluation && isset($evaluation['recommendation_id']) ? $evaluation['recommendation_id'] : null;
                                         $evaluation_id = $evaluation ? $evaluation['id'] : 0;
                                         ?>
                                         <tr class="hover:bg-gray-50">
                                             <td class="px-4 py-2 border"><?= htmlspecialchars($indicator['name']) ?></td>
                                             <td class="px-4 py-2 border text-center">
-                                                <select name="score_<?= $evaluation_id ?>" class="border border-gray-300 rounded-md score-<?= $score ?>">
-                                                    <option value="0" <?= $score == 0 ? 'selected' : '' ?>>لم يتم قياسه</option>
-                                                    <option value="1" <?= $score == 1 ? 'selected' : '' ?>>الأدلة غير متوفرة أو محدودة</option>
-                                                    <option value="2" <?= $score == 2 ? 'selected' : '' ?>>تتوفر بعض الأدلة</option>
-                                                    <option value="3" <?= $score == 3 ? 'selected' : '' ?>>تتوفر معظم الأدلة</option>
-                                                    <option value="4" <?= $score == 4 ? 'selected' : '' ?>>الأدلة مستكملة وفاعلة</option>
+                                                <select name="score_<?= $evaluation_id ?>" class="border border-gray-300 rounded-md <?= is_null($score) ? 'score-null' : ('score-' . (int)$score) ?>">
+                                                    <option value="" <?= is_null($score) ? 'selected' : '' ?>>لم يتم قياسه</option>
+                                                    <option value="0" <?= $score === 0 ? 'selected' : '' ?>>ضعيف</option>
+                                                    <option value="1" <?= $score === 1 ? 'selected' : '' ?>>مقبول</option>
+                                                    <option value="2" <?= $score === 2 ? 'selected' : '' ?>>جيد</option>
+                                                    <option value="3" <?= $score === 3 ? 'selected' : '' ?>>ممتاز</option>
                                                 </select>
                                             </td>
                                             <td class="px-4 py-2 border">
