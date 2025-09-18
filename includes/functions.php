@@ -242,7 +242,7 @@ function get_teacher_indicators_avg_by_visitor($teacher_id, $visitor_type_id = n
             ei.id AS indicator_id,
             ei.name AS indicator_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * (100/3)) AS percentage_score
+            ((AVG(ve.score) / 3) * 100) AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -279,7 +279,7 @@ function get_teacher_weakest_indicators($teacher_id, $threshold_score = 2.5, $li
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * (100/3)) AS percentage_score
+            ((AVG(ve.score) / 3) * 100) AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -321,4 +321,68 @@ function get_active_academic_year() {
 function get_academic_year_name($year_id) {
     $year = query_row("SELECT name FROM academic_years WHERE id = ?", [$year_id]);
     return $year ? $year['name'] : '';
+}
+
+/**
+ * دالة للحصول على عرض دور المستخدم الحالي
+ *
+ * @return string اسم الدور المعروض
+ */
+function get_user_role_display() {
+    // التحقق من وجود الجلسة
+    if (!isset($_SESSION['user_id'])) {
+        return 'غير مسجل دخول';
+    }
+    
+    // إذا كان display_name محفوظ في الجلسة
+    if (isset($_SESSION['role_display_name']) && !empty($_SESSION['role_display_name'])) {
+        return $_SESSION['role_display_name'];
+    }
+    
+    // إذا لم يكن محفوظ، جلبه من قاعدة البيانات
+    $user_id = $_SESSION['user_id'];
+    $role_data = query_row("
+        SELECT r.display_name, r.name 
+        FROM users u 
+        JOIN user_roles r ON u.role_id = r.id 
+        WHERE u.id = ?
+    ", [$user_id]);
+    
+    if ($role_data) {
+        // حفظه في الجلسة للاستخدام المستقبلي
+        $_SESSION['role_display_name'] = $role_data['display_name'];
+        return $role_data['display_name'];
+    }
+    
+    // إذا لم نجد الدور، عرض تحذير
+    return 'دور غير محدد';
+}
+
+/**
+ * دالة لإعادة تحديث بيانات الجلسة للمستخدم
+ *
+ * @param int $user_id معرف المستخدم
+ * @return bool نجح التحديث أم لا
+ */
+function refresh_user_session($user_id) {
+    $user = query_row("
+        SELECT u.*, r.name as role_name, r.display_name as role_display_name, 
+               r.permissions, s.name as school_name
+        FROM users u
+        LEFT JOIN user_roles r ON u.role_id = r.id
+        LEFT JOIN schools s ON u.school_id = s.id
+        WHERE u.id = ? AND u.is_active = 1
+    ", [$user_id]);
+    
+    if ($user) {
+        $_SESSION['role_name'] = $user['role_name'];
+        $_SESSION['role_display_name'] = $user['role_display_name'];
+        $_SESSION['role_id'] = $user['role_id'];
+        $_SESSION['school_id'] = $user['school_id'];
+        $_SESSION['full_name'] = $user['full_name'];
+        $_SESSION['permissions'] = json_decode($user['permissions'], true);
+        return true;
+    }
+    
+    return false;
 } 

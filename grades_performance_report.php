@@ -142,7 +142,7 @@ $sql = "
         COUNT(DISTINCT v.id) AS visits_count,
         
         -- متوسط تنفيذ الدرس (مجال رقم 2)
-        (SELECT AVG(ve.score) * (100/3)
+        (SELECT (AVG(ve.score) / 3) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -157,7 +157,7 @@ $sql = "
            AND ve.score > 0) AS lesson_execution_avg,
            
         -- متوسط الإدارة الصفية (مجال رقم 3)
-        (SELECT AVG(ve.score) * (100/3)
+        (SELECT (AVG(ve.score) / 3) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id

@@ -105,7 +105,7 @@ $sql_best_teachers = "
         t.id,
         t.name as teacher_name,
         s.name as subject_name,
-        AVG(ve.score) * (100/3) as avg_score
+        (AVG(ve.score) / 3) * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -130,7 +130,7 @@ $sql_worst_teachers = "
         t.id,
         t.name as teacher_name,
         s.name as subject_name,
-        AVG(ve.score) * (100/3) as avg_score
+        (AVG(ve.score) / 3) * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -157,7 +157,7 @@ $worst_teachers = query($sql_worst_teachers, [$academic_year_id]);
 $sql_best_school = "
     SELECT 
         sch.name as school_name, 
-        AVG(ve.score) * (100/3) as avg_score
+        (AVG(ve.score) / 3) * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -181,7 +181,7 @@ $sql_best_grade = "
     SELECT 
         g.name as grade_name, 
         sec.name as section_name,
-        AVG(ve.score) * (100/3) as avg_score
+        (AVG(ve.score) / 3) * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -207,7 +207,7 @@ $sql_worst_grade = "
     SELECT 
         g.name as grade_name, 
         sec.name as section_name,
-        AVG(ve.score) * (100/3) as avg_score
+        (AVG(ve.score) / 3) * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -236,14 +236,15 @@ $sql_subjects_stats = "
     SELECT 
         s.id as subject_id,
         s.name as subject_name,
-        (SELECT COUNT(*) FROM teacher_subjects WHERE subject_id = s.id) as teachers_count,
+        (SELECT COUNT(*) FROM teacher_subjects ts JOIN teachers t ON ts.teacher_id = t.id WHERE ts.subject_id = s.id AND t.job_title = 'معلم') as teachers_count,
         (SELECT COUNT(*) FROM visits WHERE subject_id = s.id AND academic_year_id = ? " . $date_condition . ") as visits_count,
-        (SELECT COUNT(DISTINCT teacher_id) FROM visits WHERE subject_id = s.id AND academic_year_id = ? " . $date_condition . ") as visited_teachers_count,
+        (SELECT COUNT(DISTINCT v.teacher_id) FROM visits v JOIN teachers t ON v.teacher_id = t.id WHERE v.subject_id = s.id AND v.academic_year_id = ? AND t.job_title = 'معلم' " . $date_condition . ") as visited_teachers_count,
         (
-            SELECT COALESCE(AVG(ve.score) * (100/3), 0)
+            SELECT COALESCE((AVG(ve.score) / 3) * 100, 0)
             FROM visits v
             JOIN visit_evaluations ve ON v.id = ve.visit_id
-            WHERE v.subject_id = s.id AND v.academic_year_id = ? " . $date_condition . "
+            JOIN teachers t ON v.teacher_id = t.id
+            WHERE v.subject_id = s.id AND v.academic_year_id = ? AND t.job_title = 'معلم' " . $date_condition . "
         ) as avg_performance
     FROM 
         subjects s

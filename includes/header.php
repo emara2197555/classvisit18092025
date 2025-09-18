@@ -34,6 +34,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Note: For production, install Tailwind CSS as a PostCSS plugin or use the Tailwind CLI -->
     
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -228,7 +229,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                     <div class="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-20">
                         <div class="px-4 py-2 border-b border-gray-200">
                             <p class="text-sm font-medium text-gray-900"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></p>
-                            <p class="text-xs text-gray-500"><?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
+                            <p class="text-xs text-gray-500"><?= get_user_role_display() ?></p>
                         </div>
                         <a href="profile.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                             <i class="fas fa-user-edit ml-2"></i>الملف الشخصي
@@ -259,7 +260,7 @@ $app_name = $app_name ?? 'نظام الزيارات الصفية';
                     </div>
                     <div>
                         <p class="text-white font-medium text-sm"><?= $_SESSION['full_name'] ?? 'مستخدم' ?></p>
-                        <p class="text-primary-200 text-xs"><?= $_SESSION['role_name'] ?? 'غير محدد' ?></p>
+                        <p class="text-primary-200 text-xs"><?= get_user_role_display() ?></p>
                     </div>
                 </div>
                 <div class="mt-2 space-y-1">

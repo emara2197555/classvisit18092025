@@ -1,1611 +1,1165 @@
 <?php
-// بدء التخزين المؤقت للمخرجات - سيحل مشكلة Headers already sent
-ob_start();
+/**
+ * نموذج تقييم زيارة صفية - نسخة جديدة مبسطة
+ * تم إنشاؤها لحل مشكلة نوع الزائر
+ */
 
-// تضمين ملفات قاعدة البيانات والوظائف
 require_once 'includes/db_connection.php';
-require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
 
-// حماية الصفحة - المسموح لهم بإنشاء الزيارات
-protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator']);
+// بدء الجلسة
+session_start();
+
+// حماية الصفحة - المسموح لهم بإنشاء الزيارات (منع المعلمين من إنشاء زيارات)
+$allowed_roles = ['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator'];
+$current_user_role = $_SESSION['role_name'] ?? '';
+
+if (!in_array($current_user_role, $allowed_roles)) {
+    header('Location: index.php?error=' . urlencode('ليس لديك صلاحية لإنشاء زيارات صفية'));
+    exit;
+}
 
 // الحصول على بيانات المستخدم الحالي
-$current_user_role = $_SESSION['role_name'] ?? 'admin';
 $current_user_school_id = $_SESSION['school_id'] ?? null;
 $current_user_subject_id = $_SESSION['subject_id'] ?? null;
 $current_user_id = $_SESSION['user_id'] ?? null;
+$is_coordinator = ($current_user_role === 'Subject Coordinator');
 
-// تعيين عنوان الصفحة
-$page_title = 'نموذج تقييم زيارة صفية';
+$error_message = '';
+$success_message = '';
+$visit_id = null;
 
-// معالجة النموذج إذا تم تقديمه
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_visit'])) {
+// معالجة إرسال النموذج
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // استخراج البيانات من النموذج
+        // جلب البيانات من النموذج
         $school_id = $_POST['school_id'] ?? null;
         $teacher_id = $_POST['teacher_id'] ?? null;
         $subject_id = $_POST['subject_id'] ?? null;
         $grade_id = $_POST['grade_id'] ?? null;
         $section_id = $_POST['section_id'] ?? null;
-        $level_id = $_POST['level_id'] ?? null;
         $visitor_type_id = $_POST['visitor_type_id'] ?? null;
         $visitor_person_id = $_POST['visitor_person_id'] ?? null;
         $visit_date = $_POST['visit_date'] ?? null;
         $visit_type = $_POST['visit_type'] ?? 'full';
         $attendance_type = $_POST['attendance_type'] ?? 'physical';
         $has_lab = isset($_POST['has_lab']) && $_POST['has_lab'] == '1' ? 1 : 0;
+        $topic = $_POST['topic'] ?? '';
+        
+        // جلب بيانات التقييم
         $general_notes = $_POST['general_notes'] ?? '';
         $recommendation_notes = $_POST['recommendation_notes'] ?? '';
         $appreciation_notes = $_POST['appreciation_notes'] ?? '';
         $total_score = $_POST['total_score'] ?? 0;
         
-        // التحقق من وجود البيانات الأساسية
+        // جلب level_id من الصف المختار
+        if ($grade_id) {
+            $grade_info = query_row("SELECT level_id FROM grades WHERE id = ?", [$grade_id]);
+            $level_id = $grade_info ? $grade_info['level_id'] : 1; // افتراضي 1 إذا لم يوجد
+        } else {
+            $level_id = 1; // قيمة افتراضية
+        }
+        
+        // التحقق من البيانات الأساسية
         if (!$school_id || !$teacher_id || !$subject_id || !$visit_date || !$visitor_type_id || !$visitor_person_id) {
-            throw new Exception("البيانات الأساسية غير مكتملة.");
+            throw new Exception("جميع الحقول الأساسية مطلوبة: المدرسة، المعلم، المادة، تاريخ الزيارة، نوع الزائر، اسم الزائر.");
         }
         
-        // تطبيق قيود منسق المادة
-        if ($current_user_role === 'Subject Coordinator') {
-            // التحقق من أن منسق المادة لا يُنشئ زيارات إلا لمادته
-            $coordinator_data = query_row("
-                SELECT subject_id 
-                FROM coordinator_supervisors 
-                WHERE user_id = ?
-            ", [$current_user_id]);
-            
-            if (!$coordinator_data) {
-                throw new Exception("لا يوجد مادة مخصصة لمنسق المادة.");
-            }
-            
-            if ($subject_id != $coordinator_data['subject_id']) {
-                throw new Exception("لا يُسمح لمنسق المادة بإنشاء زيارات إلا لمادته المخصصة.");
-            }
-            
-            // التحقق من أن الزائر والمعلم مناسبان لمنسق المادة
-            $visitor_allowed = false;
-            $teacher_allowed = false;
-            
-            // التحقق من أن المعلم يُدرس المادة التي يُنسقها المستخدم الحالي
-            $teacher_check = query_row("
-                SELECT t.id 
-                FROM teachers t
-                JOIN teacher_subjects ts ON t.id = ts.teacher_id
-                WHERE t.id = ? AND ts.subject_id = ?
-            ", [$teacher_id, $coordinator_data['subject_id']]);
-            
-            if ($teacher_check) {
-                $teacher_allowed = true;
-            }
-            
-            // التحقق من نوع الزائر
-            $visitor_type = query_row("SELECT name FROM visitor_types WHERE id = ?", [$visitor_type_id]);
-            
-            if ($visitor_type) {
-                if ($visitor_type['name'] === 'منسق المادة') {
-                    // التحقق من أن المنسق الزائر يُدرس نفس المادة
-                    $coordinator_visitor_check = query_row("
-                        SELECT t.id 
-                        FROM teachers t
-                        JOIN teacher_subjects ts ON t.id = ts.teacher_id
-                        WHERE t.id = ? AND t.job_title = 'منسق المادة' AND ts.subject_id = ?
-                    ", [$visitor_person_id, $coordinator_data['subject_id']]);
-                    
-                    if ($coordinator_visitor_check) {
-                        $visitor_allowed = true;
-                    }
-                } elseif ($visitor_type['name'] === 'موجه المادة') {
-                    // التحقق من أن الموجه يُدرس نفس المادة
-                    $supervisor_check = query_row("
-                        SELECT t.id 
-                        FROM teachers t
-                        JOIN teacher_subjects ts ON t.id = ts.teacher_id
-                        WHERE t.id = ? AND t.job_title = 'موجه المادة' AND ts.subject_id = ?
-                    ", [$visitor_person_id, $coordinator_data['subject_id']]);
-                    
-                    if ($supervisor_check) {
-                        $visitor_allowed = true;
-                    }
-                }
-            }
-            
-            if (!$visitor_allowed) {
-                throw new Exception("الزائر المختار غير مناسب. منسق المادة يُسمح له بإنشاء زيارات لمنسقي مادته أو لموجهي مادته فقط.");
-            }
-            
-            if (!$teacher_allowed) {
-                throw new Exception("المعلم المختار خارج نطاق مادتك. منسق المادة يُسمح له فقط بزيارة المعلمين في مادته.");
-            }
+        // التأكد من أن المعرفات صحيحة
+        if (!is_numeric($school_id) || !is_numeric($teacher_id) || !is_numeric($subject_id) || 
+            !is_numeric($visitor_type_id) || !is_numeric($visitor_person_id)) {
+            throw new Exception("قيم المعرفات يجب أن تكون أرقام صحيحة.");
         }
         
-        // إضافة الزيارة الصفية إلى جدول الزيارات
-        $sql = "
+        // جلب العام الدراسي الحالي
+        $current_academic_year = query_row("SELECT * FROM academic_years ORDER BY id DESC LIMIT 1");
+        $academic_year_id = $current_academic_year ? $current_academic_year['id'] : 1;
+        
+        // إدراج الزيارة في جدول visits
+        $visit_sql = "
             INSERT INTO visits (
                 school_id, teacher_id, subject_id, grade_id, section_id, level_id, 
-                visitor_type_id, visitor_person_id, visit_date, academic_year_id, visit_type, attendance_type, has_lab, 
-                general_notes, recommendation_notes, appreciation_notes, total_score, created_at, updated_at
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
-            )
-        ";
-        
-        // جلب العام الدراسي
-        $academic_year_id = $_POST['academic_year_id'] ?? null;
-        if (!$academic_year_id) {
-            // إذا لم يتم تحديد العام، نستخدم العام النشط
-            $active_year = get_active_academic_year();
-            $academic_year_id = $active_year ? $active_year['id'] : null;
-        }
-        
-        execute($sql, [
-            $school_id, $teacher_id, $subject_id, $grade_id, $section_id, $level_id,
-            $visitor_type_id, $visitor_person_id, $visit_date, $academic_year_id, $visit_type, $attendance_type, $has_lab,
-            $general_notes, $recommendation_notes, $appreciation_notes, $total_score
-        ]);
-        
-        // الحصول على معرف الزيارة المضافة
-        $visit_id = last_insert_id();
-        
-        // حفظ تفاصيل التقييم لكل مؤشر
-        $sql = "
-            INSERT INTO visit_evaluations (
-                visit_id, indicator_id, score, recommendation_id, custom_recommendation, 
+                visitor_type_id, visitor_person_id, visit_date, academic_year_id,
+                visit_type, attendance_type, has_lab, topic, general_notes, 
+                recommendation_notes, appreciation_notes, total_score,
                 created_at, updated_at
             ) VALUES (
-                ?, ?, ?, ?, ?, NOW(), NOW()
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
             )
         ";
         
-        // البحث عن مؤشرات التقييم في النموذج المرسل
-        foreach ($_POST as $key => $value) {
-            if (strpos($key, 'score_') === 0) {
-                $indicator_id = substr($key, 6);
+        execute($visit_sql, [
+            $school_id, $teacher_id, $subject_id, $grade_id, $section_id, $level_id,
+            $visitor_type_id, $visitor_person_id, $visit_date, $academic_year_id,
+            $visit_type, $attendance_type, $has_lab, $topic, $general_notes,
+            $recommendation_notes, $appreciation_notes, $total_score
+        ]);
+        
+        $visit_id = last_insert_id();
+        
+        // حفظ تقييمات المؤشرات
+        $indicators_saved = 0;
+        if ($visit_id) {
+            foreach ($_POST as $key => $value) {
+                if (strpos($key, 'indicator_') === 0) {
+                    $indicator_id = str_replace('indicator_', '', $key);
                 
-                // التعامل مع القيم الجديدة للتقييم
-                // إرسال NULL للمؤشرات التي لم يتم قياسها
-                if ($value === '' || $value === null) {
-                    $score = null; // NULL للمؤشرات غير المقاسة
-                } else {
-                    $score = intval($value); // 0, 1, 2, 3
-                }
-                
-                // حصول على التوصيات المختارة (إن وجدت)
-                $recommendations = isset($_POST['recommend_' . $indicator_id]) ? $_POST['recommend_' . $indicator_id] : [];
-                
-                // التوصية المخصصة (إن وجدت)
-                $custom_recommendation = $_POST['custom_recommend_' . $indicator_id] ?? '';
-                
-                // في حالة عدم وجود توصيات مختارة، نضيف سجل واحد مع التوصية المخصصة فقط
-                if (empty($recommendations)) {
-                    execute($sql, [
-                        $visit_id, $indicator_id, $score, null, $custom_recommendation
-                    ]);
-                } else {
-                    // إضافة كل توصية مختارة كسجل منفصل
-                    foreach ($recommendations as $recommendation_id) {
-                        execute($sql, [
-                            $visit_id, $indicator_id, $score, $recommendation_id, $custom_recommendation
-                        ]);
+                    // التعامل مع القيم الجديدة للتقييم
+                    if ($value === '' || $value === null) {
+                        $score = null; // NULL للمؤشرات غير المقاسة
+                    } else {
+                        $score = intval($value); // 0, 1, 2, 3
+                        // التأكد من أن النقاط صحيحة
+                        if ($score < 0 || $score > 3) {
+                            continue; // تجاهل القيم غير الصحيحة
+                        }
                     }
+                    
+                    // جلب التوصية المختارة والتوصية المخصصة
+                    $recommendation_id = null;
+                    $custom_recommendation = null;
+                    
+                    // التوصية الجاهزة
+                    if (isset($_POST['recommend_' . $indicator_id]) && !empty($_POST['recommend_' . $indicator_id])) {
+                        $recommendation_id = intval($_POST['recommend_' . $indicator_id]);
+                    }
+                    
+                    // التوصية المخصصة
+                    if (isset($_POST['custom_recommend_' . $indicator_id]) && !empty($_POST['custom_recommend_' . $indicator_id])) {
+                        $custom_recommendation = trim($_POST['custom_recommend_' . $indicator_id]);
+                    }
+                    
+                    $eval_sql = "
+                        INSERT INTO visit_evaluations (visit_id, indicator_id, score, recommendation_id, custom_recommendation, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                    ";
+                    
+                    execute($eval_sql, [$visit_id, $indicator_id, $score, $recommendation_id, $custom_recommendation]);
+                    $indicators_saved++;
                 }
             }
         }
         
-        // توجيه المستخدم إلى الصفحة الرئيسية مع رسالة نجاح
-        $_SESSION['success_message'] = "تم حفظ تقييم الزيارة الصفية بنجاح!";
-        header('Location: index.php');
-        exit;
-        
-    } catch (Exception $e) {
-        // إلغاء المعاملة في حالة حدوث خطأ
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
+        if ($visit_id) {
+            // تحديد ما إذا كانت المادة إنجليزية للرسالة
+            $is_english_subject = false;
+            if ($subject_id) {
+                $subject_info = query_row("SELECT name FROM subjects WHERE id = ?", [$subject_id]);
+                if ($subject_info) {
+                    $subject_name = $subject_info['name'];
+                    $is_english_subject = preg_match('/(english|انج|إنج|الإنج|الانجليزية|الإنجليزية)/i', $subject_name);
+                }
+            }
+            
+            if ($is_english_subject) {
+                $success_message = "Evaluation saved successfully! (Visit ID: " . $visit_id . ", " . $indicators_saved . " indicators saved)<br>You will be redirected to the visit details page in 2 seconds... <a href='view_visit.php?id=" . $visit_id . "' class='underline text-blue-600 hover:text-blue-800'>Click here to go now</a>";
+            } else {
+                $success_message = "تم حفظ التقييم بنجاح! (معرف الزيارة: " . $visit_id . "، تم حفظ " . $indicators_saved . " مؤشر)<br>سيتم تحويلك إلى صفحة معاينة الزيارة خلال ثانيتين... <a href='view_visit.php?id=" . $visit_id . "' class='underline text-blue-600 hover:text-blue-800'>اضغط هنا للذهاب الآن</a>";
+            }
+            // التحويل إلى صفحة معاينة الزيارة بعد 2 ثانية
+            header("refresh:2;url=view_visit.php?id=" . $visit_id);
+        } else {
+            $success_message = "تم حفظ التقييم بنجاح! (تم حفظ " . $indicators_saved . " مؤشر)";
         }
         
-        // تخزين رسالة الخطأ لعرضها للمستخدم
-        $error_message = "حدث خطأ أثناء حفظ التقييم: " . $e->getMessage();
+    } catch (Exception $e) {
+        $error_message = "خطأ في حفظ التقييم: " . $e->getMessage();
+        
+        // إضافة معلومات إضافية للتشخيص
+        if (strpos($e->getMessage(), 'level_id') !== false) {
+            $error_message .= " (تأكد من اختيار الصف بشكل صحيح)";
+        }
+        if (strpos($e->getMessage(), 'Foreign key constraint') !== false) {
+            $error_message .= " (تأكد من صحة البيانات المرجعية)";
+        }
     }
 }
 
-// تضمين ملف رأس الصفحة
-require_once 'includes/header.php';
-
-// جلب البيانات الأساسية من قاعدة البيانات
 try {
-    // الحصول على معلومات المدرسة (نستخدم أول مدرسة)
-    $school = query_row("SELECT * FROM schools LIMIT 1");
-    if (!$school) {
-        throw new Exception("لم يتم العثور على بيانات المدرسة. يرجى إعداد المدرسة أولاً.");
+    // جلب البيانات الأساسية
+    $schools = query("SELECT * FROM schools ORDER BY name");
+    
+    // جلب المواد حسب صلاحيات المستخدم
+    if ($is_coordinator && $current_user_subject_id) {
+        // منسق المادة يرى مادته فقط
+        $subjects = query("SELECT * FROM subjects WHERE id = ? ORDER BY name", [$current_user_subject_id]);
+    } else {
+        // باقي المستخدمين يرون جميع المواد
+        $subjects = query("SELECT * FROM subjects ORDER BY name");
     }
-    $school_id = $school['id'];
     
-    // جلب الصفوف مباشرة بدون الاعتماد على المرحلة
-    $grades = query("SELECT g.*, e.id as level_id FROM grades g JOIN educational_levels e ON g.level_id = e.id ORDER BY e.id, g.id");
+    $grades = query("SELECT * FROM grades ORDER BY level_id, id");
     
-    $domains = query("SELECT * FROM evaluation_domains ORDER BY id");
-    
-    // جلب أنواع الزوار مع تطبيق قيود منسق المادة
-    if ($current_user_role === 'Subject Coordinator') {
+    // جلب أنواع الزوار حسب صلاحيات المستخدم
+    if ($is_coordinator) {
         // منسق المادة يرى نفسه والموجه فقط
         $visitor_types = query("
-            SELECT * FROM visitor_types 
+            SELECT id, name, name_en 
+            FROM visitor_types 
             WHERE name IN ('منسق المادة', 'موجه المادة') 
             ORDER BY name
         ");
     } else {
         // باقي المستخدمين يرون جميع أنواع الزوار
-        $visitor_types = query("SELECT * FROM visitor_types ORDER BY name");
+        $visitor_types = query("SELECT id, name, name_en FROM visitor_types ORDER BY name");
     }
     
-    // جلب المواد الدراسية للمدرسة مع تطبيق قيود منسق المادة
-    if ($current_user_role === 'Subject Coordinator') {
-        // منسق المادة يرى مادته فقط
-        $coordinator_data = query_row("
-            SELECT subject_id 
-            FROM coordinator_supervisors 
-            WHERE user_id = ?
-        ", [$current_user_id]);
-        
-        if ($coordinator_data) {
-            $subjects = query("
-                SELECT * FROM subjects 
-                WHERE id = ? AND (school_id = ? OR school_id IS NULL) 
-                ORDER BY name
-            ", [$coordinator_data['subject_id'], $school_id]);
-        } else {
-            $subjects = [];
+    $academic_years = query("SELECT * FROM academic_years ORDER BY id DESC");
+    
+    // جلب معايير التقييم مع الترجمات
+    $evaluation_domains = query("SELECT id, name, name_en, description, description_en, weight, sort_order FROM evaluation_domains ORDER BY id");
+    $evaluation_indicators = query("SELECT id, domain_id, name, name_en, description, description_en, weight, sort_order FROM evaluation_indicators ORDER BY domain_id, id");
+    
+    // تنظيم المؤشرات حسب المعايير
+    $indicators_by_domain = [];
+    foreach ($evaluation_indicators as $indicator) {
+        $indicators_by_domain[$indicator['domain_id']][] = $indicator;
+    }
+    
+    // تحديد المدرسة الافتراضية (أول مدرسة)
+    $default_school_id = !empty($schools) ? $schools[0]['id'] : null;
+    
+    // تحديد ما إذا كانت المادة المختارة إنجليزية
+    $subject_is_english = false;
+    $selected_subject_name = '';
+    
+    // فحص معامل اللغة في URL أولاً
+    if (isset($_GET['lang']) && $_GET['lang'] === 'en') {
+        $subject_is_english = true;
+    }
+    
+    // أو فحص المادة المختارة
+    if (isset($_POST['subject_id']) || isset($_GET['subject_id'])) {
+        $selected_subject_id = $_POST['subject_id'] ?? $_GET['subject_id'];
+        foreach ($subjects as $s) {
+            if ((string)$s['id'] === (string)$selected_subject_id) {
+                $selected_subject_name = $s['name'];
+                // فحص ما إذا كانت المادة إنجليزية (إلا إذا تم فرض اللغة من URL)
+                $is_english_subject = preg_match('/(english|انج|إنج|الإنج|الانجليزية|الإنجليزية)/i', $s['name']);
+                
+                // إذا لم يتم فرض اللغة من URL، استخدم نوع المادة
+                if (!isset($_GET['lang'])) {
+                    $subject_is_english = $is_english_subject;
+                }
+                break;
+            }
         }
     } else {
-        // المدراء والمشرفون يرون جميع المواد
-        $subjects = query("SELECT * FROM subjects WHERE school_id = ? OR school_id IS NULL ORDER BY name", [$school_id]);
+        // إذا لم تكن هناك مادة مختارة، تحقق من وجود مادة إنجليزية
+    $has_english_subject = false;
+        foreach ($subjects as $s) {
+            if (preg_match('/(english|انج|إنج|الإنج|الانجليزية|الإنجليزية)/i', $s['name'])) {
+                $has_english_subject = true;
+                break;
+            }
+        }
     }
-} catch (PDOException $e) {
-    // تعامل مع أي أخطاء في قاعدة البيانات
-    $error_message = "حدث خطأ أثناء جلب البيانات. يرجى المحاولة مرة أخرى لاحقاً.";
+    
+    // الآن الترجمات محفوظة في قاعدة البيانات - لا حاجة للمصفوفات اليدوية
+    
+    // إضافة ترجمة النصوص
+    $texts = [
+        'form_title' => $subject_is_english ? 'Classroom Visit Evaluation Form' : 'نموذج تقييم زيارة صفية',
+        'form_description' => $subject_is_english ? 'Enter visit details and evaluate teaching performance' : 'أدخل بيانات الزيارة وقم بتقييم الأداء التدريسي',
+        'basic_data' => $subject_is_english ? 'Basic Information' : 'البيانات الأساسية',
+        'school' => $subject_is_english ? 'School:' : 'المدرسة:',
+        'subject' => $subject_is_english ? 'Subject:' : 'المادة:',
+        'teacher' => $subject_is_english ? 'Teacher:' : 'المعلم:',
+        'grade' => $subject_is_english ? 'Grade:' : 'الصف:',
+        'section' => $subject_is_english ? 'Section:' : 'الشعبة:',
+        'visit_date' => $subject_is_english ? 'Visit Date:' : 'تاريخ الزيارة:',
+        'visitor_data' => $subject_is_english ? 'Visitor Information' : 'بيانات الزائر',
+        'visitor_type' => $subject_is_english ? 'Visitor Type:' : 'نوع الزائر:',
+        'visitor_name' => $subject_is_english ? 'Visitor Name:' : 'اسم الزائر:',
+        'visit_settings' => $subject_is_english ? 'Visit Settings' : 'إعدادات الزيارة',
+        'visit_type' => $subject_is_english ? 'Visit Type:' : 'نوع الزيارة:',
+        'attendance_type' => $subject_is_english ? 'Attendance Method:' : 'طريقة الحضور:',
+        'lesson_topic' => $subject_is_english ? 'Lesson Topic:' : 'موضوع الدرس:',
+        'additional_settings' => $subject_is_english ? 'Additional Settings:' : 'إعدادات إضافية:',
+        'add_lab_evaluation' => $subject_is_english ? 'Add laboratory evaluation (Science subjects)' : 'إضافة تقييم المعمل (خاص بمادة العلوم)',
+        'evaluation_form' => $subject_is_english ? 'Evaluation Form' : 'نموذج التقييم',
+        'instructions' => $subject_is_english ? 'Instructions: Choose the appropriate evaluation for each indicator:' : 'تعليمات: اختر التقييم المناسب لكل مؤشر:',
+        'not_measured' => $subject_is_english ? 'Not measured' : 'لم يتم قياسه',
+        'evidence_limited' => $subject_is_english ? 'Evidence is not available or limited' : 'الأدلة غير متوفرة أو محدودة',
+        'some_evidence' => $subject_is_english ? 'Some evidence is available' : 'تتوفر بعض الأدلة',
+        'most_evidence' => $subject_is_english ? 'Most evidence is available' : 'تتوفر معظم الأدلة',
+        'complete_evidence' => $subject_is_english ? 'Evidence is complete and effective' : 'الأدلة مستكملة وفاعلة',
+        'ready_recommendations' => $subject_is_english ? 'Ready recommendations:' : 'التوصيات الجاهزة:',
+        'select_recommendation' => $subject_is_english ? 'Select ready recommendation...' : 'اختر توصية جاهزة...',
+        'custom_recommendation' => $subject_is_english ? 'Custom recommendation:' : 'توصية مخصصة:',
+        'write_custom_recommendation' => $subject_is_english ? 'Write a custom recommendation for this indicator...' : 'اكتب توصية مخصصة لهذا المؤشر...',
+        'general_notes' => $subject_is_english ? 'General Notes:' : 'ملاحظات عامة:',
+        'enter_general_notes' => $subject_is_english ? 'Enter your general notes here...' : 'أدخل ملاحظاتك العامة هنا...',
+        'recommend_teacher' => $subject_is_english ? 'I recommend:' : 'أوصي بـ:',
+        'enter_recommendations' => $subject_is_english ? 'Enter recommendations here...' : 'أدخل التوصيات هنا...',
+        'thank_teacher' => $subject_is_english ? 'I thank the teacher for:' : 'أشكر المعلم على:',
+        'enter_appreciation' => $subject_is_english ? 'Enter appreciation points here...' : 'أدخل نقاط الشكر والتقدير هنا...',
+        'total_score' => $subject_is_english ? 'Total Score:' : 'إجمالي النقاط:',
+        'percentage' => $subject_is_english ? 'Percentage:' : 'النسبة المئوية:',
+        'save_evaluation' => $subject_is_english ? 'Save Evaluation' : 'حفظ التقييم',
+        'select_school' => $subject_is_english ? 'Select school...' : 'اختر المدرسة...',
+        'select_subject' => $subject_is_english ? 'Select subject...' : 'اختر المادة...',
+        'select_teacher' => $subject_is_english ? 'Select teacher...' : 'اختر المعلم...',
+        'select_grade' => $subject_is_english ? 'Select grade...' : 'اختر الصف...',
+        'select_section' => $subject_is_english ? 'Select section...' : 'اختر الشعبة...',
+        'select_visitor_type' => $subject_is_english ? 'Select visitor type...' : 'اختر نوع الزائر...',
+        'select_visitor_name' => $subject_is_english ? 'Select visitor name...' : 'اختر اسم الزائر...',
+        'full_visit' => $subject_is_english ? 'Full evaluation' : 'تقييم كامل',
+        'partial_visit' => $subject_is_english ? 'Partial evaluation' : 'تقييم جزئي',
+        'physical_attendance' => $subject_is_english ? 'In-person' : 'حضوري',
+        'virtual_attendance' => $subject_is_english ? 'Virtual' : 'افتراضي',
+        'enter_topic' => $subject_is_english ? 'Enter lesson topic...' : 'اكتب موضوع الدرس...'
+    ];
+    
+} catch (Exception $e) {
+    $error_message = "خطأ في جلب البيانات: " . $e->getMessage();
 }
 ?>
 
-<!-- نموذج اختيار المدرسة والمادة والمعلم -->
-<div id="selection-form" class="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl shadow-lg p-8 mb-8">
-    <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent mb-2">نموذج تقييم زيارة صفية</h1>
-        <p class="text-slate-600">أدخل بيانات الزيارة للبدء في عملية التقييم</p>
-        <div class="mt-4 w-20 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mx-auto"></div>
+<?php
+// تضمين ملف رأس الصفحة
+require_once 'includes/header.php';
+?>
+    <style>
+        .loading-spinner {
+            border: 2px solid #f3f4f6;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+<!-- المحتوى الرئيسي -->
+<div class="main-content">
+    <div class="container mx-auto p-6">
+        
+        
+        <!-- العنوان -->
+        <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">📋 <?= $texts['form_title'] ?></h1>
+            <p class="text-gray-600"><?= $texts['form_description'] ?></p>
     </div>
     
-    <?php if (isset($error_message)): ?>
-        <div class="bg-red-50 border border-red-200 border-r-4 border-r-red-500 text-red-700 p-4 mb-6 rounded-lg shadow-sm">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-                <?= $error_message ?>
-            </div>
+        <!-- الرسائل -->
+        <?php if ($error_message): ?>
+            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+                <strong>خطأ:</strong> <?= htmlspecialchars($error_message) ?>
         </div>
     <?php endif; ?>
     
-    <form action="evaluation_form.php" method="post" id="visit-form">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <!-- نوع الزائر -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">نوع الزائر:</label>
-                <select id="visitor-type" name="visitor_type_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="">اختر نوع الزائر...</option>
-                    <?php foreach ($visitor_types as $type): ?>
-                        <option value="<?= $type['id'] ?>"><?= htmlspecialchars($type['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <div id="visitor-name" class="mt-2 text-sm text-blue-600 font-medium"></div>
-                <input type="hidden" id="visitor-person-id" name="visitor_person_id" value="">
+        <?php if ($success_message): ?>
+            <div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+                <strong>نجح:</strong> <?= htmlspecialchars($success_message) ?>
             </div>
+        <?php endif; ?>
 
-            <!-- العام الدراسي -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">العام الدراسي:</label>
-                <select id="academic-year" name="academic_year_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="">اختر العام الدراسي...</option>
-                    <?php 
-                    // جلب العام الدراسي النشط
-                    $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
-                    foreach ($academic_years as $year): 
-                        $is_selected = $year['is_active'] ? 'selected' : '';
-                    ?>
-                        <option value="<?= $year['id'] ?>" <?= $is_selected ?>><?= htmlspecialchars($year['name']) ?> <?= $year['is_active'] ? '(نشط)' : '' ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <!-- نوع الزيارة -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">نوع الزيارة:</label>
-                <select id="visit-type" name="visit_type" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="full">تقييم كلي</option>
-                    <option value="partial">تقييم جزئي</option>
-                </select>
-            </div>
-
-            <!-- طريقة الحضور -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">طريقة الحضور:</label>
-                <select id="attendance-type" name="attendance_type" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="physical">حضور</option>
-                    <option value="remote">عن بعد</option>
-                    <option value="hybrid">مدمج</option>
+        <!-- النموذج الرئيسي -->
+        <form method="POST" id="evaluation-form" class="space-y-6">
+            
+            <!-- البيانات الأساسية -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-lg font-semibold mb-4">📋 <?= $texts['basic_data'] ?></h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    
+                    <!-- المدرسة -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">🏫 <?= $texts['school'] ?></label>
+                        <select id="school_id" name="school_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <?php foreach ($schools as $school): ?>
+                                <option value="<?= $school['id'] ?>" <?= ($school['id'] == $default_school_id) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($school['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
                 </select>
             </div>
 
             <!-- المادة -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">المادة:</label>
-                <select id="subject" name="subject_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="loadTeachers()">
-                    <option value="">اختر المادة...</option>
-                    <?php foreach ($subjects as $subject): ?>
-                        <option value="<?= $subject['id'] ?>"><?= htmlspecialchars($subject['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📚 <?= $texts['subject'] ?></label>
+                        <?php if ($is_coordinator && $current_user_subject_id): ?>
+                            <!-- منسق المادة: المادة محددة مسبقاً مع إمكانية القراءة للـ JavaScript -->
+                            <select id="subject_id" name="subject_id" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-blue-50 text-blue-800 font-medium cursor-not-allowed" onclick="return false;" onkeydown="return false;">
+                                <option value="<?= $current_user_subject_id ?>" selected>
+                                    <?= htmlspecialchars($subjects[0]['name'] ?? 'مادة غير محددة') ?>
+                                    <span class="text-xs">(مادة المنسق)</span>
+                                </option>
+                            </select>
+                            <p class="text-xs text-blue-600 mt-1">
+                                <i class="fas fa-info-circle ml-1"></i>
+                                هذه مادتك كمنسق - لا يمكن تغييرها
+                            </p>
+                        <?php else: ?>
+                            <!-- باقي المستخدمين: يمكنهم اختيار المادة -->
+                            <select id="subject_id" name="subject_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <option value=""><?= $texts['select_subject'] ?></option>
+                                <?php foreach ($subjects as $subject): ?>
+                                    <?php 
+                                    $is_selected = '';
+                                    if (isset($_GET['subject_id']) && $_GET['subject_id'] == $subject['id']) {
+                                        $is_selected = 'selected';
+                                    }
+                                    ?>
+                                    <option value="<?= $subject['id'] ?>" <?= $is_selected ?>><?= htmlspecialchars($subject['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
             </div>
 
             <!-- المعلم -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">المعلم:</label>
-                <select id="teacher" name="teacher_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="">اختر المعلم...</option>
-                    <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على المدرسة والمادة المختارة -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">👨‍🏫 <?= $texts['teacher'] ?></label>
+                        <select id="teacher_id" name="teacher_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <option value=""><?= $texts['select_teacher'] ?></option>
                 </select>
             </div>
 
             <!-- الصف -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">الصف:</label>
-                <select id="grade" name="grade_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required onchange="loadSections(this.value)">
-                    <option value="">اختر الصف...</option>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📖 <?= $texts['grade'] ?></label>
+                        <select id="grade_id" name="grade_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <option value=""><?= $texts['select_grade'] ?></option>
                     <?php foreach ($grades as $grade): ?>
-                        <option value="<?= $grade['id'] ?>" data-level-id="<?= $grade['level_id'] ?>"><?= htmlspecialchars($grade['name']) ?></option>
+                                <option value="<?= $grade['id'] ?>"><?= htmlspecialchars($grade['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
 
             <!-- الشعبة -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">الشعبة:</label>
-                <select id="section" name="section_id" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
-                    <option value="">اختر الشعبة...</option>
-                    <!-- سيتم تحديث هذه القائمة ديناميكياً بناءً على الصف المختار -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">👥 <?= $texts['section'] ?></label>
+                        <select id="section_id" name="section_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value=""><?= $texts['select_section'] ?></option>
                 </select>
             </div>
 
-            <!-- تقييم المعمل -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">إعدادات إضافية:</label>
-                <div class="flex items-center">
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="has-lab" name="has_lab" class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-200">
-                        <span class="mr-3 text-sm font-medium text-gray-700">إضافة تقييم المعمل</span>
-                    </label>
-                </div>
-            </div>
-
             <!-- تاريخ الزيارة -->
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                <label class="block mb-3 font-bold text-gray-800 text-sm">تاريخ الزيارة:</label>
-                <input type="date" id="visit-date" name="visit_date" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400" required>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📅 <?= $texts['visit_date'] ?></label>
+                        <input type="date" id="visit_date" name="visit_date" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
             </div>
 
-            <!-- حذف حقل المدرسة - سنستخدم المدرسة الافتراضية -->
-            <input type="hidden" id="school" name="school_id" value="<?= $school_id ?>">
-        </div>
+            </div>
+            </div>
 
-        <div class="text-center pt-6 border-t border-slate-200">
-            <button type="button" id="start-evaluation-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-lg">
-                بدء التقييم
-            </button>
+            <!-- بيانات الزائر -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-lg font-semibold mb-4">👤 <?= $texts['visitor_data'] ?></h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- نوع الزائر -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            🧑‍💼 <?= $texts['visitor_type'] ?>
+                            <?php if ($is_coordinator): ?>
+                                <span class="text-xs text-blue-600">(منسق المادة أو موجه المادة فقط)</span>
+                            <?php endif; ?>
+                        </label>
+                        <select id="visitor_type_id" name="visitor_type_id" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                            <option value=""><?= $texts['select_visitor_type'] ?></option>
+                            <?php foreach ($visitor_types as $type): ?>
+                                <option value="<?= $type['id'] ?>">
+                                    <?= htmlspecialchars($subject_is_english && !empty($type['name_en']) ? $type['name_en'] : $type['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- اسم الزائر -->
+                <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">👤 اسم الزائر:</label>
+                        <div id="visitor-name-container" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 min-h-[42px] flex items-center">
+                            <span class="text-gray-500 text-sm">اختر نوع الزائر أولاً</span>
         </div>
-    </form>
+                        <input type="hidden" id="visitor_person_id" name="visitor_person_id" value="">
 </div>
 
-<!-- نموذج التقييم (يظهر بعد اختيار بيانات المعلم والمدرسة) -->
-<div id="evaluation-form" class="bg-white rounded-lg shadow-md p-6" style="display: none;">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">تقييم الزيارة الصفية</h1>
-        <button id="back-to-selection" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">تغيير المعلم/المدرسة</button>
+            </div>
     </div>
 
-    <div id="evaluation-header" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6"></div>
-    
-    <!-- معلومات الزيارات السابقة -->
-    <div id="previous-visits-info" class="mb-8 bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-200 rounded-xl p-6 shadow-lg">
-        <div class="flex items-center mb-4 pb-4 border-b border-slate-300">
-            <div class="bg-gradient-to-r from-blue-600 to-purple-600 p-3 rounded-lg mr-4 shadow-md">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
-            </div>
-            <div>
-                <h2 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent">معلومات الزيارات السابقة</h2>
-                <p class="text-slate-600 text-sm mt-1">رؤية شاملة عن تاريخ أداء المعلم والتوصيات السابقة</p>
-            </div>
-        </div>
-        
-        <div class="mb-6 p-4 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg shadow-inner">
-            <div class="flex items-center text-white">
-                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <p class="text-sm font-medium">هذه المعلومات تساعدك على متابعة تقدم المعلم ومعرفة التوصيات السابقة قبل إجراء التقييم الجديد</p>
-            </div>
-        </div>
-        
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <!-- إحصائيات الزيارات -->
-            <div class="bg-white border-l-4 border-blue-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
-                <div class="flex items-center mb-3">
-                    <div class="bg-blue-100 p-2 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-bold text-blue-800">الزيارات السابقة</h3>
+            <!-- إعدادات الزيارة -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-lg font-semibold mb-4">⚙️ إعدادات الزيارة</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- نوع الزيارة -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📝 نوع الزيارة:</label>
+                        <select id="visit_type" name="visit_type" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="full">زيارة كاملة</option>
+                            <option value="partial">زيارة جزئية</option>
+                        </select>
                 </div>
-                <div class="space-y-3">
-                    <div class="flex justify-between items-center p-2 bg-blue-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">عدد الزيارات:</span>
-                        <span id="visits-count" class="text-xl font-bold text-blue-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                    <div class="flex justify-between items-center p-2 bg-green-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">متوسط الأداء (كل الزائرين):</span>
-                        <span id="average-performance-all" class="text-xl font-bold text-green-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                    <div class="flex justify-between items-center p-2 bg-purple-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">متوسط الأداء (الزائر الحالي):</span>
-                        <span id="average-performance-current" class="text-xl font-bold text-purple-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- تفاصيل آخر زيارة -->
-            <div class="bg-white border-l-4 border-green-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
-                <div class="flex items-center mb-3">
-                    <div class="bg-green-100 p-2 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-bold text-green-800">آخر زيارة</h3>
-                </div>
-                <div class="space-y-3">
-                    <div class="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">التاريخ:</span>
-                        <span id="last-visit-date" class="text-green-700 font-bold bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                    <div class="flex justify-between items-center p-2 bg-blue-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">نسبة التقييم (الزائر الحالي):</span>
-                        <span id="last-visit-current-percentage" class="text-xl font-bold text-blue-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                    <div class="flex justify-between items-center p-2 bg-orange-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">نسبة التقييم (آخر زائر):</span>
-                        <span id="last-visit-any-percentage" class="text-xl font-bold text-orange-700 bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                    <div class="flex justify-between items-center p-2 bg-purple-50 rounded-lg">
-                        <span class="font-semibold text-gray-700 text-sm">الصف/الشعبة:</span>
-                        <span id="last-visit-class" class="text-purple-700 font-bold bg-white px-2 py-1 rounded shadow-sm">-</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- توصيات آخر زيارة -->
-            <div class="bg-white border-l-4 border-amber-500 rounded-lg p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
-                <div class="flex items-center mb-3">
-                    <div class="bg-amber-100 p-2 rounded-lg mr-3">
-                        <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-lg font-bold text-amber-800">توصيات آخر زيارة</h3>
-                </div>
-                <div class="space-y-4">
-                    <div id="last-recommendation-notes" class="p-4 bg-gradient-to-r from-red-50 to-pink-50 rounded-lg border border-red-200 shadow-sm">
-                        <div class="flex items-center mb-2">
-                            <svg class="w-4 h-4 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-                            </svg>
-                            <span class="font-bold text-red-700 text-sm">أنصح المعلم:</span>
-                        </div>
-                        <p class="text-gray-800 text-sm leading-relaxed bg-white p-2 rounded border-r-2 border-red-300">لا توجد توصيات مسجلة</p>
-                    </div>
-                    <div id="last-appreciation-notes" class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200 shadow-sm">
-                        <div class="flex items-center mb-2">
-                            <svg class="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span class="font-bold text-green-700 text-sm">أشكر المعلم على:</span>
-                        </div>
-                        <p class="text-gray-800 text-sm leading-relaxed bg-white p-2 rounded border-r-2 border-green-300">لا توجد نقاط شكر مسجلة</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <form id="evaluation-save-form" action="evaluation_form.php" method="post">
-    <!-- أقسام التقييم -->
-    <?php $step = 1; ?>
-    <?php foreach ($domains as $domain): ?>
-        <div id="step-<?= $step ?>" class="evaluation-section bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl shadow-lg p-6 mb-6" style="display: <?= $step === 1 ? 'block' : 'none' ?>;">
-            <div class="flex items-center mb-6 pb-4 border-b border-slate-300">
+                    <!-- طريقة الحضور -->
                 <div>
-                    <h2 class="text-2xl font-bold bg-gradient-to-r from-purple-700 to-blue-700 bg-clip-text text-transparent"><?= htmlspecialchars($domain['name']) ?></h2>
-                    <p class="text-slate-600 text-sm mt-1">قيم أداء المعلم في هذا المجال بعناية</p>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">🎯 طريقة الحضور:</label>
+                        <select id="attendance_type" name="attendance_type" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="physical">حضوري</option>
+                            <option value="virtual">افتراضي</option>
+                        </select>
+        </div>
+        
+                    <!-- موضوع الدرس -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📖 <?= $texts['lesson_topic'] ?></label>
+                        <input type="text" id="topic" name="topic" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="<?= $texts['enter_topic'] ?>">
+        </div>
+        
+                    <!-- إعدادات إضافية -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">⚙️ <?= $texts['additional_settings'] ?></label>
+                        <div class="flex items-center p-3 border border-gray-300 rounded-md bg-gray-50">
+                            <input type="checkbox" id="has_lab" name="has_lab" value="1" class="mr-3 text-blue-500 focus:ring-blue-500">
+                            <label for="has_lab" class="text-sm text-gray-700 cursor-pointer">🧪 <?= $texts['add_lab_evaluation'] ?></label>
                 </div>
             </div>
             
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <?php 
-                try {
-                    $indicators = get_indicators_by_domain($domain['id']);
-                    foreach ($indicators as $indicator): 
-                        // تحديد ما إذا كان المؤشر ينتمي إلى مجموعة مؤشرات المعمل (يبدأ من المؤشر 24 إلى 29)
-                        $is_lab_indicator = ($indicator['id'] >= 24 && $indicator['id'] <= 29);
-                        
-                        // إضافة class جديد للتحكم بظهور مؤشرات المعمل
-                        $lab_class = $is_lab_indicator ? 'lab-indicator' : '';
-                        
-                        // تحديد لون وأيقونة المؤشر حسب النوع
-                        if ($is_lab_indicator) {
-                            $indicator_color = 'from-amber-500 to-orange-500';
-                            $bg_color = 'from-amber-50 to-orange-50';
-                            $border_color = 'border-amber-500';
-                            $text_color = 'text-amber-700';
-                            $badge_text = 'مؤشر معملي';
-                            $icon_path = 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z';
-                        } else {
-                            $indicator_color = 'from-indigo-500 to-purple-500';
-                            $bg_color = 'from-slate-100 to-blue-100';
-                            $border_color = 'border-indigo-500';
-                            $text_color = 'text-indigo-600';
-                            $badge_text = 'مؤشر عام';
-                            $icon_path = 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
-                        }
-                ?>
-                    <div class="indicator-block <?= $lab_class ?> bg-white border border-slate-200 rounded-xl p-5 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105">
-                        <div class="flex items-start mb-4">
-                            <div class="flex-1">
-                                <div class="bg-gradient-to-r <?= $bg_color ?> border-r-4 <?= $border_color ?> p-4 rounded-lg shadow-sm">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <label class="block text-gray-900 font-bold text-base leading-relaxed"><?= htmlspecialchars($indicator['name']) ?></label>
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold <?= $text_color ?> bg-white border <?= $border_color ?> shadow-sm">
-                                            <?= $badge_text ?>
-                                        </span>
-                                    </div>
-                                    <div class="text-xs <?= $text_color ?> font-medium">المؤشر رقم <?= $indicator['id'] ?> - قيم هذا العنصر بعناية</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <select name="score_<?= $indicator['id'] ?>" class="w-full border-2 border-slate-300 p-3 rounded-lg text-sm font-medium focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 hover:border-purple-400">
-                                <option value="">لم يتم قياسه (NULL)</option>
-                                <option value="3">الأدلة مستكملة وفاعلة (3)</option>
-                                <option value="2">تتوفر معظم الأدلة (2)</option>
-                                <option value="1">تتوفر بعض الأدلة (1)</option>
-                                <option value="0">الأدلة غير متوفرة أو محدودة (0)</option>
-                            </select>
-                        </div>
-                        
-                        <?php 
-                        try {
-                            $recommendations = get_recommendations_by_indicator($indicator['id']);
-                            if (count($recommendations) > 0): 
-                        ?>
-                            <div class="mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border border-blue-200 rounded-lg shadow-sm">
-                                <div class="flex items-center mb-3">
-                                    <p class="text-sm font-bold text-blue-800">التوصيات المقترحة:</p>
-                                </div>
-                                <div class="space-y-2">
-                                    <?php foreach ($recommendations as $rec): ?>
-                                    <div class="flex items-start p-2 bg-white rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors duration-200">
-                                        <input type="checkbox" name="recommend_<?= $indicator['id'] ?>[]" value="<?= $rec['id'] ?>" id="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="form-checkbox h-4 w-4 text-blue-600 mt-1 flex-shrink-0">
-                                        <label for="rec_<?= $rec['id'] ?>_<?= $indicator['id'] ?>" class="mr-3 text-sm text-gray-700 leading-relaxed cursor-pointer"><?= htmlspecialchars($rec['text']) ?></label>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        <?php 
-                            endif;
-                        } catch (PDOException $e) {
-                            // تعديل لعرض الخطأ ومعرفة المشكلة
-                            echo '<p class="text-red-500 text-sm">خطأ في جلب التوصيات: ' . $e->getMessage() . '</p>';
-                        }
-                        ?>
-                        
-                        <div class="mt-4">
-                            <div class="flex items-center mb-2">
-                                <label class="text-sm font-semibold text-green-800">توصية مخصصة (اختياري):</label>
-                            </div>
-                            <input type="text" name="custom_recommend_<?= $indicator['id'] ?>" placeholder="أدخل توصية مخصصة..." class="w-full border-2 border-green-300 p-3 rounded-lg text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-all duration-200 hover:border-green-400 bg-green-50">
-                        </div>
-                    </div>
-                <?php 
-                    endforeach;
-                } catch (PDOException $e) {
-                    echo '<p class="text-red-500">حدث خطأ أثناء جلب مؤشرات التقييم</p>';
-                }
-                ?>
+                </div>
             </div>
             
-            <div class="flex justify-between items-center mt-8 pt-6 border-t border-slate-200">
-                <?php if ($step > 1): ?>
-                    <button type="button" class="prev-step bg-gradient-to-r from-gray-500 to-gray-600 text-white px-6 py-3 rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-md hover:shadow-lg" data-step="<?= $step ?>">
-                        <span>السابق</span>
-                    </button>
-                <?php else: ?>
-                    <div></div>
-                <?php endif; ?>
+            <!-- نموذج التقييم -->
+            <div id="evaluation-section" class="bg-white rounded-lg shadow-sm border p-6">
+                <h2 class="text-lg font-semibold mb-4">📋 <?= $texts['evaluation_form'] ?></h2>
                 
-                <button type="button" class="go-to-notes bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg" data-notes-step="<?= count($domains) + 1 ?>">
-                    <span>ملاحظات وتوصيات</span>
-                </button>
-                
-                <?php if ($step < count($domains)): ?>
-                    <button type="button" class="next-step bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg" data-step="<?= $step ?>">
-                        <span>التالي</span>
-                    </button>
-                <?php else: ?>
-                    <button type="button" class="notes-to-final-result bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg">
-                        <span>عرض النتيجة النهائية</span>
-                    </button>
-                <?php endif; ?>
+                <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-sm text-blue-800">
+                        <strong><?= $texts['instructions'] ?></strong>
+                        <br><strong>• <?= $texts['not_measured'] ?></strong> | <strong>• <?= $texts['evidence_limited'] ?></strong> | <strong>• <?= $texts['some_evidence'] ?></strong> | <strong>• <?= $texts['most_evidence'] ?></strong> | <strong>• <?= $texts['complete_evidence'] ?></strong>
+                    </p>
+    </div>
+
+    <?php 
+                $domain_colors = [
+                    1 => ['bg' => 'bg-blue-50', 'border' => 'border-blue-200', 'text' => 'text-blue-800', 'accent' => 'border-r-blue-500'],
+                    2 => ['bg' => 'bg-green-50', 'border' => 'border-green-200', 'text' => 'text-green-800', 'accent' => 'border-r-green-500'],
+                    3 => ['bg' => 'bg-purple-50', 'border' => 'border-purple-200', 'text' => 'text-purple-800', 'accent' => 'border-r-purple-500'],
+                    4 => ['bg' => 'bg-orange-50', 'border' => 'border-orange-200', 'text' => 'text-orange-800', 'accent' => 'border-r-orange-500'],
+                    5 => ['bg' => 'bg-red-50', 'border' => 'border-red-200', 'text' => 'text-red-800', 'accent' => 'border-r-red-500']
+                ];
+                ?>
+                <?php foreach ($evaluation_domains as $domain): ?>
+                    <?php 
+                    // إخفاء جزء المعمل إذا لم يتم تفعيله
+                    if ($domain['id'] == 5) { // جزء خاص بمادة العلوم (النشاط العملي)
+                        echo '<div id="lab-evaluation-section" style="display: none;">'; // مخفي بشكل افتراضي
+                    }
+                    
+                    $colors = $domain_colors[$domain['id']] ?? $domain_colors[1]; 
+                    ?>
+                    <div class="mb-6 p-4 border <?= $colors['border'] ?> <?= $colors['bg'] ?> border-r-4 <?= $colors['accent'] ?> rounded-lg shadow-sm">
+                        <h3 class="text-md font-semibold <?= $colors['text'] ?> mb-3">
+                            <?= htmlspecialchars($subject_is_english && !empty($domain['name_en']) ? $domain['name_en'] : $domain['name']) ?>
+                        </h3>
+                        
+                        <?php if (isset($indicators_by_domain[$domain['id']])): ?>
+                            <div class="space-y-3">
+                                <?php foreach ($indicators_by_domain[$domain['id']] as $indicator): ?>
+                                    <div class="p-3 bg-gray-50 rounded border">
+                                        <!-- نص المؤشر -->
+                                        <div class="mb-3">
+                                            <label class="text-sm font-medium text-gray-800">
+                                                <?= htmlspecialchars($subject_is_english && !empty($indicator['name_en']) ? $indicator['name_en'] : $indicator['name']) ?>
+                                            </label>
             </div>
-        </div>
-        <?php $step++; ?>
+            
+                                        <!-- خيارات التقييم -->
+                                        <div class="flex gap-2 flex-wrap">
+                <?php 
+                                            $score_options = [
+                                                '' => ['label' => $texts['not_measured'], 'color' => 'text-gray-500', 'bg' => 'bg-gray-100'],
+                                                '0' => ['label' => $texts['evidence_limited'], 'color' => 'text-gray-700', 'bg' => 'bg-gray-50'],
+                                                '1' => ['label' => $texts['some_evidence'], 'color' => 'text-red-700', 'bg' => 'bg-red-50'],
+                                                '2' => ['label' => $texts['most_evidence'], 'color' => 'text-blue-700', 'bg' => 'bg-blue-50'],
+                                                '3' => ['label' => $texts['complete_evidence'], 'color' => 'text-green-700', 'bg' => 'bg-green-50']
+                                            ];
+                                            ?>
+                                            <?php foreach ($score_options as $value => $option): ?>
+                                                <label class="flex flex-col items-center cursor-pointer p-2 border border-gray-200 rounded hover:shadow-sm transition-all min-w-[120px] <?= $option['bg'] ?>">
+                                                    <input type="radio" 
+                                                           name="indicator_<?= $indicator['id'] ?>" 
+                                                           value="<?= $value ?>" 
+                                                           class="mb-2 text-blue-500 focus:ring-blue-500">
+                                                    <span class="text-xs text-center <?= $option['color'] ?> font-medium leading-tight"><?= $option['label'] ?></span>
+                                        </label>
+                                            <?php endforeach; ?>
+                        </div>
+                        
+                                        <!-- التوصيات الجاهزة -->
+                                        <div class="mt-3">
+                                            <label class="text-xs font-medium text-gray-600 mb-2 block"><?= $texts['ready_recommendations'] ?></label>
+                        <?php 
+                                            // جلب التوصيات المتعلقة بهذا المؤشر
+                                            $indicator_recommendations = query("SELECT * FROM recommendations WHERE indicator_id = ? ORDER BY text", [$indicator['id']]);
+                                            ?>
+                                            
+                                            <?php if (!empty($indicator_recommendations)): ?>
+                                                <select name="recommend_<?= $indicator['id'] ?>" 
+                                                        class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                                    <option value=""><?= $texts['select_recommendation'] ?></option>
+                                                    <?php foreach ($indicator_recommendations as $rec): ?>
+                                                        <option value="<?= $rec['id'] ?>">
+                                                            <?= htmlspecialchars($subject_is_english && !empty($rec['text_en']) ? $rec['text_en'] : $rec['text']) ?>
+                                                        </option>
+                                    <?php endforeach; ?>
+                                                </select>
+                                            <?php else: ?>
+                                                <p class="text-xs text-gray-500 italic">
+                                                    <?= $subject_is_english ? 'No ready recommendations for this indicator' : 'لا توجد توصيات جاهزة لهذا المؤشر' ?>
+                                                </p>
+                                            <?php endif; ?>
+                                            
+                                            <!-- حقل التوصية المخصصة -->
+                                            <div class="mt-2">
+                                                <label class="text-xs font-medium text-gray-600 block mb-1"><?= $texts['custom_recommendation'] ?></label>
+                                                <textarea name="custom_recommend_<?= $indicator['id'] ?>" 
+                                                          rows="2" 
+                                                          class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                          placeholder="<?= $texts['write_custom_recommendation'] ?>"></textarea>
+                                </div>
+                            </div>
+                            </div>
+                                <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                <?php 
+                    // إغلاق div المعمل
+                    if ($domain['id'] == 5) {
+                        echo '</div>'; // إغلاق lab-evaluation-section
+                    }
+                    ?>
     <?php endforeach; ?>
 
-    <!-- قسم الملاحظات والتوصيات -->
-    <div id="step-<?= $step ?>" class="evaluation-section bg-white border border-gray-200 border-r-4 border-r-primary-600 rounded-lg p-6 mb-4" style="display: none;">
-        <h2 class="text-xl font-bold text-primary-700 mb-6 pb-2 border-b border-gray-200">ملاحظات وتوصيات عامة</h2>
-        
-        <div class="space-y-6">
+                <!-- ملاحظات وتوصيات عامة -->
+                <div class="mt-6 space-y-4">
             <div>
-                <label class="block mb-3 font-semibold text-gray-700">أوصي بـ:</label>
-                <textarea id="recommendation-notes" name="recommendation_notes" class="w-full border-2 border-gray-300 p-4 rounded-lg h-32 resize-none" placeholder="أدخل التوصيات هنا..."></textarea>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">💭 <?= $texts['general_notes'] ?></label>
+                        <textarea name="general_notes" id="general_notes" rows="3" 
+                                  class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="<?= $texts['enter_general_notes'] ?>"></textarea>
             </div>
             
             <div>
-                <label class="block mb-3 font-semibold text-gray-700">أشكر المعلم على:</label>
-                <textarea id="appreciation-notes" name="appreciation_notes" class="w-full border-2 border-gray-300 p-4 rounded-lg h-32 resize-none" placeholder="أدخل نقاط الشكر والتقدير هنا..."></textarea>
-            </div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">🎯 <?= $texts['recommend_teacher'] ?></label>
+                        <textarea name="recommendation_notes" id="recommendation_notes" rows="4" 
+                                  class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="<?= $texts['enter_recommendations'] ?>"></textarea>
         </div>
         
-        <div class="flex justify-between mt-6">
-            <button type="button" class="prev-step bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600" data-step="<?= $step ?>">السابق</button>
-            <button type="button" class="notes-to-final-result bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">عرض النتيجة النهائية وحفظ التقييم</button>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">⭐ <?= $texts['thank_teacher'] ?></label>
+                        <textarea name="appreciation_notes" id="appreciation_notes" rows="4" 
+                                  class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="<?= $texts['enter_appreciation'] ?>"></textarea>
         </div>
     </div>
-    <?php $step++; ?>
 
-    <!-- قسم النتيجة النهائية -->
-    <div id="step-<?= $step ?>" class="evaluation-section bg-white border border-gray-200 border-r-4 border-r-primary-600 rounded-lg p-6 mb-4" style="display: none;">
-        <h2 class="text-xl font-bold text-primary-700 mb-6 pb-2 border-b border-gray-200">نتيجة التقييم النهائية</h2>
-        
-        <div class="grid grid-cols-1 gap-6">
-            <div id="total-score" class="text-xl font-bold p-4 bg-gray-50 rounded-lg border border-gray-200"></div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3 text-gray-700">نقاط القوة:</h3>
-                    <ul id="strengths" class="list-disc list-inside space-y-2 text-gray-600"></ul>
+                <!-- إجمالي النقاط -->
+                <div class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-semibold text-green-800"><?= $texts['total_score'] ?></span>
+                        <span id="total-score" class="text-2xl font-bold text-green-600">0</span>
+                        <input type="hidden" name="total_score" id="total_score_input" value="0">
                 </div>
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3 text-gray-700">نقاط تحتاج إلى تحسين:</h3>
-                    <ul id="improvements" class="list-disc list-inside space-y-2 text-gray-600"></ul>
+                    <div class="text-sm text-green-600 mt-1">
+                        <?= $texts['percentage'] ?> <span id="percentage-score">0%</span>
                 </div>
             </div>
-
-            <div id="recommendation-notes-display" class="bg-white p-4 rounded-lg border border-gray-200" style="display: none;">
-                <h3 class="text-lg font-semibold mb-3 text-gray-700">أوصي بـ:</h3>
-                <p class="text-gray-600 whitespace-pre-line"></p>
             </div>
             
-            <div id="appreciation-notes-display" class="bg-white p-4 rounded-lg border border-gray-200" style="display: none;">
-                <h3 class="text-lg font-semibold mb-3 text-gray-700">أشكر المعلم على:</h3>
-                <p class="text-gray-600 whitespace-pre-line"></p>
+            <!-- أزرار التحكم -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+                <div class="flex gap-4">
+                    <button type="submit" onclick="return validateBeforeSubmit()" class="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition-colors flex items-center gap-2">
+                        💾 <?= $texts['save_evaluation'] ?>
+                    </button>
             </div>
         </div>
 
-        <div class="flex justify-between mt-6">
-            <button type="button" class="prev-step bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600" data-step="<?= $step ?>">العودة</button>
-            <button type="submit" name="save_visit" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">حفظ التقييم</button>
+        </form>
+
         </div>
     </div>
-    
-    <!-- حقول مخفية لتخزين البيانات الضرورية -->
-    <input type="hidden" name="school_id" id="hidden-school-id">
-    <input type="hidden" name="level_id" id="hidden-level-id">
-    <input type="hidden" name="grade_id" id="hidden-grade-id">
-    <input type="hidden" name="section_id" id="hidden-section-id">
-    <input type="hidden" name="subject_id" id="hidden-subject-id">
-    <input type="hidden" name="teacher_id" id="hidden-teacher-id">
-    <input type="hidden" name="visitor_type_id" id="hidden-visitor-type-id">
-    <input type="hidden" name="visitor_person_id" id="hidden-visitor-person-id">
-    <input type="hidden" name="visit_date" id="hidden-visit-date">
-    <input type="hidden" name="visit_type" id="hidden-visit-type">
-    <input type="hidden" name="attendance_type" id="hidden-attendance-type">
-    <input type="hidden" name="has_lab" id="hidden-has-lab" value="0">
-    <input type="hidden" name="total_score" id="hidden-total-score">
-    <input type="hidden" name="average_score" id="hidden-average-score">
-    <input type="hidden" name="grade" id="hidden-grade">
-    <input type="hidden" name="academic_year_id" id="hidden-academic-year-id">
-    </form>
-</div>
+<!-- نهاية المحتوى الرئيسي -->
 
 <script>
-// متغيرات عامة للتقييم
-let indicators = <?= json_encode($indicators ?? []) ?>;
-let currentStep = 1;
-let isPartialEvaluation = false;
+// متغيرات عامة
+let languageUpdateInProgress = false;
 
-// إضافة متغير للتحكم بظهور مؤشرات المعمل
-let hasLab = false;
 
-// قائمة المؤشرات التفصيلية (لاستخدامها عند عرض النتائج)
-const indicatorsDetails = [
-  "خطة الدرس متوفرة وبنودها مستكملة ومناسبة.",
-  "أهداف التعلم مناسبة ودقيقة الصياغة وقابلة للقياس.",
-  "أنشطة الدرس الرئيسة واضحة ومتدرجة ومرتبطة بالأهداف.",
-  "أهداف التعلم معروضة ويتم مناقشتها .",
-  "أنشطة التمهيد مفعلة بشكل مناسب.",
-  "محتوى الدرس واضح والعرض منظّم ومترابط.",
-  "طرائق التدريس وإستراتيجياته متنوعه وتتمحور حول الطالب.",
-  "مصادر التعلم الرئيسة والمساندة موظّفة بصورة واضحة وسليمة.",
-  "الوسائل التعليميّة والتكنولوجيا موظّفة بصورة مناسبة.",
-  "الأسئلة الصفية ذات صياغة سليمة ومتدرجة ومثيرة للتفكير .",
-  "المادة العلمية دقيقة و مناسبة.",
-  "الكفايات الأساسية متضمنة في السياق المعرفي للدرس.",
-  "القيم الأساسية متضمنة في السياق المعرفي للدرس.",
-  "التكامل بين محاور المادة ومع المواد الأخرى يتم بشكل مناسب.",
-  "الفروق الفردية بين الطلبة يتم مراعاتها.",
-  "غلق الدرس يتم بشكل مناسب.",
-  "أساليب التقويم ( القبلي والبنائي والختامي ) مناسبة ومتنوعة.",
-  "التغذية الراجعة متنوعة ومستمرة",
-  "أعمال الطلبة متابعة ومصححة بدقة ورقيًا وإلكترونيًا .",
-  "البيئة الصفية إيجابية وآمنة وداعمة للتعلّم.",
-  "إدارة أنشطة التعلّم والمشاركات الصّفيّة تتم بصورة منظمة.",
-  "قوانين إدارة الصف وإدارة السلوك مفعّلة.",
-  "الاستثمار الأمثل لزمن الحصة",
-  "مدى صلاحية وتوافر الأدوات اللازمة لتنفيذ النشاط العملي.",
-  "شرح إجراءات الأمن والسلامة المناسبة للتجربة ومتابعة تفعيلها.",
-  "إعطاء تعليمات واضحة وسليمة لأداء النشاط العملي قبل وأثناء التنفيذ.",
-  "تسجيل الطلبة للملاحظات والنتائج أثناء تنفيذ النشاط العملي.",
-  "تقويم مهارات الطلبة أثناء تنفيذ النشاط العملي.",
-  "تنويع أساليب تقديم التغذية الراجعة للطلبة لتنمية مهاراتهم."
-];
-
-// دالة التحقق من صحة النموذج
-function validateForm() {
-    const requiredFields = ['visitor-type', 'grade', 'section', 'subject', 'teacher', 'visit-date'];
-    let isValid = true;
-
-    requiredFields.forEach(field => {
-        const element = document.getElementById(field);
-        if (!element.value) {
-            element.classList.add('border-red-500');
-            isValid = false;
-        } else {
-            element.classList.remove('border-red-500');
-        }
-    });
-    
-    // التحقق من اختيار الزائر الشخصي
-    const visitorPersonId = document.getElementById('visitor-person-id').value;
-    const visitorPersonElement = document.getElementById('visitor-person');
-    
-    if (visitorPersonElement && !visitorPersonId) {
-        visitorPersonElement.classList.add('border-red-500');
-        isValid = false;
-    } else if (visitorPersonElement) {
-        visitorPersonElement.classList.remove('border-red-500');
-    }
-
-    if (!isValid) {
-        alert('يرجى ملء جميع الحقول المطلوبة');
-        return false;
-    }
-
-    return isValid;
-}
-
-// عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
-    // وضع التاريخ الحالي كقيمة افتراضية
-    document.getElementById('visit-date').value = new Date().toISOString().split('T')[0];
-    
-    // عرض إشعار تلميحي للمستخدم
-    const infoElement = document.createElement('div');
-    infoElement.className = 'bg-blue-50 text-blue-800 p-4 rounded-lg border border-blue-200 mb-4';
-    infoElement.innerHTML = `
-        <p class="mb-2 font-semibold">ملاحظة هامة:</p>
-        <ul class="list-disc list-inside text-sm">
-            <li>ستظهر معلومات الزيارات السابقة للمعلم بعد بدء التقييم.</li>
-            <li>يمكنك الاطلاع على توصيات الزيارات السابقة ونقاط التقدير قبل إجراء التقييم الجديد.</li>
-        </ul>
-    `;
-    
-    const selectionForm = document.getElementById('selection-form');
-    selectionForm.insertBefore(infoElement, selectionForm.firstChild.nextSibling);
-    
-    // أزرار التنقل بين خطوات التقييم
-    document.querySelectorAll('.next-step').forEach(button => {
-        button.addEventListener('click', function() {
-            const step = parseInt(this.getAttribute('data-step'));
-            showStep(step + 1);
-        });
-    });
-    
-    document.querySelectorAll('.prev-step').forEach(button => {
-        button.addEventListener('click', function() {
-            const step = parseInt(this.getAttribute('data-step'));
-            showStep(step - 1);
-        });
-    });
-    
-    // زر العودة إلى اختيار المعلم والمدرسة
-    document.getElementById('back-to-selection').addEventListener('click', function() {
-        // عند العودة إلى نموذج الاختيار، نخفي نموذج التقييم ونظهر نموذج الاختيار
-        document.getElementById('selection-form').style.display = 'block';
-        document.getElementById('evaluation-form').style.display = 'none';
-        
-        // تفريغ معلومات الزيارات السابقة
-        document.getElementById('visits-count').textContent = '-';
-        document.getElementById('average-performance-all').textContent = '-';
-        document.getElementById('average-performance-current').textContent = '-';
-        document.getElementById('last-visit-date').textContent = '-';
-        document.getElementById('last-visit-class').textContent = '-';
-        document.getElementById('last-visit-current-percentage').textContent = '-';
-        document.getElementById('last-visit-any-percentage').textContent = '-';
-        
-        const recommendationElement = document.querySelector('#last-recommendation-notes p');
-        if (recommendationElement) {
-            recommendationElement.textContent = '-';
-        }
-        
-        const appreciationElement = document.querySelector('#last-appreciation-notes p');
-        if (appreciationElement) {
-            appreciationElement.textContent = '-';
-        }
-    });
-    
-    // عند ضغط زر بدء التقييم
-    document.getElementById('start-evaluation-btn').addEventListener('click', function(e) {
-        e.preventDefault();
-        if (validateForm()) {
-            // نقل المعلومات من نموذج الاختيار إلى نموذج التقييم
-            const schoolId = document.getElementById('school').value;
-            const gradeId = document.getElementById('grade').value;
-            const sectionId = document.getElementById('section').value;
-            const levelId = document.querySelector(`#grade option[value="${gradeId}"]`).getAttribute('data-level-id');
-            const subjectId = document.getElementById('subject').value;
-            const teacherId = document.getElementById('teacher').value;
-            const visitorTypeId = document.getElementById('visitor-type').value;
-            const visitorPersonId = document.getElementById('visitor-person-id').value;
-            const visitDate = document.getElementById('visit-date').value;
-            const visitType = document.getElementById('visit-type').value;
-            const attendanceType = document.getElementById('attendance-type').value;
-            const academicYearId = document.getElementById('academic-year').value;
-            
-            // نقل القيم إلى الحقول المخفية
-            document.getElementById('hidden-school-id').value = schoolId;
-            document.getElementById('hidden-level-id').value = levelId;
-            document.getElementById('hidden-grade-id').value = gradeId;
-            document.getElementById('hidden-section-id').value = sectionId;
-            document.getElementById('hidden-subject-id').value = subjectId;
-            document.getElementById('hidden-teacher-id').value = teacherId;
-            document.getElementById('hidden-visitor-type-id').value = visitorTypeId;
-            document.getElementById('hidden-visitor-person-id').value = visitorPersonId;
-            document.getElementById('hidden-visit-date').value = visitDate;
-            document.getElementById('hidden-visit-type').value = visitType;
-            document.getElementById('hidden-attendance-type').value = attendanceType;
-            document.getElementById('hidden-academic-year-id').value = academicYearId;
-            
-            // تحديث معلومات نوع التقييم
-            isPartialEvaluation = (visitType === 'partial');
-
-            // تحديث قيمة خيار المعمل
-            hasLab = document.getElementById('has-lab').checked;
-            document.getElementById('hidden-has-lab').value = hasLab ? '1' : '0';
-
-            // التحكم بظهور مؤشرات المعمل
-            toggleLabIndicators();
-            
-            // تحديث عنوان التقييم
-            const schoolName = document.querySelector(`#school option[value="${schoolId}"]`)?.textContent || '';
-            const gradeName = document.querySelector(`#grade option[value="${gradeId}"]`)?.textContent || '';
-            const sectionName = document.querySelector(`#section option[value="${sectionId}"]`)?.textContent || '';
-            const subjectName = document.querySelector(`#subject option[value="${subjectId}"]`)?.textContent || '';
-            const teacherName = document.querySelector(`#teacher option[value="${teacherId}"]`)?.textContent || '';
-            const visitTypeName = document.querySelector(`#visit-type option[value="${visitType}"]`)?.textContent || '';
-            
-            const headerHtml = `
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <p class="font-semibold">المعلم: <span class="font-normal">${teacherName}</span></p>
-                        <p class="font-semibold">المادة: <span class="font-normal">${subjectName}</span></p>
-                    </div>
-                    <div>
-                        <p class="font-semibold">الصف: <span class="font-normal">${gradeName}</span></p>
-                        <p class="font-semibold">الشعبة: <span class="font-normal">${sectionName}</span></p>
-                    </div>
-                    <div>
-                        <p class="font-semibold">نوع التقييم: <span class="font-normal">${visitTypeName}</span></p>
-                        <p class="font-semibold">تاريخ الزيارة: <span class="font-normal">${formatDate(visitDate)}</span></p>
-                    </div>
-                </div>
-            `;
-            document.getElementById('evaluation-header').innerHTML = headerHtml;
-            
-            // إخفاء نموذج الاختيار وإظهار نموذج التقييم
-            document.getElementById('selection-form').style.display = 'none';
-            document.getElementById('evaluation-form').style.display = 'block';
-            
-            // تحميل معلومات الزيارات السابقة
-            loadPreviousVisitsInfo(teacherId, visitorPersonId);
-            
-            // إظهار الخطوة الأولى
-            showStep(1);
-            
-            // تأكد من أن قسم معلومات الزيارات السابقة ظاهر
-            const previousVisitsDiv = document.getElementById('previous-visits-info');
-            if (previousVisitsDiv) {
-                previousVisitsDiv.style.display = 'block';
-            }
-        }
-    });
-    
-    // زر عرض النتيجة النهائية - تعديل ليعرض حقلي التوصيات والشكر قبل النتيجة النهائية
-    document.querySelectorAll('.notes-to-final-result').forEach(button => {
-        button.addEventListener('click', function() {
-            // هنا نعرض صفحة الملاحظات والتوصيات أولاً (قبل الأخيرة)
-            const totalSteps = document.querySelectorAll('.evaluation-section').length;
-            const notesStep = totalSteps - 1; // الخطوة قبل الأخيرة (ملاحظات وتوصيات)
-            showStep(notesStep);
-        });
-    });
-    
-    // إضافة زر لعرض النتيجة النهائية من صفحة الملاحظات والتوصيات
-    const finalResultButtons = document.querySelectorAll('.notes-to-final-result');
-    finalResultButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            calculateAndShowFinalResult();
-            const totalSteps = document.querySelectorAll('.evaluation-section').length;
-            showStep(totalSteps); // الخطوة الأخيرة (النتيجة النهائية)
-        });
-    });
-    
-    // تعيين قيمة نوع التقييم
-    document.getElementById('visit-type').addEventListener('change', function() {
-        isPartialEvaluation = this.value === 'partial';
-    });
-    
-    // تحديث اسم الزائر عند اختيار نوع الزائر
-    document.getElementById('visitor-type').addEventListener('change', updateVisitorName);
-    
-    // تحديث قائمة الزوار عند تغيير المدرسة
-    document.getElementById('school').addEventListener('change', function() {
-        updateVisitorName(); // تحديث قائمة الزوار عند تغيير المدرسة
-    });
-
-    // عند تغيير حالة اختيار المعمل
-    document.getElementById('has-lab').addEventListener('change', function() {
-        hasLab = this.checked;
-        document.getElementById('hidden-has-lab').value = hasLab ? '1' : '0';
-        
-        // التحكم بظهور مؤشرات المعمل
-        toggleLabIndicators();
-    });
-
-    // تحميل المعلمين عند اختيار المادة
-    document.getElementById('subject').addEventListener('change', function() {
-        loadTeachers();
-        updateVisitorName(); // تحديث قائمة الزوار عند تغيير المادة
-    });
-
-    // تحميل الشعب عند اختيار الصف
-    document.getElementById('grade').addEventListener('change', function() {
-        loadSections(this.value);
-    });
-
-    // إضافة مستمع أحداث للزر الملاحظات والتوصيات
-    document.querySelectorAll('.go-to-notes').forEach(button => {
-        button.addEventListener('click', function() {
-            const notesStep = parseInt(this.getAttribute('data-notes-step'));
-            showStep(notesStep);
-        });
-    });
-});
-
-// تحديث اسم الزائر عند اختيار نوع الزائر
+// دالة تحديث اسم الزائر - نسخة مبسطة جداً
 function updateVisitorName() {
-    const visitorTypeSelect = document.getElementById('visitor-type');
-    const visitorNameDiv = document.getElementById('visitor-name');
-    const visitorPersonIdInput = document.getElementById('visitor-person-id');
-    const subjectSelect = document.getElementById('subject');
-    const schoolSelect = document.getElementById('school');
     
-    if (visitorTypeSelect.value) {
-        // بناء URL مع المعلمات المطلوبة
-        let apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
-        
-        if (subjectSelect.value) {
-            apiUrl += `&subject_id=${subjectSelect.value}`;
-        }
-        
-        if (schoolSelect.value) {
-            apiUrl += `&school_id=${schoolSelect.value}`;
-        }
-        
-        // إرسال طلب AJAX للحصول على قائمة الزوار حسب النوع المختار
-        fetch(apiUrl)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.visitors.length > 0) {
-                    // إنشاء قائمة منسدلة للزوار
-                    let select = document.createElement('select');
-                    select.id = 'visitor-person';
-                    select.className = 'w-full border-2 border-slate-300 p-3 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 hover:border-blue-400';
-                    select.required = true;
-                    
-                    let defaultOption = document.createElement('option');
-                    defaultOption.value = '';
-                    defaultOption.textContent = 'اختر الزائر...';
-                    select.appendChild(defaultOption);
-                    
-                    data.visitors.forEach(visitor => {
-                        let option = document.createElement('option');
-                        option.value = visitor.id;
-                        option.textContent = visitor.name;
-                        select.appendChild(option);
-                    });
-                    
-                    // تحديث عنصر اسم الزائر
-                    visitorNameDiv.innerHTML = '';
-                    visitorNameDiv.appendChild(select);
-                    
-                    // تحديث معرف الزائر عند الاختيار
-                    select.addEventListener('change', function() {
-                        visitorPersonIdInput.value = this.value;
-                    });
-                } else {
-                    visitorNameDiv.innerHTML = '<p class="text-red-500">لا يوجد زوار من هذا النوع</p>';
-                    visitorPersonIdInput.value = '';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                visitorNameDiv.innerHTML = '<p class="text-red-500">حدث خطأ في تحميل بيانات الزوار</p>';
-                visitorPersonIdInput.value = '';
-            });
-    } else {
-        visitorNameDiv.innerHTML = '';
-        visitorPersonIdInput.value = '';
+    // الحصول على العناصر
+    const visitorTypeSelect = document.getElementById('visitor_type_id');
+    const visitorNameContainer = document.getElementById('visitor-name-container');
+    const visitorPersonIdInput = document.getElementById('visitor_person_id');
+    const subjectSelect = document.getElementById('subject_id');
+    const schoolSelect = document.getElementById('school_id');
+    
+    // التحقق من وجود العناصر
+    if (!visitorTypeSelect) {
+        return;
     }
+    
+    if (!visitorNameContainer) {
+        return;
+    }
+    
+    
+    // التحقق من اختيار نوع الزائر
+    if (!visitorTypeSelect.value) {
+        visitorNameContainer.innerHTML = '<span class="text-gray-500 text-sm">اختر نوع الزائر أولاً</span>';
+        if (visitorPersonIdInput) visitorPersonIdInput.value = '';
+        return;
+    }
+    
+    
+    // بناء رابط الـ API
+    let apiUrl = `api/get_visitor_name.php?visitor_type_id=${visitorTypeSelect.value}`;
+    
+    if (subjectSelect && subjectSelect.value) {
+        apiUrl += `&subject_id=${subjectSelect.value}`;
+    }
+    
+    if (schoolSelect && schoolSelect.value) {
+        apiUrl += `&school_id=${schoolSelect.value}`;
+    }
+    
+    
+    // إظهار رسالة التحميل
+    visitorNameContainer.innerHTML = '<div class="flex items-center gap-2 text-blue-600"><div class="loading-spinner"></div><span class="text-sm">جاري التحميل...</span></div>';
+    
+    // إرسال الطلب
+    
+    fetch(apiUrl)
+        .then(response => {
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return response.json();
+        })
+        .then(data => {
+            
+            if (data.success && data.visitors && data.visitors.length > 0) {
+                
+                // إنشاء قائمة منسدلة
+                const select = document.createElement('select');
+                select.id = 'visitor_person_select';
+                select.name = 'visitor_person_select';
+                select.className = 'w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500';
+                select.required = true;
+                
+                // الخيار الافتراضي
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'اختر اسم الزائر...';
+                select.appendChild(defaultOption);
+                
+                // إضافة الزوار
+                data.visitors.forEach(visitor => {
+                    const option = document.createElement('option');
+                    option.value = visitor.id;
+                    option.textContent = visitor.name;
+                    select.appendChild(option);
+                });
+                
+                // تحديث الحاوي
+                visitorNameContainer.innerHTML = '';
+                visitorNameContainer.appendChild(select);
+                
+                
+                // إضافة مستمع للاختيار
+                select.addEventListener('change', function() {
+                    if (visitorPersonIdInput) {
+                        visitorPersonIdInput.value = this.value;
+                    }
+                });
+                
+            } else if (data.success && (!data.visitors || data.visitors.length === 0)) {
+                visitorNameContainer.innerHTML = '<span class="text-amber-600 text-sm">لا توجد زوار متاحين لهذا النوع</span>';
+                if (visitorPersonIdInput) visitorPersonIdInput.value = '';
+                
+            } else {
+                console.log(`❌ خطأ من الخادم: ${data.message || 'خطأ غير معروف'}`);
+                visitorNameContainer.innerHTML = `<span class="text-red-600 text-sm">خطأ: ${data.message || 'فشل في جلب البيانات'}</span>`;
+                if (visitorPersonIdInput) visitorPersonIdInput.value = '';
+            }
+        })
+        .catch(error => {
+            console.log(`❌ خطأ في الشبكة: ${error.message}`);
+            visitorNameContainer.innerHTML = '<span class="text-red-600 text-sm">خطأ في الاتصال بالخادم</span>';
+            if (visitorPersonIdInput) visitorPersonIdInput.value = '';
+        });
 }
 
-// تحميل المعلمين عند اختيار المادة
+// دالة تحميل المعلمين
 function loadTeachers() {
-    const subjectSelect = document.getElementById('subject');
-    const teacherSelect = document.getElementById('teacher');
-    const schoolId = document.getElementById('school').value;
-    const visitorTypeSelect = document.getElementById('visitor-type');
-    const visitorPersonSelect = document.getElementById('visitor-person');
+    const schoolId = document.getElementById('school_id').value;
+    const subjectId = document.getElementById('subject_id').value;
+    const teacherSelect = document.getElementById('teacher_id');
     
-    if (!subjectSelect.value || !schoolId) {
+    console.log(`🔍 loadTeachers: schoolId=${schoolId}, subjectId=${subjectId}`);
+    
+    if (!schoolId || !subjectId) {
+        console.log('❌ المدرسة أو المادة غير محددة');
         teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
         return;
     }
     
-    // تحديد نوع الزائر
-    const visitorTypeName = visitorTypeSelect.options[visitorTypeSelect.selectedIndex]?.text || '';
-    const isCoordinator = visitorTypeName === 'منسق المادة';
-    const isSupervisor = visitorTypeName === 'موجه المادة';
+    console.log(`🔄 تحميل المعلمين للمدرسة ${schoolId} والمادة ${subjectId}`);
     
-    // إرسال طلب AJAX للحصول على قائمة المعلمين حسب المادة والمدرسة
-    let url = `includes/get_teachers.php?subject_id=${subjectSelect.value}&school_id=${schoolId}`;
-    
-    // إذا كان الزائر منسق المادة أو موجه المادة، نضيف معلومات إضافية للتصفية
-    if (isCoordinator || isSupervisor) {
-        url += `&visitor_type=${encodeURIComponent(visitorTypeName)}`;
-        if (visitorPersonSelect && visitorPersonSelect.value) {
-            url += `&exclude_visitor=${visitorPersonSelect.value}`;
-        }
-    }
-    
-    fetch(url)
-        .then(response => response.json())
+    fetch(`api/get_teachers_by_school_subject.php?school_id=${schoolId}&subject_id=${subjectId}`)
+        .then(response => {
+            console.log(`📡 استجابة API: ${response.status} ${response.statusText}`);
+            return response.json();
+        })
         .then(data => {
-            // إعادة تعيين قائمة المعلمين
+            console.log('📊 بيانات API:', data);
             teacherSelect.innerHTML = '<option value="">اختر المعلم...</option>';
             
-            // إذا كان الزائر موجه، نضيف منسق المادة في بداية القائمة
-            if (isSupervisor && subjectSelect.value) {
-                // جلب منسق المادة
-                fetch(`includes/get_subject_coordinator.php?subject_id=${subjectSelect.value}&school_id=${schoolId}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(coordinators => {
-                        // التحقق من وجود خطأ في الاستجابة
-                        if (coordinators.error) {
-                            console.error('Coordinator API error:', coordinators.error);
-                            throw new Error(coordinators.error);
-                        }
-                        
-                        // التحقق من أن coordinators مصفوفة
-                        if (Array.isArray(coordinators) && coordinators.length > 0) {
-                            // إضافة منسقي المادة إلى القائمة
-                            coordinators.forEach(coord => {
-                                let option = document.createElement('option');
-                                option.value = coord.id;
-                                option.textContent = coord.name + ' (منسق المادة)';
-                                teacherSelect.appendChild(option);
-                            });
-                            
-                            // إضافة فاصل بين منسقي المادة والمعلمين العاديين
-                            if (data.length > 0) {
-                                let separator = document.createElement('option');
-                                separator.disabled = true;
-                                separator.textContent = '---------------------';
-                                teacherSelect.appendChild(separator);
-                            }
-                        } else {
-                            console.log('No coordinators found for subject:', subjectSelect.value);
-                        }
-                        
-                        // إضافة المعلمين إلى القائمة
-                        data.forEach(teacher => {
-                            let option = document.createElement('option');
-                            option.value = teacher.id;
-                            option.textContent = teacher.name;
-                            teacherSelect.appendChild(option);
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Error loading coordinators:', error);
-                        // إضافة المعلمين فقط في حالة فشل جلب المنسقين
-                        data.forEach(teacher => {
-                            let option = document.createElement('option');
-                            option.value = teacher.id;
-                            option.textContent = teacher.name;
-                            teacherSelect.appendChild(option);
-                        });
-                    });
-            } else {
-                // إضافة المعلمين إلى القائمة
-                data.forEach(teacher => {
-                    let option = document.createElement('option');
+            if (data.success && data.teachers && data.teachers.length > 0) {
+                data.teachers.forEach(teacher => {
+                    const option = document.createElement('option');
                     option.value = teacher.id;
                     option.textContent = teacher.name;
                     teacherSelect.appendChild(option);
                 });
+                console.log(`✅ تم تحميل ${data.teachers.length} معلم بنجاح`);
+            } else if (data.success && (!data.teachers || data.teachers.length === 0)) {
+                console.log('⚠️ لا توجد معلمين متاحين لهذه المدرسة والمادة');
+            } else {
+                console.log(`❌ خطأ من API: ${data.message || 'خطأ غير معروف'}`);
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            teacherSelect.innerHTML = '<option value="">حدث خطأ في تحميل المعلمين</option>';
+            console.log(`❌ خطأ في الشبكة أو تحليل JSON: ${error.message}`);
+            teacherSelect.innerHTML = '<option value="">خطأ في تحميل المعلمين</option>';
         });
 }
 
-// تحميل الشعب عند اختيار الصف
-function loadSections(gradeId) {
-    const sectionSelect = document.getElementById('section');
-    const schoolId = document.getElementById('school').value;
+// دالة تحميل الشعب
+function loadSections() {
+    const schoolId = document.getElementById('school_id').value;
+    const gradeId = document.getElementById('grade_id').value;
+    const sectionSelect = document.getElementById('section_id');
     
-    if (gradeId && schoolId) {
-        // إرسال طلب AJAX للحصول على قائمة الشعب حسب الصف والمدرسة
-        fetch(`includes/get_sections.php?grade_id=${gradeId}&school_id=${schoolId}`)
-            .then(response => response.json())
-            .then(data => {
-                // إعادة تعيين قائمة الشعب
-                sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
-                
-                // إضافة الشعب إلى القائمة
-                data.forEach(section => {
-                    let option = document.createElement('option');
+    console.log(`🔍 loadSections: schoolId=${schoolId}, gradeId=${gradeId}`);
+    
+    if (!schoolId || !gradeId) {
+        console.log('❌ المدرسة أو الصف غير محدد');
+        sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
+        return;
+    }
+    
+    console.log(`🔄 تحميل الشعب للمدرسة ${schoolId} والصف ${gradeId}`);
+    
+    fetch(`api/get_sections_by_school_grade.php?school_id=${schoolId}&grade_id=${gradeId}`)
+        .then(response => response.json())
+        .then(data => {
+            sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
+            
+            if (data.success && data.sections) {
+                data.sections.forEach(section => {
+                    const option = document.createElement('option');
                     option.value = section.id;
                     option.textContent = section.name;
                     sectionSelect.appendChild(option);
                 });
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                sectionSelect.innerHTML = '<option value="">حدث خطأ في تحميل الشعب</option>';
-            });
-    } else {
-        sectionSelect.innerHTML = '<option value="">اختر الشعبة...</option>';
-    }
-}
-
-// دالة عرض خطوة محددة من التقييم
-function showStep(step) {
-    const totalSteps = document.querySelectorAll('.evaluation-section').length;
-    
-    for (let i = 1; i <= totalSteps; i++) {
-        const el = document.getElementById(`step-${i}`);
-        if (el) {
-            el.style.display = (i === step) ? 'block' : 'none';
-        }
-    }
-    
-    // تأكد من أن قسم معلومات الزيارات السابقة ظاهر دائمًا
-    const previousVisitsDiv = document.getElementById('previous-visits-info');
-    if (previousVisitsDiv) {
-        previousVisitsDiv.style.display = 'block';
-    }
-    
-    currentStep = step;
-    window.scrollTo(0, 0);
-}
-
-// دالة حساب وعرض النتيجة النهائية
-function calculateAndShowFinalResult() {
-    // تحضير مصفوفات لتخزين النتائج
-    const strengths = [];
-    const improvements = [];
-    let totalScore = 0;
-    let totalItems = 0;
-    
-    try {
-        // جمع نتائج التقييم
-        document.querySelectorAll('.indicator-block').forEach((block, index) => {
-            // لا نحسب المؤشرات المخفية (المعمل عندما يكون غير مُفعّل)
-            if (block.style.display === 'none') {
-                return;
-            }
-            
-            const scoreSelect = block.querySelector('select[name^="score_"]');
-            const scoreValue = scoreSelect.value;
-            const score = scoreValue === '' ? null : parseInt(scoreValue);
-            const indicatorLabel = block.querySelector('label').textContent;
-            
-            // إذا كان التقييم جزئياً، نحسب فقط العناصر التي تم تقييمها
-            // ونستثني مؤشرات "لم يتم قياسه" (قيمة فارغة أو null) من الحساب
-            if (scoreValue !== '' && score !== null) {
-                // تصنيف نقاط القوة والتحسين
-                if (score >= 2) {
-                    strengths.push(indicatorLabel);
-                } else if (score >= 0) {
-                    improvements.push(indicatorLabel);
-                }
-                
-                // إضافة النقاط للمجموع
-                totalScore += score;
-                totalItems++;
-            }
-        });
-        
-        // حساب المتوسط
-        const average = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : 0;
-        
-        // تحديد التقدير
-        const grade = getGrade(average);
-        
-        // تحديث الحقول المخفية
-        document.getElementById('hidden-total-score').value = totalScore;
-        document.getElementById('hidden-average-score').value = average;
-        document.getElementById('hidden-grade').value = grade;
-        
-        // حساب النسبة المئوية (من 3 إلى 100%)
-        const percentage = totalItems > 0 ? ((totalScore / (totalItems * 3)) * 100).toFixed(2) : 0;
-        
-        // عرض النتيجة الإجمالية
-        const evaluationType = isPartialEvaluation ? 'تقييم جزئي' : 'تقييم كلي';
-        document.getElementById('total-score').textContent = 
-            `${evaluationType}: النتيجة ${totalScore} من ${totalItems * 3} (المتوسط: ${average} - النسبة: ${percentage}%)`;
-        
-        // عرض نقاط القوة
-        const strengthsList = document.getElementById('strengths');
-        strengthsList.innerHTML = '';
-        if (strengths.length > 0) {
-            strengths.forEach(strength => {
-                strengthsList.innerHTML += `<li>${strength}</li>`;
-            });
-        } else {
-            strengthsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط قوة</li>';
-        }
-        
-        // عرض نقاط التحسين
-        const improvementsList = document.getElementById('improvements');
-        improvementsList.innerHTML = '';
-        if (improvements.length > 0) {
-            improvements.forEach(improvement => {
-                improvementsList.innerHTML += `<li>${improvement}</li>`;
-            });
-        } else {
-            improvementsList.innerHTML = '<li class="text-gray-500">لم يتم تحديد نقاط تحتاج إلى تحسين</li>';
-        }
-        
-        // جمع التوصيات المختارة
-        const recommendationBoxes = document.querySelectorAll('input[type="checkbox"][name^="recommend_"]:checked');
-        let selectedRecommendations = [];
-        recommendationBoxes.forEach(box => {
-            const label = document.querySelector(`label[for="${box.id}"]`);
-            if (label) {
-                selectedRecommendations.push(label.textContent.trim());
-            }
-        });
-        
-        // إضافة التوصيات المخصصة
-        const customRecommendInputs = document.querySelectorAll('input[name^="custom_recommend_"]');
-        customRecommendInputs.forEach(input => {
-            if (input.value.trim()) {
-                selectedRecommendations.push(input.value.trim());
-            }
-        });
-        
-        // تحديث حقل التوصيات إذا كان فارغاً
-        const recommendationNotes = document.getElementById('recommendation-notes');
-        if (!recommendationNotes.value.trim() && selectedRecommendations.length > 0) {
-            recommendationNotes.value = selectedRecommendations.join('\n\n');
-        }
-        
-        // العثور على عناصر عرض التوصيات والشكر
-        const recommendationNotesDisplay = document.getElementById('recommendation-notes-display');
-        const appreciationNotesDisplay = document.getElementById('appreciation-notes-display');
-        
-        if (!recommendationNotesDisplay || !appreciationNotesDisplay) {
-            console.error('لم يتم العثور على عناصر عرض التوصيات أو الشكر');
-            return;
-        }
-        
-        // عرض التوصيات - دائماً نظهرها حتى لو كانت فارغة
-        const recommendationParagraph = recommendationNotesDisplay.querySelector('p');
-        if (recommendationParagraph) {
-            recommendationParagraph.textContent = recommendationNotes.value || 'لم يتم إضافة توصيات';
-            recommendationNotesDisplay.style.display = 'block';
-        } else {
-            console.error('لم يتم العثور على عنصر الفقرة لعرض التوصيات');
-        }
-        
-        // عرض نقاط الشكر - دائماً نظهرها حتى لو كانت فارغة
-        const appreciationNotes = document.getElementById('appreciation-notes');
-        const appreciationParagraph = appreciationNotesDisplay.querySelector('p');
-        if (appreciationParagraph && appreciationNotes) {
-            appreciationParagraph.textContent = appreciationNotes.value || 'لم يتم إضافة نقاط شكر';
-            appreciationNotesDisplay.style.display = 'block';
-        } else {
-            console.error('لم يتم العثور على عنصر الفقرة لعرض نقاط الشكر أو عنصر الإدخال');
-        }
-    } catch (error) {
-        console.error('حدث خطأ أثناء حساب وعرض النتيجة النهائية:', error);
-    }
-}
-
-// دالة الحصول على التقدير بناءً على المتوسط
-function getGrade(average) {
-    // تحويل المتوسط إلى نسبة مئوية للمقارنة
-    const percentage = (average / 3) * 100;
-    
-    if (percentage >= 90) return 'ممتاز';       // 2.7 من 3
-    if (percentage >= 80) return 'جيد جداً';     // 2.4 من 3
-    if (percentage >= 65) return 'جيد';         // 1.95 من 3
-    if (percentage >= 50) return 'مقبول';       // 1.5 من 3
-    return 'يحتاج إلى تحسين';                  // أقل من 1.5 من 3
-}
-
-// دالة تحميل معلومات الزيارات السابقة
-function loadPreviousVisitsInfo(teacherId, visitorPersonId) {
-    if (!teacherId || !visitorPersonId) return;
-    
-    console.log('جاري تحميل معلومات الزيارات السابقة للمعلم ' + teacherId + ' والزائر ' + visitorPersonId);
-    
-    // إظهار قسم معلومات الزيارات السابقة بشكل افتراضي
-    const previousVisitsDiv = document.getElementById('previous-visits-info');
-    if (previousVisitsDiv) {
-        previousVisitsDiv.style.display = 'block';
-    }
-    
-    // جلب معلومات الزيارات السابقة من خلال API
-    const apiUrl = `api/get_previous_visits.php?teacher_id=${teacherId}&visitor_person_id=${visitorPersonId}`;
-    console.log('🔥 استدعاء API مع URL:', apiUrl);
-    
-    fetch(apiUrl)
-        .then(response => {
-            console.log('تم استلام الرد من API');
-            return response.json();
-        })
-        .then(data => {
-            console.log('البيانات المستلمة من API:', data);
-            
-            if (data.success) {
-                const visitsInfo = data.data;
-                
-                // تحديث عدد الزيارات
-                const visitsCountElement = document.getElementById('visits-count');
-                if (visitsCountElement) {
-                    visitsCountElement.textContent = visitsInfo.visits_count || '0';
-                }
-                
-                // تحديث متوسط الأداء العام لكل الزائرين
-                const averagePerformanceAllElement = document.getElementById('average-performance-all');
-                if (averagePerformanceAllElement) {
-                    if (visitsInfo.average_performance_all !== undefined && visitsInfo.average_performance_all !== null) {
-                        // المتوسط يأتي كنسبة من 0-1، نحوله لنسبة مئوية
-                        const avgPercentage = parseFloat((visitsInfo.average_performance_all * 100).toFixed(2));
-                        console.log("متوسط الأداء لكل الزائرين (قيمة خام):", visitsInfo.average_performance_all);
-                        console.log("متوسط الأداء لكل الزائرين (نسبة مئوية):", avgPercentage);
-                        
-                        averagePerformanceAllElement.textContent = `${avgPercentage}%`;
-                    } else {
-                        averagePerformanceAllElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // تحديث متوسط الأداء للزائر الحالي
-                const averagePerformanceCurrentElement = document.getElementById('average-performance-current');
-                if (averagePerformanceCurrentElement) {
-                    if (visitsInfo.average_performance_current_visitor !== undefined && visitsInfo.average_performance_current_visitor !== null) {
-                        // المتوسط يأتي كنسبة من 0-1، نحوله لنسبة مئوية
-                        const avgPercentage = parseFloat((visitsInfo.average_performance_current_visitor * 100).toFixed(2));
-                        console.log("متوسط الأداء للزائر الحالي (قيمة خام):", visitsInfo.average_performance_current_visitor);
-                        console.log("متوسط الأداء للزائر الحالي (نسبة مئوية):", avgPercentage);
-                        
-                        averagePerformanceCurrentElement.textContent = `${avgPercentage}%`;
-                    } else {
-                        averagePerformanceCurrentElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // إذا كان هناك زيارة سابقة للزائر الحالي، نعرض تفاصيلها
-                // وإلا نعرض آخر زيارة لأي زائر
-                const lastVisitCurrentVisitor = visitsInfo.last_visit_current_visitor;
-                const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
-                const lastVisitToShow = lastVisitCurrentVisitor || lastVisitAnyVisitor;
-                
-                console.log('آخر زيارة للزائر الحالي:', lastVisitCurrentVisitor);
-                console.log('آخر زيارة لأي زائر:', lastVisitAnyVisitor);
-                console.log('آخر زيارة لعرضها:', lastVisitToShow);
-                
-                // تحديث تاريخ آخر زيارة
-                const lastVisitDateElement = document.getElementById('last-visit-date');
-                if (lastVisitDateElement) {
-                    if (lastVisitToShow && lastVisitToShow.date) {
-                        const visitDate = new Date(lastVisitToShow.date).toLocaleDateString('ar-EG');
-                        lastVisitDateElement.textContent = visitDate;
-                    } else {
-                        lastVisitDateElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // تحديث الصف والشعبة
-                const lastVisitClassElement = document.getElementById('last-visit-class');
-                if (lastVisitClassElement) {
-                    if (lastVisitToShow) {
-                        lastVisitClassElement.textContent = 
-                            `${lastVisitToShow.grade || '-'} / ${lastVisitToShow.section || '-'}`;
-                    } else {
-                        lastVisitClassElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // تحديث نسبة تقييم آخر زيارة للزائر الحالي
-                const lastVisitCurrentPercentageElement = document.getElementById('last-visit-current-percentage');
-                if (lastVisitCurrentPercentageElement) {
-                    if (lastVisitCurrentVisitor && lastVisitCurrentVisitor.average_score !== undefined && lastVisitCurrentVisitor.average_score !== null) {
-                        // average_score يأتي كنسبة من 0-1، نحوله لنسبة مئوية
-                        const percentage = parseFloat((lastVisitCurrentVisitor.average_score * 100).toFixed(2));
-                        console.log("نسبة آخر زيارة للزائر الحالي (قيمة خام):", lastVisitCurrentVisitor.average_score);
-                        console.log("نسبة آخر زيارة للزائر الحالي (نسبة مئوية):", percentage);
-                        
-                        lastVisitCurrentPercentageElement.textContent = `${percentage}%`;
-                    } else {
-                        lastVisitCurrentPercentageElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // تحديث نسبة تقييم آخر زيارة لأي زائر
-                const lastVisitAnyPercentageElement = document.getElementById('last-visit-any-percentage');
-                if (lastVisitAnyPercentageElement) {
-                    const lastVisitAnyVisitor = visitsInfo.last_visit_any_visitor;
-                    if (lastVisitAnyVisitor && lastVisitAnyVisitor.average_score !== undefined && lastVisitAnyVisitor.average_score !== null) {
-                        // average_score يأتي كنسبة من 0-1، نحوله لنسبة مئوية
-                        const percentage = parseFloat((lastVisitAnyVisitor.average_score * 100).toFixed(2));
-                        console.log("نسبة آخر زيارة لأي زائر (قيمة خام):", lastVisitAnyVisitor.average_score);
-                        console.log("نسبة آخر زيارة لأي زائر (نسبة مئوية):", percentage);
-                        
-                        lastVisitAnyPercentageElement.textContent = `${percentage}%`;
-                        
-                        // إضافة معلومات الزائر في tooltip
-                        lastVisitAnyPercentageElement.title = `بواسطة: الزائر رقم ${lastVisitAnyVisitor.visitor_person_id || '-'} (${lastVisitAnyVisitor.visitor_type || '-'})`;
-                    } else {
-                        lastVisitAnyPercentageElement.textContent = 'غير متوفر';
-                    }
-                }
-                
-                // عرض توصيات المعلم من الزيارة السابقة
-                const recommendationElement = document.querySelector('#last-recommendation-notes p');
-                if (recommendationElement) {
-                    if (lastVisitToShow && lastVisitToShow.recommendation_notes) {
-                        recommendationElement.textContent = lastVisitToShow.recommendation_notes;
-                        console.log('تم عرض التوصيات من:', lastVisitCurrentVisitor ? 'الزائر الحالي' : 'آخر زائر');
-                    } else {
-                        recommendationElement.textContent = 'لا توجد توصيات مسجلة';
-                    }
-                }
-                
-                // عرض نقاط الشكر من الزيارة السابقة
-                const appreciationElement = document.querySelector('#last-appreciation-notes p');
-                if (appreciationElement) {
-                    if (lastVisitToShow && lastVisitToShow.appreciation_notes) {
-                        appreciationElement.textContent = lastVisitToShow.appreciation_notes;
-                        console.log('تم عرض نقاط الشكر من:', lastVisitCurrentVisitor ? 'الزائر الحالي' : 'آخر زائر');
-                    } else {
-                        appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
-                    }
-                }
-                
-            } else {
-                console.error('خطأ في تحميل معلومات الزيارات السابقة:', data.message);
-                
-                // تعيين رسائل افتراضية في حالة حدوث خطأ
-                document.getElementById('visits-count').textContent = '0';
-                document.getElementById('average-performance-all').textContent = 'غير متوفر';
-                document.getElementById('average-performance-current').textContent = 'غير متوفر';
-                document.getElementById('last-visit-date').textContent = 'غير متوفر';
-                document.getElementById('last-visit-class').textContent = 'غير متوفر';
-                document.getElementById('last-visit-current-percentage').textContent = 'غير متوفر';
-                document.getElementById('last-visit-any-percentage').textContent = 'غير متوفر';
-                
-                const recommendationElement = document.querySelector('#last-recommendation-notes p');
-                if (recommendationElement) {
-                    recommendationElement.textContent = 'لا توجد توصيات مسجلة';
-                }
-                
-                const appreciationElement = document.querySelector('#last-appreciation-notes p');
-                if (appreciationElement) {
-                    appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
-                }
+                console.log(`✅ تم تحميل ${data.sections.length} شعبة`);
             }
         })
         .catch(error => {
-            console.error('خطأ في تحميل معلومات الزيارات السابقة:', error);
-            
-            // تعيين رسائل افتراضية في حالة حدوث خطأ
-            document.getElementById('visits-count').textContent = '0';
-            document.getElementById('average-performance-all').textContent = 'غير متوفر';
-            document.getElementById('average-performance-current').textContent = 'غير متوفر';
-            document.getElementById('last-visit-date').textContent = 'غير متوفر';
-            document.getElementById('last-visit-class').textContent = 'غير متوفر';
-            document.getElementById('last-visit-current-percentage').textContent = 'غير متوفر';
-            document.getElementById('last-visit-any-percentage').textContent = 'غير متوفر';
-            
-            const recommendationElement = document.querySelector('#last-recommendation-notes p');
-            if (recommendationElement) {
-                recommendationElement.textContent = 'لا توجد توصيات مسجلة';
-            }
-            
-            const appreciationElement = document.querySelector('#last-appreciation-notes p');
-            if (appreciationElement) {
-                appreciationElement.textContent = 'لا توجد نقاط شكر مسجلة';
-            }
+            console.log(`❌ خطأ في تحميل الشعب: ${error.message}`);
         });
 }
 
-// وظيفة للتحكم بظهور/إخفاء مؤشرات المعمل
-function toggleLabIndicators() {
-    const labIndicators = document.querySelectorAll('.lab-indicator');
-    labIndicators.forEach(indicator => {
-        indicator.style.display = hasLab ? 'block' : 'none';
+
+// دالة حساب إجمالي النقاط
+function calculateTotal() {
+    
+    let totalScore = 0;
+    let totalIndicators = 0;
+    
+    // جمع جميع المؤشرات المقيمة
+    const radioGroups = document.querySelectorAll('input[type="radio"][name^="indicator_"]');
+    const indicatorNames = new Set();
+    
+    radioGroups.forEach(radio => {
+        indicatorNames.add(radio.name);
     });
+    
+    
+    // حساب النقاط لكل مؤشر
+    indicatorNames.forEach(indicatorName => {
+        const selectedRadio = document.querySelector(`input[name="${indicatorName}"]:checked`);
+        if (selectedRadio) {
+            const value = selectedRadio.value;
+            if (value === '' || value === null) {
+                // لا نضيف للمجموع ولا للعداد
+            } else {
+                const score = parseInt(value);
+                totalScore += score;
+                totalIndicators++;
+            }
+        }
+    });
+    
+    // حساب النسبة المئوية (بناءً على المؤشرات المقيمة فقط)
+    const maxPossibleScore = totalIndicators * 3; // أقصى نقاط ممكنة للمؤشرات المقيمة فقط
+    const percentage = totalIndicators > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+    
+    // تحديث العرض
+    document.getElementById('total-score').textContent = totalScore;
+    document.getElementById('total_score_input').value = totalScore;
+    document.getElementById('percentage-score').textContent = percentage + '%';
+    
+    
+    // تحديد مستوى الأداء
+    let performanceLevel = '';
+    let levelColor = '';
+    
+    if (percentage >= 90) {
+        performanceLevel = 'ممتاز';
+        levelColor = 'text-green-600';
+    } else if (percentage >= 80) {
+        performanceLevel = 'جيد جداً';
+        levelColor = 'text-blue-600';
+    } else if (percentage >= 70) {
+        performanceLevel = 'جيد';
+        levelColor = 'text-yellow-600';
+    } else if (percentage >= 60) {
+        performanceLevel = 'مقبول';
+        levelColor = 'text-orange-600';
+        } else {
+        performanceLevel = 'يحتاج تطوير';
+        levelColor = 'text-red-600';
+    }
+    
+    console.log(`🎯 مستوى الأداء: ${performanceLevel}`);
+    
+    return { totalScore, percentage, performanceLevel };
 }
 
-// دالة تنسيق التاريخ بشكل صحيح
-function formatDate(dateStr) {
-    if (!dateStr) return '';
+// دالة التحقق قبل إرسال النموذج
+function validateBeforeSubmit() {
+    console.log('🔍 بدء التحقق من صحة البيانات قبل الإرسال...');
     
-    const date = new Date(dateStr);
-    // تنسيق التاريخ بالعربية (يوم/شهر/سنة)
-    return date.toLocaleDateString('ar-EG');
+    // التحقق من البيانات الأساسية
+    const requiredFields = {
+        'school_id': 'المدرسة',
+        'subject_id': 'المادة', 
+        'teacher_id': 'المعلم',
+        'grade_id': 'الصف',
+        'visitor_type_id': 'نوع الزائر',
+        'visitor_person_id': 'اسم الزائر',
+        'visit_date': 'تاريخ الزيارة'
+    };
+    
+    let missingFields = [];
+    
+    Object.entries(requiredFields).forEach(([fieldId, fieldName]) => {
+        const field = document.getElementById(fieldId);
+        if (!field || !field.value) {
+            missingFields.push(fieldName);
+            console.log(`❌ حقل مطلوب مفقود: ${fieldName}`);
+        } else {
+            console.log(`✅ ${fieldName}: ${field.value}`);
+        }
+    });
+    
+    if (missingFields.length > 0) {
+        const message = `الحقول التالية مطلوبة:\n${missingFields.join('\n')}`;
+        alert(message);
+        console.log(`❌ فشل التحقق: ${missingFields.length} حقول مفقودة`);
+        return false;
+    }
+    
+    // حساب النقاط النهائية
+    calculateTotal();
+    
+    console.log('✅ تم التحقق من جميع البيانات - جاري الإرسال...');
+    return true;
 }
+
+// عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // تعيين التاريخ الحالي
+    document.getElementById('visit_date').value = new Date().toISOString().split('T')[0];
+    
+    // تحميل المعلمين للمدرسة الافتراضية إذا تم اختيار مادة
+    const defaultSchoolId = document.getElementById('school_id').value;
+    const subjectId = document.getElementById('subject_id').value;
+    
+    console.log(`🔄 تحميل الصفحة: مدرسة=${defaultSchoolId}, مادة=${subjectId}`);
+    
+    // تحميل المعلمين تلقائياً
+    <?php if ($is_coordinator && $current_user_subject_id): ?>
+        // للمنسق: تحميل معلمي مادته تلقائياً
+        console.log('🔄 تحميل معلمي المادة للمنسق...');
+        console.log('مادة المنسق: <?= $current_user_subject_id ?>');
+        loadTeachers();
+        loadSections(); // تحميل الشعب أيضاً
+    <?php else: ?>
+        // للمستخدمين الآخرين: تحميل حسب المدرسة والمادة المحددتين
+        if (defaultSchoolId && subjectId) {
+            console.log('🔄 تحميل المعلمين تلقائياً...');
+            loadTeachers();
+        } else if (defaultSchoolId) {
+            console.log('⚠️ المدرسة محددة لكن المادة غير محددة');
+        } else {
+            console.log('⚠️ لا توجد مدرسة افتراضية');
+        }
+    <?php endif; ?>
+    
+    // ربط Event Listeners
+    
+    // نوع الزائر
+    document.getElementById('visitor_type_id').addEventListener('change', function() {
+        if (this.value) {
+            updateVisitorName();
+                    } else {
+            document.getElementById('visitor-name-container').innerHTML = '<span class="text-gray-500 text-sm">اختر نوع الزائر أولاً</span>';
+            document.getElementById('visitor_person_id').value = '';
+        }
+    });
+    
+    // المدرسة
+    document.getElementById('school_id').addEventListener('change', function() {
+        loadTeachers();
+        loadSections();
+        
+        // تحديث قائمة الزوار إذا كان نوع الزائر محدد
+        const visitorType = document.getElementById('visitor_type_id').value;
+        if (visitorType) {
+            updateVisitorName();
+        }
+    });
+    
+    // المادة
+    document.getElementById('subject_id').addEventListener('change', function() {
+        
+        // تحديث اللغة (فقط عند تغيير المادة يدوياً)
+        const selectedOption = this.options[this.selectedIndex];
+        updateLanguage(); // إعادة تفعيل تحديث اللغة
+        
+        // تحميل المعلمين
+        loadTeachers();
+        
+        // تحديث قائمة الزوار إذا كان نوع الزائر محدد
+        const visitorType = document.getElementById('visitor_type_id').value;
+        if (visitorType) {
+            updateVisitorName();
+        }
+    });
+    
+    // الصف
+    document.getElementById('grade_id').addEventListener('change', function() {
+        loadSections();
+    });
+    
+    // ربط Event Listeners لحساب النقاط التلقائي
+    const evaluationRadios = document.querySelectorAll('input[type="radio"][name^="indicator_"]');
+    evaluationRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            // حساب النقاط تلقائياً بعد ثانية واحدة
+            setTimeout(calculateTotal, 500);
+        });
+    });
+    
+    // ربط checkbox المعمل
+    const hasLabCheckbox = document.getElementById('has_lab');
+    if (hasLabCheckbox) {
+        hasLabCheckbox.addEventListener('change', function() {
+            const labSection = document.getElementById('lab-evaluation-section');
+            if (labSection) {
+                if (this.checked) {
+                    labSection.style.display = 'block';
+                    } else {
+                    labSection.style.display = 'none';
+                    
+                    // مسح جميع اختيارات المعمل
+                    const labRadios = labSection.querySelectorAll('input[type="radio"]');
+                    labRadios.forEach(radio => radio.checked = false);
+                    
+                    // مسح التوصيات المختارة
+                    const labSelects = labSection.querySelectorAll('select');
+                    labSelects.forEach(select => select.value = '');
+                    
+                    // مسح التوصيات المخصصة
+                    const labTextareas = labSection.querySelectorAll('textarea');
+                    labTextareas.forEach(textarea => textarea.value = '');
+                    
+                }
+            }
+        });
+    }
+    
+    
+    // عرض حالة اللغة الحالية
+    const currentLang = new URLSearchParams(window.location.search).get('lang');
+});
+
+// دالة تحديث اللغة - مع منع الحلقة اللا نهائية
+function updateLanguage() {
+    // منع التنفيذ المتكرر
+    if (languageUpdateInProgress) {
+        console.log('🔄 تحديث اللغة في الانتظار...');
+        return;
+    }
+    
+    const subjectSelect = document.getElementById('subject_id');
+    if (!subjectSelect || !subjectSelect.value) {
+        console.log('❌ لم يتم اختيار مادة بعد');
+        return;
+    }
+    
+    const selectedOption = subjectSelect.options[subjectSelect.selectedIndex];
+    const subjectName = selectedOption.text.toLowerCase();
+    
+    // فحص ما إذا كانت المادة إنجليزية باستخدام regex أقوى
+    const isEnglish = /(english|انج|إنج|الإنج|الانجليزية|الإنجليزية)/i.test(subjectName);
+    
+    const currentLang = new URLSearchParams(window.location.search).get('lang');
+    
+    console.log(`🔍 فحص اللغة: المادة="${subjectName}", إنجليزية=${isEnglish}, اللغة الحالية=${currentLang || 'عربي'}`);
+    
+    // تحديث اللغة حسب نوع المادة
+    if (isEnglish && currentLang !== 'en') {
+        console.log('🔄 تغيير إلى الإنجليزية...');
+        languageUpdateInProgress = true;
+        
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.set('subject_id', subjectSelect.value);
+        currentUrl.searchParams.set('lang', 'en');
+        window.location.replace(currentUrl.toString());
+        
+    } else if (!isEnglish && currentLang === 'en') {
+        console.log('🔄 تغيير إلى العربية...');
+        languageUpdateInProgress = true;
+        
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.set('subject_id', subjectSelect.value);
+        currentUrl.searchParams.delete('lang');
+        window.location.replace(currentUrl.toString());
+    } else {
+        console.log('✅ اللغة صحيحة بالفعل');
+    }
+}
+
+
 </script>
 
 <?php

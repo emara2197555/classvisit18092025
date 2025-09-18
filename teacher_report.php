@@ -113,7 +113,7 @@ $visits = query("
         vt.name AS visitor_type,
         CONCAT(t.name, ' (', vt.name, ')') AS visitor_name,
         v.total_score,
-        (SELECT AVG(ve.score) FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) * (100/3) AS avg_percentage
+        (SELECT (AVG(ve.score) / 3) * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -134,14 +134,15 @@ $visits = query("
         v.visit_date ASC
 ", [$teacher_id, $academic_year_id]);
 
-// جلب متوسطات المجالات لكل زيارة
+// جلب متوسطات المجالات لكل زيارة (استبعاد المعمل للمواد غير العلمية)
 $domain_visits = query("
     SELECT 
         v.id AS visit_id,
         v.visit_date,
         d.id AS domain_id,
         d.name AS domain_name,
-        AVG(ve.score) * (100/3) AS avg_percentage
+        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        COUNT(ve.score) AS evaluated_indicators
     FROM 
         visits v
     JOIN 
@@ -155,6 +156,11 @@ $domain_visits = query("
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score IS NOT NULL
+        AND ve.score > 0
+        AND (
+            d.id != 5 OR 
+            (d.id = 5 AND v.has_lab = 1)
+        )
     GROUP BY 
         v.id, v.visit_date, d.id, d.name
     ORDER BY 
@@ -188,7 +194,7 @@ $domains_avg = query("
     SELECT 
         d.id,
         d.name,
-        AVG(ve.score) * (100/3) AS avg_percentage
+        (AVG(ve.score) / 3) * 100 AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -219,16 +225,19 @@ if ($total_domains > 0) {
     $overall_avg = $sum_avg / $total_domains;
 }
 
-// جلب أضعف المؤشرات أداءً
+// جلب أضعف المؤشرات أداءً (من المجالات 1-4 فقط، واستبعاد المعمل)
 $weakest_indicators = query("
     SELECT 
         i.id,
         i.name,
+        d.name as domain_name,
         AVG(ve.score) AS avg_score,
-        AVG(ve.score) * (100/3) AS avg_percentage,
+        (AVG(ve.score) / 3) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
+    JOIN 
+        evaluation_domains d ON i.domain_id = d.id
     JOIN 
         visit_evaluations ve ON ve.indicator_id = i.id
     JOIN 
@@ -238,25 +247,31 @@ $weakest_indicators = query("
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score IS NOT NULL
+        AND ve.score > 0
+        AND i.domain_id IN (1, 2, 3, 4)
     GROUP BY 
-        i.id, i.name
+        i.id, i.name, d.name
     HAVING 
-        AVG(ve.score) < 2
+        AVG(ve.score) < 2.5
+        AND COUNT(DISTINCT v.id) >= 2
     ORDER BY 
         avg_score ASC
     LIMIT 5
 ", [$teacher_id, $academic_year_id]);
 
-// جلب أقوى المؤشرات أداءً
+// جلب أقوى المؤشرات أداءً (من جميع المجالات المُقيمة فعلياً)
 $strongest_indicators = query("
     SELECT 
         i.id,
         i.name,
+        d.name as domain_name,
         AVG(ve.score) AS avg_score,
-        AVG(ve.score) * (100/3) AS avg_percentage,
+        (AVG(ve.score) / 3) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
+    JOIN 
+        evaluation_domains d ON i.domain_id = d.id
     JOIN 
         visit_evaluations ve ON ve.indicator_id = i.id
     JOIN 
@@ -266,12 +281,14 @@ $strongest_indicators = query("
         AND v.academic_year_id = ?
         " . ($selected_term != 'all' ? $date_condition : "") . "
         AND ve.score IS NOT NULL
+        AND ve.score > 0
     GROUP BY 
-        i.id, i.name
+        i.id, i.name, d.name
     HAVING 
-        AVG(ve.score) >= 2.5
+        AVG(ve.score) >= 2.8
+        AND COUNT(DISTINCT v.id) >= 2
     ORDER BY 
-        avg_score DESC
+        avg_score DESC, visits_count DESC
     LIMIT 5
 ", [$teacher_id, $academic_year_id]);
 
@@ -317,33 +334,6 @@ $common_recommendations = query("
     </div>
     
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-        <!-- معلومات المعلم للطباعة -->
-        <div class="teacher-info mb-4">
-            <h3 class="text-lg font-semibold mb-3">معلومات المعلم</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <strong>اسم المعلم:</strong> <?= htmlspecialchars($teacher['name']) ?>
-                </div>
-                <div>
-                    <strong>العام الدراسي:</strong> 
-                    <?= $selected_academic_year ? htmlspecialchars($selected_academic_year['name']) : 'غير محدد' ?>
-                </div>
-                <div>
-                    <strong>عدد الزيارات:</strong> <?= count($visits) ?> زيارة
-                </div>
-            </div>
-            <?php if (!empty($teacher_subjects)): ?>
-            <div class="mt-3">
-                <strong>المواد التي يدرسها:</strong>
-                <?php 
-                $subject_names = array_map(function($subject) { 
-                    return $subject['name']; 
-                }, $teacher_subjects);
-                echo htmlspecialchars(implode(', ', $subject_names));
-                ?>
-            </div>
-            <?php endif; ?>
-        </div>
         
         <!-- نموذج تحديد الفلاتر -->
         <form action="" method="get" class="mb-6 no-print">
@@ -364,32 +354,129 @@ $common_recommendations = query("
         </form>
         
         <!-- معلومات المعلم -->
-        <div class="bg-gray-50 p-4 rounded-lg mb-6">
-            <h2 class="text-xl font-bold mb-3">معلومات المعلم</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <p class="font-semibold">اسم المعلم: <span class="font-normal"><?= htmlspecialchars($teacher['name']) ?></span></p>
-                    <p class="font-semibold">المسمى الوظيفي: <span class="font-normal"><?= htmlspecialchars($teacher['job_title']) ?></span></p>
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <div class="flex items-center mb-4">
+                <div class="bg-blue-100 p-3 rounded-full ml-4">
+                    <i class="fas fa-user-graduate text-blue-600 text-xl"></i>
                 </div>
                 <div>
-                    <p class="font-semibold">المواد التي يدرسها:</p>
-                    <ul class="list-disc list-inside">
-                        <?php foreach ($teacher_subjects as $subject): ?>
-                            <li><?= htmlspecialchars($subject['name']) ?></li>
-                        <?php endforeach; ?>
-                    </ul>
+                    <h2 class="text-2xl font-bold text-gray-800">معلومات المعلم</h2>
+                    <p class="text-gray-600">البيانات الأساسية وإحصائيات الأداء</p>
                 </div>
-                <div>
-                    <p class="font-semibold">عدد الزيارات: <span class="font-normal"><?= count($visits) ?></span></p>
-                    <?php if ($academic_year_id > 0): ?>
-                        <p class="font-semibold">العام الدراسي: <span class="font-normal"><?= htmlspecialchars($academic_year_name) ?></span></p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- اسم المعلم -->
+                <div class="bg-white p-4 rounded-lg shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-user text-blue-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">اسم المعلم</span>
+                    </div>
+                    <p class="text-lg font-bold text-gray-800"><?= htmlspecialchars($teacher['name']) ?></p>
+                    <p class="text-sm text-gray-500 mt-1"><?= htmlspecialchars($teacher['job_title']) ?></p>
+                </div>
+
+                <!-- المواد التي يدرسها -->
+                <div class="bg-white p-4 rounded-lg shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-book text-green-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">المواد التدريسية</span>
+                    </div>
+                    <?php if (!empty($teacher_subjects)): ?>
+                        <div class="space-y-1">
+                            <?php foreach ($teacher_subjects as $subject): ?>
+                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                                    <?= htmlspecialchars($subject['name']) ?>
+                                </span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="text-gray-500 text-sm">لا توجد مواد محددة</p>
+                    <?php endif; ?>
+                </div>
+
+                <!-- عدد الزيارات -->
+                <div class="bg-white p-4 rounded-lg shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-clipboard-check text-purple-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">عدد الزيارات</span>
+                    </div>
+                    <p class="text-2xl font-bold text-purple-600"><?= count($visits) ?></p>
+                    <p class="text-sm text-gray-500">زيارة صفية</p>
+                </div>
+
+                <!-- العام الدراسي -->
+                <div class="bg-white p-4 rounded-lg shadow-sm">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-calendar-alt text-orange-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">العام الدراسي</span>
+                    </div>
+                    <p class="text-lg font-bold text-orange-600">
+                        <?= $academic_year_id > 0 ? htmlspecialchars($academic_year_name) : 'جميع الأعوام' ?>
+                    </p>
+                    <?php if ($selected_term && $selected_term !== 'all'): ?>
+                        <p class="text-sm text-gray-500">
+                            <?= $selected_term === 'first' ? 'الفصل الأول' : 'الفصل الثاني' ?>
+                        </p>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         
         <!-- ملخص الأداء -->
+        <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6 mb-6">
+            <div class="flex items-center mb-4">
+                <div class="bg-green-100 p-3 rounded-full ml-4">
+                    <i class="fas fa-chart-line text-green-600 text-xl"></i>
                 </div>
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">ملخص الأداء العام</h2>
+                    <p class="text-gray-600">المتوسطات والإحصائيات الرئيسية</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- المتوسط العام -->
+                <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-blue-500">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-percentage text-blue-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">المتوسط العام</span>
+                    </div>
+                    <p class="text-3xl font-bold text-blue-600"><?= number_format($overall_avg, 1) ?>%</p>
+                    <p class="text-sm text-gray-500">من 100%</p>
+                </div>
+
+                <!-- عدد المجالات -->
+                <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-green-500">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-layer-group text-green-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">المجالات المقيمة</span>
+                    </div>
+                    <p class="text-3xl font-bold text-green-600"><?= count($domains_avg) ?></p>
+                    <p class="text-sm text-gray-500">مجال تقييم</p>
+                </div>
+
+                <!-- أقوى المؤشرات -->
+                <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-emerald-500">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-arrow-up text-emerald-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">نقاط القوة</span>
+                    </div>
+                    <p class="text-3xl font-bold text-emerald-600"><?= count($strongest_indicators) ?></p>
+                    <p class="text-sm text-gray-500">مؤشر قوي</p>
+                </div>
+
+                <!-- المؤشرات التي تحتاج تحسين -->
+                <div class="bg-white p-4 rounded-lg shadow-sm border-r-4 border-amber-500">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-exclamation-triangle text-amber-600 ml-2"></i>
+                        <span class="text-sm font-medium text-gray-600">يحتاج تحسين</span>
+                    </div>
+                    <p class="text-3xl font-bold text-amber-600"><?= count($weakest_indicators) ?></p>
+                    <p class="text-sm text-gray-500">مؤشر ضعيف</p>
+                </div>
+            </div>
+        </div>
         
         <!-- إحصائيات تطور الأداء -->
         <?php if (!empty($progress_stats)): ?>
@@ -811,40 +898,80 @@ $common_recommendations = query("
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- أقوى المؤشرات -->
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3 text-green-700">أقوى المؤشرات أداءً</h3>
+                <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                    <div class="flex items-center mb-3">
+                        <i class="fas fa-star text-green-600 ml-2"></i>
+                        <h3 class="text-lg font-semibold text-green-700">نقاط القوة المميزة</h3>
+                    </div>
                     <?php if (count($strongest_indicators) > 0): ?>
-                        <ul class="space-y-2">
+                        <div class="space-y-3">
                             <?php foreach ($strongest_indicators as $indicator): ?>
-                                <li class="border-b pb-2">
-                                    <div class="flex justify-between">
-                                        <span><?= htmlspecialchars($indicator['name']) ?></span>
-                                        <span class="font-bold"><?= number_format($indicator['avg_percentage'], 1) ?>%</span>
+                                <div class="bg-white p-3 rounded-lg border-r-4 border-green-500 shadow-sm">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <p class="font-medium text-gray-800 text-sm leading-relaxed">
+                                                <?= htmlspecialchars($indicator['name']) ?>
+                                            </p>
+                                            <p class="text-xs text-gray-500 mt-1">
+                                                <i class="fas fa-layer-group ml-1"></i>
+                                                <?= htmlspecialchars($indicator['domain_name']) ?>
+                                                • <?= $indicator['visits_count'] ?> زيارة
+                                            </p>
+                                        </div>
+                                        <div class="mr-3 text-left">
+                                            <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-bold">
+                                                <?= number_format($indicator['avg_percentage'], 1) ?>%
+                                            </span>
+                                        </div>
                                     </div>
-                                </li>
+                                </div>
                             <?php endforeach; ?>
-                        </ul>
+                        </div>
                     <?php else: ?>
-                        <p class="text-gray-500">لا توجد بيانات كافية</p>
+                        <div class="text-center py-4">
+                            <i class="fas fa-info-circle text-gray-400 text-2xl mb-2"></i>
+                            <p class="text-gray-500">لا توجد نقاط قوة مميزة بعد</p>
+                            <p class="text-xs text-gray-400">يحتاج المعلم لمزيد من الزيارات للتقييم</p>
+                        </div>
                     <?php endif; ?>
                 </div>
                 
                 <!-- أضعف المؤشرات -->
-                <div class="bg-white p-4 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-semibold mb-3 text-red-700">مؤشرات تحتاج إلى تحسين</h3>
+                <div class="bg-gradient-to-br from-amber-50 to-orange-50 p-4 rounded-lg border border-amber-200">
+                    <div class="flex items-center mb-3">
+                        <i class="fas fa-exclamation-triangle text-amber-600 ml-2"></i>
+                        <h3 class="text-lg font-semibold text-amber-700">نقاط تحتاج لتطوير</h3>
+                    </div>
                     <?php if (count($weakest_indicators) > 0): ?>
-                        <ul class="space-y-2">
+                        <div class="space-y-3">
                             <?php foreach ($weakest_indicators as $indicator): ?>
-                                <li class="border-b pb-2">
-                                    <div class="flex justify-between">
-                                        <span><?= htmlspecialchars($indicator['name']) ?></span>
-                                        <span class="font-bold"><?= number_format($indicator['avg_percentage'], 1) ?>%</span>
+                                <div class="bg-white p-3 rounded-lg border-r-4 border-amber-500 shadow-sm">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <p class="font-medium text-gray-800 text-sm leading-relaxed">
+                                                <?= htmlspecialchars($indicator['name']) ?>
+                                            </p>
+                                            <p class="text-xs text-gray-500 mt-1">
+                                                <i class="fas fa-layer-group ml-1"></i>
+                                                <?= htmlspecialchars($indicator['domain_name']) ?>
+                                                • <?= $indicator['visits_count'] ?> زيارة
+                                            </p>
+                                        </div>
+                                        <div class="mr-3 text-left">
+                                            <span class="inline-block bg-amber-100 text-amber-800 px-2 py-1 rounded text-sm font-bold">
+                                                <?= number_format($indicator['avg_percentage'], 1) ?>%
+                                            </span>
+                                        </div>
                                     </div>
-                                </li>
+                                </div>
                             <?php endforeach; ?>
-                        </ul>
+                        </div>
                     <?php else: ?>
-                        <p class="text-gray-500">لا توجد مؤشرات ضعيفة</p>
+                        <div class="text-center py-4">
+                            <i class="fas fa-thumbs-up text-green-400 text-2xl mb-2"></i>
+                            <p class="text-green-600 font-medium">ممتاز! لا توجد نقاط ضعف</p>
+                            <p class="text-xs text-gray-500">جميع المؤشرات المُقيمة في مستوى جيد</p>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>

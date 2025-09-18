@@ -232,7 +232,7 @@ if ($subject_id) {
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) * (100/3)) AS percentage_score
+            (AVG(ve.score) / 3) * 100 AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -311,7 +311,7 @@ if ($subject_id) {
                 ei.id AS indicator_id,
                 ei.name AS indicator_name,
                 AVG(ve.score) AS avg_score,
-                (AVG(ve.score) * (100/3)) AS percentage_score,
+                (AVG(ve.score) / 3) * 100 AS percentage_score,
                 COUNT(DISTINCT v.id) as visit_count
             FROM 
                 visit_evaluations ve
@@ -699,7 +699,7 @@ if ($subject_id) {
                                         }
                                         
                                         $avg_score = $total_visits > 0 ? $total_score / $total_visits : 0;
-                                        $percentage_score = $avg_score * (100/3);
+                                        $percentage_score = ($avg_score / 3) * 100;
                                     ?>
                                         <tr class="hover:bg-gray-50 transition-colors duration-200">
                                             <td class="border border-gray-300 px-4 py-3 text-right">

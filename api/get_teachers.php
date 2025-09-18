@@ -32,6 +32,16 @@ if ($school_id && $subject_id) {
         AND school_id = ? 
         ORDER BY name
     ", [$school_id]);
+} elseif ($subject_id) {
+    // جلب المعلمين حسب المادة فقط (من جميع المدارس)
+    $teachers = query("
+        SELECT DISTINCT t.* 
+        FROM teachers t
+        JOIN teacher_subjects ts ON t.id = ts.teacher_id
+        WHERE t.job_title = 'معلم' 
+        AND ts.subject_id = ?
+        ORDER BY t.name
+    ", [$subject_id]);
 }
 
 header('Content-Type: application/json');

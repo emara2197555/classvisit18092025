@@ -54,6 +54,7 @@ function authenticate_user($username, $password) {
     $_SESSION['user_id'] = $user['id'];
     $_SESSION['username'] = $user['username'];
     $_SESSION['role_name'] = $user['role_name'];
+    $_SESSION['role_display_name'] = $user['role_display_name'];
     $_SESSION['role_id'] = $user['role_id'];
     $_SESSION['school_id'] = $user['school_id'];
     $_SESSION['full_name'] = $user['full_name'];
@@ -98,6 +99,9 @@ function authenticate_user($username, $password) {
     
     // تسجيل العملية في سجل النشاط
     log_user_activity($user['id'], 'login', 'users', $user['id']);
+    
+    // التحقق من صحة الدور وعدم وجود تداخل
+    validate_user_role($user['id']);
     
     return [
         'success' => true, 
@@ -563,6 +567,11 @@ function protect_page($required_roles = [], $required_permissions = []) {
         exit;
     }
     
+    // تحديث بيانات الجلسة إذا لم تكن محدثة
+    if (!isset($_SESSION['role_display_name']) || empty($_SESSION['role_display_name'])) {
+        refresh_user_session($_SESSION['user_id']);
+    }
+    
     // التحقق من الأدوار المطلوبة
     if (!empty($required_roles) && !has_role($required_roles)) {
         header('HTTP/1.0 403 Forbidden');
@@ -592,4 +601,74 @@ function protect_page($required_roles = [], $required_permissions = []) {
 function get_last_insert_id() {
     global $pdo;
     return $pdo->lastInsertId();
+}
+
+/**
+ * دالة للتحقق من صحة دور المستخدم ومنع التداخل
+ *
+ * @param int $user_id معرف المستخدم
+ * @return void
+ */
+function validate_user_role($user_id) {
+    // جلب بيانات المستخدم الحالية
+    $user = query_row("
+        SELECT u.*, r.name as role_name, r.display_name as role_display_name 
+        FROM users u 
+        LEFT JOIN user_roles r ON u.role_id = r.id 
+        WHERE u.id = ?
+    ", [$user_id]);
+    
+    if (!$user) {
+        return;
+    }
+    
+    // التحقق من وجود الدور
+    if (empty($user['role_name'])) {
+        // تعيين دور افتراضي إذا لم يكن محدد
+        $default_role_id = 6; // معلم كدور افتراضي
+        execute("UPDATE users SET role_id = ? WHERE id = ?", [$default_role_id, $user_id]);
+        
+        // تحديث الجلسة
+        $_SESSION['role_name'] = 'Teacher';
+        $_SESSION['role_display_name'] = 'معلم';
+        $_SESSION['role_id'] = $default_role_id;
+        
+        log_user_activity($user_id, 'role_auto_assigned', 'users', $user_id, null, 
+                         "تم تعيين دور افتراضي (معلم) للمستخدم");
+    }
+    
+    // منع تداخل الأدوار الإدارية
+    $admin_roles = ['Admin', 'Director', 'Academic Deputy'];
+    if (in_array($user['role_name'], $admin_roles)) {
+        // التأكد من أن المستخدم الإداري لا يظهر كمعلم في جدول المعلمين
+        $teacher_record = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user_id]);
+        if ($teacher_record) {
+            // إزالة الربط مع جدول المعلمين للمستخدمين الإداريين
+            execute("UPDATE teachers SET user_id = NULL WHERE user_id = ?", [$user_id]);
+            log_user_activity($user_id, 'teacher_link_removed', 'teachers', $teacher_record['id'], 
+                             null, "تم إزالة ربط المستخدم الإداري من جدول المعلمين");
+        }
+    }
+    
+    // للمعلمين: التأكد من وجود سجل في جدول المعلمين
+    if ($user['role_name'] === 'Teacher') {
+        $teacher_record = query_row("SELECT id FROM teachers WHERE user_id = ?", [$user_id]);
+        if (!$teacher_record) {
+            // البحث عن معلم بنفس الاسم أو البريد الإلكتروني
+            $matching_teacher = query_row("
+                SELECT id FROM teachers 
+                WHERE (name = ? OR email = ?) AND user_id IS NULL
+                LIMIT 1
+            ", [$user['full_name'], $user['email']]);
+            
+            if ($matching_teacher) {
+                // ربط المعلم بالمستخدم
+                execute("UPDATE teachers SET user_id = ? WHERE id = ?", [$user_id, $matching_teacher['id']]);
+                $_SESSION['teacher_id'] = $matching_teacher['id'];
+                
+                log_user_activity($user_id, 'teacher_linked', 'teachers', $matching_teacher['id'], 
+                                 null, "تم ربط المستخدم بسجل المعلم");
+            }
+        }
+    }
 }

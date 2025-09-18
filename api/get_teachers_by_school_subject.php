@@ -5,7 +5,9 @@ require_once '../includes/functions.php';
 require_once '../includes/auth_functions.php';
 
 // التحقق من تسجيل الدخول
-session_start();
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
 if (!is_logged_in()) {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized']);
@@ -81,19 +83,19 @@ try {
     }
 
     // إرجاع البيانات بتنسيق JSON
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
         'success' => true,
         'teachers' => $teachers,
         'message' => count($teachers) > 0 ? 'تم جلب المعلمين بنجاح' : 'لا توجد معلمين متاحين'
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
 } catch (Exception $e) {
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
         'success' => false,
         'teachers' => [],
         'message' => 'خطأ في جلب البيانات: ' . $e->getMessage()
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 }
 ?> 

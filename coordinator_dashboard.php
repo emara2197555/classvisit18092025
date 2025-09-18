@@ -52,19 +52,17 @@ $school_name = $school['name'] ?? 'غير محدد';
 // إحصائيات سريعة للمنسق
 $stats = [];
 
-// عدد المعلمين في المادة
+// عدد المعلمين في المادة (المعلمين فقط - بدون منسقين أو موجهين)
 if ($subject_id && $school_id) {
     $teachers_count = query_row("
         SELECT COUNT(DISTINCT t.id) as count 
         FROM teacher_subjects ts 
         INNER JOIN teachers t ON ts.teacher_id = t.id 
-        WHERE ts.subject_id = ? AND t.school_id = ?
+        WHERE ts.subject_id = ? AND t.school_id = ? AND t.job_title = 'معلم'
     ", [$subject_id, $school_id]);
     $stats['teachers_count'] = $teachers_count['count'] ?? 0;
-    echo "<!-- TEACHERS COUNT RESULT: " . ($teachers_count['count'] ?? 'NULL') . " -->";
 } else {
     $stats['teachers_count'] = 0;
-    echo "<!-- TEACHERS COUNT: MISSING DATA -->";
 }
 
 // عدد الزيارات هذا الشهر للمادة
@@ -92,7 +90,8 @@ if ($subject_id && $school_id) {
             FROM visit_evaluations ve
             GROUP BY ve.visit_id
         ) visit_scores ON v.id = visit_scores.visit_id
-        WHERE v.subject_id = ? AND v.school_id = ?
+        INNER JOIN teachers t ON v.teacher_id = t.id
+        WHERE v.subject_id = ? AND v.school_id = ? AND t.job_title = 'معلم'
     ", [$subject_id, $school_id]);
     $stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
 } else {
@@ -108,7 +107,7 @@ if ($subject_id && $school_id) {
         LEFT JOIN teachers t ON v.teacher_id = t.id
         LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
         LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
-        WHERE v.subject_id = ? AND v.school_id = ?
+        WHERE v.subject_id = ? AND v.school_id = ? AND t.job_title = 'معلم'
         GROUP BY v.id
         ORDER BY v.visit_date DESC, v.created_at DESC
         LIMIT 10
@@ -141,7 +140,7 @@ if ($subject_id && $school_id) {
                 ve.visit_id
         ) visit_scores ON v.id = visit_scores.visit_id
         WHERE 
-            ts.subject_id = ? AND t.school_id = ?
+            ts.subject_id = ? AND t.school_id = ? AND t.job_title = 'معلم'
         GROUP BY 
             t.id, t.name
         ORDER BY 

@@ -129,11 +129,8 @@ $schools = query("SELECT * FROM schools ORDER BY name");
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المعرف</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">اسم المستخدم</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الاسم الكامل</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">البريد الإلكتروني</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الدور</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المدرسة</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحالة</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تاريخ الإنشاء</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
                     </tr>
                 </thead>
@@ -143,9 +140,7 @@ $schools = query("SELECT * FROM schools ORDER BY name");
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= $user['id'] ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($user['username']) ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($user['full_name']) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($user['email'] ?? '') ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($user['role_name']) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($user['school_name'] ?? 'غير محدد') ?></td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <?php if ($user['is_active']): ?>
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">نشط</span>
@@ -153,7 +148,6 @@ $schools = query("SELECT * FROM schools ORDER BY name");
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">غير نشط</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= format_date_ar($user['created_at']) ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <button onclick="openEditModal(<?= htmlspecialchars(json_encode($user)) ?>)" 
                                         class="text-blue-600 hover:text-blue-900 ml-2">

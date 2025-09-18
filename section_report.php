@@ -13,6 +13,21 @@ $current_page = 'section_report.php';
 // تضمين ملف رأس الصفحة
 require_once 'includes/header.php';
 
+// التحقق من دور المستخدم وتحديد المادة المخصصة (للمنسق)
+$coordinator_subject_id = null;
+if (isset($_SESSION['role_name']) && $_SESSION['role_name'] === 'Subject Coordinator') {
+    // جلب مادة المنسق
+    $coordinator_subject = query_row("
+        SELECT cs.subject_id 
+        FROM coordinator_supervisors cs 
+        WHERE cs.user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if ($coordinator_subject) {
+        $coordinator_subject_id = $coordinator_subject['subject_id'];
+    }
+}
+
 // التحقق من وجود معرف الشعبة
 $section_id = isset($_GET['section_id']) ? (int)$_GET['section_id'] : 0;
 $grade_id = isset($_GET['grade_id']) ? (int)$_GET['grade_id'] : 0;
@@ -55,15 +70,24 @@ if (!$section) {
 $academic_years = query("SELECT id, name, is_active FROM academic_years ORDER BY is_active DESC, name DESC");
 
 // جلب المواد الدراسية للشعبة
-// نجلب كل المواد التي يوجد لها زيارات لهذه الشعبة
-$subjects = query("
+// نجلب كل المواد التي يوجد لها زيارات لهذه الشعبة (مع فلترة المنسق)
+$subjects_sql = "
     SELECT DISTINCT s.id, s.name
     FROM subjects s
     JOIN visits v ON s.id = v.subject_id
-    WHERE v.section_id = ? AND v.grade_id = ?
-    ORDER BY s.name", 
-    [$section_id, $grade_id]
-);
+    WHERE v.section_id = ? AND v.grade_id = ?";
+
+$subjects_params = [$section_id, $grade_id];
+
+// إضافة فلتر مادة المنسق إذا كان المستخدم منسق مادة
+if ($coordinator_subject_id) {
+    $subjects_sql .= " AND s.id = ?";
+    $subjects_params[] = $coordinator_subject_id;
+}
+
+$subjects_sql .= " ORDER BY s.name";
+
+$subjects = query($subjects_sql, $subjects_params);
 
 // جلب تقييمات الشعبة حسب المواد الدراسية - نركز فقط على مجالي تنفيذ الدرس والإدارة الصفية
 
@@ -77,7 +101,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+            (SELECT (AVG(ve.score) / 3) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -88,8 +112,8 @@ if ($academic_year_id > 0) {
                AND ei.domain_id = 2
                AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
-            -- متوسط الإدارة الصفية (مجال رقم 3)
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+            -- متوسط الإدارة الصفية (مجال رقم 4)
+            (SELECT (AVG(ve.score) / 3) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -97,20 +121,24 @@ if ($academic_year_id > 0) {
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
                AND vs.academic_year_id = ?
-               AND ei.domain_id = 3
+               AND ei.domain_id = 4
                AND ve.score IS NOT NULL) AS classroom_management_avg,
                
-            -- المتوسط العام للمجالين
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
-             FROM visit_evaluations ve 
-             JOIN visits vs ON ve.visit_id = vs.id
-             JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-             WHERE vs.section_id = ?
-               AND vs.grade_id = ?
-               AND vs.subject_id = s.id
-               AND vs.academic_year_id = ?
-               AND (ei.domain_id = 2 OR ei.domain_id = 3)
-               AND ve.score IS NOT NULL) AS overall_avg
+            -- المتوسط العام (متوسط المجالات)
+            (SELECT AVG(domain_avg)
+             FROM (
+                 SELECT (AVG(ve.score) / 3) * 100 as domain_avg
+                 FROM visit_evaluations ve 
+                 JOIN visits vs ON ve.visit_id = vs.id
+                 JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
+                 JOIN evaluation_domains ed ON ei.domain_id = ed.id
+                 WHERE vs.section_id = ?
+                   AND vs.grade_id = ?
+                   AND vs.subject_id = s.id
+                   AND vs.academic_year_id = ?
+                   AND ve.score IS NOT NULL
+                 GROUP BY ed.id
+             ) as domain_averages) AS overall_avg
         FROM 
             subjects s
         JOIN 
@@ -118,7 +146,14 @@ if ($academic_year_id > 0) {
         WHERE 
             v.section_id = ?
             AND v.grade_id = ?
-            AND v.academic_year_id = ?
+            AND v.academic_year_id = ?";
+    
+    // إضافة فلتر مادة المنسق إذا كان المستخدم منسق مادة
+    if ($coordinator_subject_id) {
+        $sql .= " AND s.id = ?";
+    }
+    
+    $sql .= "
         GROUP BY 
             s.id, s.name
         ORDER BY 
@@ -132,6 +167,11 @@ if ($academic_year_id > 0) {
         $section_id, $grade_id, $academic_year_id,  // المتوسط العام للمجالين
         $section_id, $grade_id, $academic_year_id   // شرط WHERE الرئيسي
     ];
+    
+    // إضافة معلمة مادة المنسق إذا لزم الأمر
+    if ($coordinator_subject_id) {
+        $query_params[] = $coordinator_subject_id;
+    }
 } else {
     // استعلام بدون فلتر العام الدراسي
     $sql = "
@@ -142,7 +182,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+            (SELECT (AVG(ve.score) / 3) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -152,26 +192,26 @@ if ($academic_year_id > 0) {
                AND ei.domain_id = 2
                AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
-            -- متوسط الإدارة الصفية (مجال رقم 3)
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+            -- متوسط الإدارة الصفية (مجال رقم 4)
+            (SELECT (AVG(ve.score) / 3) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
              WHERE vs.section_id = ?
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
-               AND ei.domain_id = 3
+               AND ei.domain_id = 4
                AND ve.score IS NOT NULL) AS classroom_management_avg,
                
             -- المتوسط العام للمجالين
-            (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+            (SELECT (AVG(ve.score) / 3) * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
              WHERE vs.section_id = ?
                AND vs.grade_id = ?
                AND vs.subject_id = s.id
-               AND (ei.domain_id = 2 OR ei.domain_id = 3)
+               AND (ei.domain_id = 2 OR ei.domain_id = 4)
                AND ve.score IS NOT NULL) AS overall_avg
         FROM 
             subjects s
@@ -225,8 +265,8 @@ $weakest_query = "
     SELECT 
         i.id,
         i.name,
-        (SUM(ve.score) / COUNT(ve.score)) AS avg_score,
-        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS avg_percentage,
+        AVG(ve.score) AS avg_score,
+        (AVG(ve.score) / 3) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -239,11 +279,11 @@ $weakest_query = "
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.score IS NOT NULL
-        AND (i.domain_id = 2 OR i.domain_id = 3)
+        AND (i.domain_id = 2 OR i.domain_id = 4)
     GROUP BY 
         i.id, i.name
     HAVING 
-        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 < 50
+        (AVG(ve.score) / 3) * 100 < 50
     ORDER BY 
         avg_score ASC
     LIMIT 5
@@ -260,8 +300,8 @@ $strongest_query = "
     SELECT 
         i.id,
         i.name,
-        (SUM(ve.score) / COUNT(ve.score)) AS avg_score,
-        (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS avg_percentage,
+        AVG(ve.score) AS avg_score,
+        (AVG(ve.score) / 3) * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -274,7 +314,7 @@ $strongest_query = "
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.score IS NOT NULL
-        AND (i.domain_id = 2 OR i.domain_id = 3)
+        AND (i.domain_id = 2 OR i.domain_id = 4)
     GROUP BY 
         i.id, i.name
     HAVING 
@@ -308,7 +348,7 @@ $recommendations_query = "
         AND v.grade_id = ?
         " . ($academic_year_id > 0 ? "AND v.academic_year_id = ?" : "") . "
         AND ve.recommendation_id IS NOT NULL
-        AND (i.domain_id = 2 OR i.domain_id = 3)
+        AND (i.domain_id = 2 OR i.domain_id = 4)
     GROUP BY 
         r.text
     ORDER BY 
@@ -499,6 +539,169 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
                     <?php endif; ?>
                 </div>
             </div>
+        </div>
+        
+        <!-- قائمة الزيارات للشعبة -->
+        <div class="mt-8">
+            <h2 class="text-xl font-bold mb-4">قائمة الزيارات للشعبة</h2>
+            
+            <?php
+            // جلب جميع الزيارات للشعبة (مع فلترة مادة المنسق)
+            $section_visits_sql = "
+                SELECT v.id, v.visit_date, v.visit_type, v.attendance_type, v.total_score,
+                       t.name as teacher_name, s.name as subject_name,
+                       vt.name as visitor_type_name, tp.name as visitor_name
+                FROM visits v
+                JOIN teachers t ON v.teacher_id = t.id
+                JOIN subjects s ON v.subject_id = s.id
+                JOIN visitor_types vt ON v.visitor_type_id = vt.id
+                LEFT JOIN teachers tp ON v.visitor_person_id = tp.id
+                WHERE v.section_id = ? AND v.grade_id = ?";
+            
+            $params = [$section_id, $grade_id];
+            
+            if ($academic_year_id > 0) {
+                $section_visits_sql .= " AND v.academic_year_id = ?";
+                $params[] = $academic_year_id;
+            }
+            
+            // إضافة فلتر مادة المنسق إذا كان المستخدم منسق مادة
+            if ($coordinator_subject_id) {
+                $section_visits_sql .= " AND v.subject_id = ?";
+                $params[] = $coordinator_subject_id;
+            }
+            
+            $section_visits_sql .= " ORDER BY v.visit_date DESC, v.id DESC";
+            
+            $section_visits = query($section_visits_sql, $params);
+            ?>
+            
+            <?php if (empty($section_visits)): ?>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p class="text-yellow-800">لا توجد زيارات مسجلة لهذه الشعبة في العام الدراسي المحدد.</p>
+                </div>
+            <?php else: ?>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">التاريخ</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المعلم</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المادة</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نوع الزيارة</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الزائر</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نوع الحضور</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">متوسط الأداء</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <?php foreach ($section_visits as $visit): ?>
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-2 text-sm">
+                                            <?= date('Y/m/d', strtotime($visit['visit_date'])) ?>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <?= htmlspecialchars($visit['teacher_name']) ?>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <?= htmlspecialchars($visit['subject_name']) ?>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <span class="px-2 py-1 text-xs rounded-full <?= $visit['visit_type'] == 'full' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' ?>">
+                                                <?= $visit['visit_type'] == 'full' ? 'زيارة كاملة' : 'زيارة جزئية' ?>
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <div>
+                                                <div class="font-medium"><?= htmlspecialchars($visit['visitor_type_name']) ?></div>
+                                                <?php if (!empty($visit['visitor_name'])): ?>
+                                                    <div class="text-gray-500 text-xs"><?= htmlspecialchars($visit['visitor_name']) ?></div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <span class="px-2 py-1 text-xs rounded-full <?= $visit['attendance_type'] == 'physical' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800' ?>">
+                                                <?= $visit['attendance_type'] == 'physical' ? 'حضوري' : ($visit['attendance_type'] == 'remote' ? 'عن بُعد' : 'مختلط') ?>
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm font-semibold">
+                                            <?php 
+                                            // حساب متوسط الأداء الصحيح: مجموع النقاط مقسوم على عدد المؤشرات
+                                            $scores_query = query("
+                                                SELECT ve.score
+                                                FROM visit_evaluations ve
+                                                JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
+                                                WHERE ve.visit_id = ? AND ve.score IS NOT NULL AND ei.domain_id <> 5
+                                            ", [$visit['id']]);
+                                            
+                                            $visit_performance = 0;
+                                            if (!empty($scores_query)) {
+                                                $total_points = array_sum(array_column($scores_query, 'score'));
+                                                $indicators_count = count($scores_query);
+                                                $visit_performance = ($total_points / ($indicators_count * 3)) * 100;
+                                            }
+                                            ?>
+                                            <?php if ($visit_performance > 0): ?>
+                                                <span class="<?= $visit_performance >= 80 ? 'text-green-600' : ($visit_performance >= 60 ? 'text-yellow-600' : 'text-red-600') ?>">
+                                                    <?= number_format($visit_performance, 1) ?>%
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-gray-400">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <a href="view_visit.php?id=<?= $visit['id'] ?>" 
+                                               class="text-blue-600 hover:text-blue-800 transition-colors"
+                                               title="عرض تفاصيل الزيارة">
+                                                <i class="bi bi-eye"></i> عرض
+                                            </a>
+                                            <a href="print_visit.php?id=<?= $visit['id'] ?>" 
+                                               class="text-green-600 hover:text-green-800 transition-colors mr-3"
+                                               title="طباعة الزيارة" target="_blank">
+                                                <i class="bi bi-printer"></i> طباعة
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- إحصائيات سريعة للزيارات -->
+                    <div class="bg-gray-50 px-4 py-3 border-t border-gray-200">
+                        <div class="flex flex-wrap gap-4 text-sm text-gray-600">
+                            <span>إجمالي الزيارات: <strong><?= count($section_visits) ?></strong></span>
+                            <span>الزيارات الكاملة: <strong><?= count(array_filter($section_visits, function($v) { return $v['visit_type'] == 'full'; })) ?></strong></span>
+                            <span>الزيارات الجزئية: <strong><?= count(array_filter($section_visits, function($v) { return $v['visit_type'] == 'partial'; })) ?></strong></span>
+                            <?php
+                            // حساب متوسط الأداء الصحيح لجميع الزيارات: مجموع النقاط / عدد المؤشرات
+                            $total_performance = 0;
+                            $valid_visits = 0;
+                            foreach ($section_visits as $visit) {
+                                $scores_query = query("
+                                    SELECT ve.score
+                                    FROM visit_evaluations ve
+                                    JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
+                                    WHERE ve.visit_id = ? AND ve.score IS NOT NULL AND ei.domain_id <> 5
+                                ", [$visit['id']]);
+                                
+                                if (!empty($scores_query)) {
+                                    $total_points = array_sum(array_column($scores_query, 'score'));
+                                    $indicators_count = count($scores_query);
+                                    $visit_performance = ($total_points / ($indicators_count * 3)) * 100;
+                                    $total_performance += $visit_performance;
+                                    $valid_visits++;
+                                }
+                            }
+                            $avg_performance = $valid_visits > 0 ? $total_performance / $valid_visits : 0;
+                            ?>
+                            <span>متوسط الأداء: <strong><?= number_format($avg_performance, 1) ?>%</strong></span>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
         
         <!-- زر الطباعة -->

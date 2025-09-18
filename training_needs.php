@@ -224,8 +224,20 @@ if ($current_user_role === 'Teacher') {
             ", [$school_id]);
         }
     } else {
-        // جلب كل المعلمين إذا لم تختر مدرسة
-        $teachers = query("SELECT * FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+        // جلب المعلمين حسب المادة المختارة (بدون تحديد مدرسة)
+        if ($subject_id > 0) {
+            $teachers = query("
+                SELECT t.* 
+                FROM teachers t
+                JOIN teacher_subjects ts ON t.id = ts.teacher_id
+                WHERE t.job_title = 'معلم' 
+                AND ts.subject_id = ?
+                ORDER BY t.name
+            ", [$subject_id]);
+        } else {
+            // جلب كل المعلمين إذا لم تختر مدرسة أو مادة
+            $teachers = query("SELECT * FROM teachers WHERE job_title = 'معلم' ORDER BY name");
+        }
     }
 }
 
@@ -288,8 +300,8 @@ if ($teacher) {
             ei.name AS indicator_name,
             ed.id AS domain_id,
             ed.name AS domain_name,
-            (SUM(ve.score) / COUNT(ve.score)) AS avg_score,
-            (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS percentage_score,
+            AVG(ve.score) AS avg_score,
+            (AVG(ve.score) / 3) * 100 AS percentage_score,
             COUNT(DISTINCT v.visitor_type_id) AS visitor_types_count,
             GROUP_CONCAT(DISTINCT vt.name ORDER BY vt.id) AS visitor_types
         FROM 
@@ -422,7 +434,7 @@ if ($teacher) {
             'domain_id' => $indicator['domain_id'],
             'domain_name' => $indicator['domain_name'],
             'avg_score' => $avg_score,
-            'percentage_score' => round($avg_score * (100/3), 2),
+            'percentage_score' => round(($avg_score / 3) * 100, 2),
             'visitor_types' => $indicator['visitor_types'],
             'visitor_types_count' => $indicator['visitor_types_count'],
             'needs_training' => $needs_training,
@@ -433,8 +445,8 @@ if ($teacher) {
     // إحصائية عامة - مع التحقق من أن النتيجة ليست خالية
     $overall_stats = query_row("
         SELECT 
-            (SUM(ve.score) / COUNT(ve.score)) AS overall_avg,
-            (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 AS overall_percentage
+            AVG(ve.score) AS overall_avg,
+            (AVG(ve.score) / 3) * 100 AS overall_percentage
         FROM 
             visit_evaluations ve
         JOIN 
@@ -800,7 +812,7 @@ $academic_years = query($academic_years_query);
                                             <?php if ($score !== null): ?>
                                                 <?php 
                                                 // تحويل الدرجة إلى نسبة مئوية
-                                                $score_percentage = $score * (100/3);
+                                                $score_percentage = ($score / 3) * 100;
                                                 $color_class = $score_percentage >= 80 ? 'text-green-700 bg-green-100' : 
                                                               ($score_percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
                                                 ?>
@@ -899,6 +911,14 @@ $academic_years = query($academic_years_query);
         } else if (schoolId) {
             // إذا تم اختيار مدرسة فقط
             fetch(`api/get_teachers.php?school_id=${schoolId}`)
+                .then(response => response.json())
+                .then(data => {
+                    updateTeachers(data);
+                })
+                .catch(error => console.error('خطأ في جلب المعلمين:', error));
+        } else if (subjectId) {
+            // إذا تم اختيار مادة فقط (بدون مدرسة)
+            fetch(`api/get_teachers.php?subject_id=${subjectId}`)
                 .then(response => response.json())
                 .then(data => {
                     updateTeachers(data);

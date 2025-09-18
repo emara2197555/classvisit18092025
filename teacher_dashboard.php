@@ -62,36 +62,136 @@ $visits_this_month = query_row("
 ", [$teacher_id]);
 $stats['visits_this_month'] = $visits_this_month['count'];
 
-// متوسط الأداء العام
-$avg_performance = query_row("
-    SELECT AVG(ve.score) as avg_score
+// الحصول على العام الدراسي الحالي
+$current_academic_year = query_row("SELECT id FROM academic_years WHERE is_active = 1 LIMIT 1");
+$academic_year_id = $current_academic_year['id'] ?? 2; // افتراضي العام 2
+
+// حساب متوسطات المجالات أولاً
+$domains_averages = query("
+    SELECT 
+        d.id,
+        d.name,
+        (AVG(ve.score) / 3) * 100 AS avg_percentage
+    FROM 
+        evaluation_domains d
+    JOIN 
+        evaluation_indicators i ON i.domain_id = d.id
+    JOIN 
+        visit_evaluations ve ON ve.indicator_id = i.id
+    JOIN 
+        visits v ON ve.visit_id = v.id
+    WHERE 
+        v.teacher_id = ?
+        AND v.academic_year_id = ?
+        AND ve.score IS NOT NULL
+        AND (
+            d.id != 5 OR 
+            (d.id = 5 AND v.has_lab = 1)
+        )
+    GROUP BY 
+        d.id, d.name
+    ORDER BY 
+        d.id
+", [$teacher_id, $academic_year_id]);
+
+// حساب المتوسط العام من متوسطات المجالات (نفس طريقة التقرير)
+$total_percentage = 0;
+$domains_count = 0;
+foreach ($domains_averages as $domain) {
+    $total_percentage += $domain['avg_percentage'];
+    $domains_count++;
+}
+$stats['avg_performance'] = $domains_count > 0 ? round($total_percentage / $domains_count, 1) : 0;
+
+// استخراج متوسطات المجالات من البيانات المحسوبة مسبقاً
+$stats['avg_planning'] = 0;
+$stats['avg_lesson'] = 0;
+$stats['avg_assessment'] = 0;
+$stats['avg_management'] = 0;
+
+foreach ($domains_averages as $domain) {
+    switch ($domain['id']) {
+        case 1: // التخطيط للدرس
+            $stats['avg_planning'] = round($domain['avg_percentage'], 1);
+            break;
+        case 2: // تنفيذ الدرس
+            $stats['avg_lesson'] = round($domain['avg_percentage'], 1);
+            break;
+        case 3: // التقويم
+            $stats['avg_assessment'] = round($domain['avg_percentage'], 1);
+            break;
+        case 4: // الإدارة الصفية
+            $stats['avg_management'] = round($domain['avg_percentage'], 1);
+            break;
+    }
+}
+
+// آخر زيارة ومتوسطها (العام الدراسي الحالي)
+$last_visit_data = query_row("
+    SELECT 
+        v.visit_date,
+        AVG(
+            CASE 
+                WHEN i.domain_id != 5 THEN ve.score 
+                WHEN i.domain_id = 5 AND v.has_lab = 1 THEN ve.score
+                ELSE NULL 
+            END
+        ) as avg_score
+    FROM visits v
+    INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
+    INNER JOIN evaluation_indicators i ON ve.indicator_id = i.id
+    WHERE v.teacher_id = ?
+    AND v.academic_year_id = ?
+    AND ve.score IS NOT NULL
+    GROUP BY v.id, v.visit_date
+    ORDER BY v.visit_date DESC
+    LIMIT 1
+", [$teacher_id, $academic_year_id]);
+
+$stats['last_visit_score'] = $last_visit_data && $last_visit_data['avg_score'] ? 
+    round(($last_visit_data['avg_score'] / 3) * 100, 1) : 0;
+$stats['last_visit_date'] = $last_visit_data['visit_date'] ?? null;
+
+// عدد التوصيات المتلقاة (العام الدراسي الحالي)
+$recommendations_count = query_row("
+    SELECT COUNT(*) as count
     FROM visits v
     INNER JOIN visit_evaluations ve ON v.id = ve.visit_id
     WHERE v.teacher_id = ?
-", [$teacher_id]);
-$stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
+    AND v.academic_year_id = ?
+    AND (ve.recommendation_id IS NOT NULL OR ve.custom_recommendation IS NOT NULL)
+", [$teacher_id, $academic_year_id]);
+$stats['recommendations_count'] = $recommendations_count['count'];
 
-// متوسط أداء المؤشرات (simplified - no separate lesson/management breakdown since the new structure is different)
-// We'll calculate overall average from all indicators
-$stats['avg_lesson'] = $stats['avg_performance']; // Use same value since we can't separate by old categories
-$stats['avg_management'] = $stats['avg_performance']; // Use same value since we can't separate by old categories
-
-// آخر الزيارات
+// آخر الزيارات (مع حساب صحيح للمتوسطات)
 $recent_visits = query("
-    SELECT v.*, s.name as subject_name, vt.name as visitor_name,
-           sec.name as section_name, g.name as grade_name,
-           AVG(ve.score) as avg_score
+    SELECT 
+        v.*,
+        s.name as subject_name, 
+        vt.name as visitor_name,
+        sec.name as section_name, 
+        g.name as grade_name,
+        AVG(
+            CASE 
+                WHEN i.domain_id != 5 THEN ve.score 
+                WHEN i.domain_id = 5 AND v.has_lab = 1 THEN ve.score
+                ELSE NULL 
+            END
+        ) as avg_score
     FROM visits v
     LEFT JOIN subjects s ON v.subject_id = s.id
     LEFT JOIN visitor_types vt ON v.visitor_type_id = vt.id
     LEFT JOIN sections sec ON v.section_id = sec.id
     LEFT JOIN grades g ON sec.grade_id = g.id
     LEFT JOIN visit_evaluations ve ON v.id = ve.visit_id
+    LEFT JOIN evaluation_indicators i ON ve.indicator_id = i.id
     WHERE v.teacher_id = ?
+    AND v.academic_year_id = ?
+    AND ve.score IS NOT NULL
     GROUP BY v.id
     ORDER BY v.visit_date DESC, v.created_at DESC
     LIMIT 10
-", [$teacher_id]);
+", [$teacher_id, $academic_year_id]);
 
 // المواد التي يدرسها المعلم
 $teacher_subjects = query("
@@ -115,6 +215,15 @@ require_once 'includes/header.php';
                 مرحباً، <?= htmlspecialchars($teacher_name) ?>
             </h1>
             <p class="text-green-100"><?= htmlspecialchars($school_name) ?></p>
+            <?php 
+            $current_year_name = query_row("SELECT name FROM academic_years WHERE id = ?", [$academic_year_id]);
+            if ($current_year_name): 
+            ?>
+                <p class="text-green-200 text-sm mt-1">
+                    <i class="fas fa-calendar-alt ml-1"></i>
+                    العام الدراسي: <?= htmlspecialchars($current_year_name['name']) ?>
+                </p>
+            <?php endif; ?>
             <?php if (!empty($teacher_subjects)): ?>
                 <div class="mt-2 flex flex-wrap gap-2">
                     <?php foreach ($teacher_subjects as $subject): ?>
@@ -164,13 +273,67 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <!-- متوسط تنفيذ الدرس -->
+    <!-- الأداء العام -->
+    <div class="bg-gradient-to-br from-slate-500 to-slate-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">الأداء العام</h3>
+                <p class="text-3xl font-bold"><?= $stats['avg_performance'] ?>%</p>
+                <p class="text-slate-200 text-sm mt-1">متوسط شامل</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-chart-line text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- آخر زيارة -->
+    <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">آخر زيارة</h3>
+                <p class="text-3xl font-bold"><?= $stats['last_visit_score'] ?>%</p>
+                <p class="text-indigo-200 text-sm mt-1">
+                    <?= $stats['last_visit_date'] ? date('d/m/Y', strtotime($stats['last_visit_date'])) : 'لا توجد زيارات' ?>
+                </p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-clock text-2xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- تفاصيل الأداء حسب المجالات -->
+<div class="mb-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+        <i class="fas fa-layer-group text-gray-600 ml-3"></i>
+        تفاصيل الأداء حسب المجالات
+    </h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+    <!-- التخطيط للدرس -->
+    <div class="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">التخطيط</h3>
+                <p class="text-3xl font-bold"><?= $stats['avg_planning'] ?>%</p>
+                <p class="text-cyan-200 text-sm mt-1">تخطيط الدرس</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-clipboard-list text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- تنفيذ الدرس -->
     <div class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
         <div class="flex items-center justify-between">
             <div>
-                <h3 class="text-lg font-semibold mb-2">تنفيذ الدرس</h3>
+                <h3 class="text-lg font-semibold mb-2">التنفيذ</h3>
                 <p class="text-3xl font-bold"><?= $stats['avg_lesson'] ?>%</p>
-                <p class="text-green-200 text-sm mt-1">متوسط الأداء</p>
+                <p class="text-green-200 text-sm mt-1">تنفيذ الدرس</p>
             </div>
             <div class="bg-white bg-opacity-20 rounded-full p-3">
                 <i class="fas fa-tasks text-2xl"></i>
@@ -178,16 +341,44 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <!-- متوسط الإدارة الصفية -->
+    <!-- التقويم -->
+    <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">التقويم</h3>
+                <p class="text-3xl font-bold"><?= $stats['avg_assessment'] ?>%</p>
+                <p class="text-amber-200 text-sm mt-1">تقويم الطلاب</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-clipboard-check text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- الإدارة الصفية -->
     <div class="bg-gradient-to-br from-orange-500 to-red-500 text-white rounded-xl p-6 shadow-lg">
         <div class="flex items-center justify-between">
             <div>
                 <h3 class="text-lg font-semibold mb-2">الإدارة الصفية</h3>
                 <p class="text-3xl font-bold"><?= $stats['avg_management'] ?>%</p>
-                <p class="text-orange-200 text-sm mt-1">متوسط الأداء</p>
+                <p class="text-orange-200 text-sm mt-1">إدارة الصف</p>
             </div>
             <div class="bg-white bg-opacity-20 rounded-full p-3">
                 <i class="fas fa-users-cog text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- التوصيات المتلقاة -->
+    <div class="bg-gradient-to-br from-rose-500 to-rose-600 text-white rounded-xl p-6 shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold mb-2">التوصيات</h3>
+                <p class="text-3xl font-bold"><?= $stats['recommendations_count'] ?></p>
+                <p class="text-rose-200 text-sm mt-1">توصية متلقاة</p>
+            </div>
+            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                <i class="fas fa-lightbulb text-2xl"></i>
             </div>
         </div>
     </div>
@@ -222,13 +413,43 @@ require_once 'includes/header.php';
             
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
-                    <span class="text-gray-600">تنفيذ الدرس</span>
+                    <span class="text-gray-600">
+                        <i class="fas fa-clipboard-list text-cyan-500 ml-1"></i>
+                        التخطيط
+                    </span>
+                    <span class="font-semibold"><?= $stats['avg_planning'] ?>%</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">
+                        <i class="fas fa-tasks text-green-500 ml-1"></i>
+                        التنفيذ
+                    </span>
                     <span class="font-semibold"><?= $stats['avg_lesson'] ?>%</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-gray-600">الإدارة الصفية</span>
+                    <span class="text-gray-600">
+                        <i class="fas fa-clipboard-check text-amber-500 ml-1"></i>
+                        التقويم
+                    </span>
+                    <span class="font-semibold"><?= $stats['avg_assessment'] ?>%</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">
+                        <i class="fas fa-users-cog text-orange-500 ml-1"></i>
+                        الإدارة الصفية
+                    </span>
                     <span class="font-semibold"><?= $stats['avg_management'] ?>%</span>
                 </div>
+            </div>
+            
+            <!-- رابط التقرير المفصل -->
+            <div class="mt-6 text-center">
+                <a href="teacher_report.php?teacher_id=<?= $teacher_id ?>" 
+                   class="inline-flex items-center bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition duration-200 shadow-lg">
+                    <i class="fas fa-chart-bar ml-2"></i>
+                    عرض التقرير المفصل
+                    <i class="fas fa-external-link-alt mr-2 text-sm"></i>
+                </a>
             </div>
         </div>
         

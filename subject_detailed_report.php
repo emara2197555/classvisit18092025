@@ -64,13 +64,42 @@ if ($user_role_name === 'Subject Coordinator') {
     }
 }
 
-// جلب المعلمين الذين يدرسون هذه المادة
-$subject_teachers = query("
-    SELECT DISTINCT t.id, t.name 
+// جلب المعلمين الذين يدرسون هذه المادة مصنفين حسب الوظيفة
+$all_subject_staff = query("
+    SELECT DISTINCT t.id, t.name, t.job_title
     FROM teacher_subjects ts 
     JOIN teachers t ON ts.teacher_id = t.id 
     WHERE ts.subject_id = ? 
-    ORDER BY t.name", [$subject_id]);
+    ORDER BY 
+        CASE t.job_title 
+            WHEN 'موجه المادة' THEN 1
+            WHEN 'منسق المادة' THEN 2  
+            WHEN 'معلم' THEN 3
+            ELSE 4
+        END, t.name", [$subject_id]);
+
+// تصنيف الموظفين حسب الوظيفة
+$teachers = [];
+$coordinators = [];
+$supervisors = [];
+
+foreach ($all_subject_staff as $staff) {
+    switch ($staff['job_title']) {
+        case 'موجه المادة':
+            $supervisors[] = $staff;
+            break;
+        case 'منسق المادة':
+            $coordinators[] = $staff;
+            break;
+        case 'معلم':
+        default:
+            $teachers[] = $staff;
+            break;
+    }
+}
+
+// للتوافق مع الكود القديم
+$subject_teachers = $all_subject_staff;
 
 // جلب زيارات المادة
 $visits = query("
@@ -85,7 +114,7 @@ $visits = query("
         vt.name AS visitor_type,
         CONCAT(vis.name, ' (', vt.name, ')') AS visitor_name,
         v.total_score,
-        (SELECT AVG(ve.score) FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) * (100/3) AS avg_percentage
+        (SELECT (AVG(ve.score) / 3) * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -113,7 +142,7 @@ $domains_avg = query("
     SELECT 
         d.id,
         d.name,
-        AVG(ve.score) * (100/3) AS avg_percentage
+        (AVG(ve.score) / 3) * 100 AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -135,7 +164,10 @@ $domains_avg = query("
 
 // حساب الإحصائيات العامة
 $total_visits = count($visits);
-$total_teachers = count($subject_teachers);
+$total_teachers = count($teachers);
+$total_coordinators = count($coordinators);
+$total_supervisors = count($supervisors);
+$total_staff = count($subject_teachers); // إجمالي جميع الموظفين
 
 // حساب المتوسط العام للمادة
 $overall_avg = 0;
@@ -181,7 +213,7 @@ if (count($visits) >= 2) {
         // جلب متوسط أول وآخر زيارة لكل مجال
         $domain_trend = query("
             SELECT 
-                AVG(ve.score) * (100/3) AS avg_score,
+                (AVG(ve.score) / 3) * 100 AS avg_score,
                 v.visit_date
             FROM 
                 visit_evaluations ve
@@ -228,7 +260,7 @@ foreach ($domain_progress as $progress) {
 $best_indicators = query("
     SELECT 
         i.name,
-        AVG(ve.score) * (100/3) AS avg_score
+        (AVG(ve.score) / 3) * 100 AS avg_score
     FROM 
         evaluation_indicators i
     JOIN 
@@ -292,8 +324,11 @@ $common_recommendations = query("
                 <div class="text-sm text-gray-600">إجمالي الزيارات</div>
             </div>
             <div class="bg-green-50 p-4 rounded-lg text-center">
-                <div class="text-2xl font-bold text-green-600"><?= $total_teachers ?></div>
-                <div class="text-sm text-gray-600">عدد المعلمين</div>
+                <div class="text-2xl font-bold text-green-600"><?= $total_staff ?></div>
+                <div class="text-sm text-gray-600">إجمالي الموظفين</div>
+                <div class="text-xs text-gray-500 mt-1">
+                    <?= $total_teachers ?> معلم | <?= $total_coordinators ?> منسق | <?= $total_supervisors ?> موجه
+                </div>
             </div>
             <div class="bg-purple-50 p-4 rounded-lg text-center">
                 <div class="text-2xl font-bold text-purple-600"><?= number_format($overall_avg, 1) ?>%</div>
@@ -531,16 +566,62 @@ $common_recommendations = query("
         </div>
         <?php endif; ?>
 
-        <!-- قائمة المعلمين -->
-        <?php if (!empty($subject_teachers)): ?>
+        <!-- قوائم الموظفين مصنفة حسب الوظيفة -->
+        
+        <!-- الموجهين -->
+        <?php if (!empty($supervisors)): ?>
         <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-3">معلمو المادة</h3>
+            <h3 class="text-lg font-semibold mb-3 text-purple-700 flex items-center">
+                <i class="fas fa-user-graduate text-purple-600 ml-2"></i>
+                موجهو المادة (<?= count($supervisors) ?>)
+            </h3>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <?php foreach ($subject_teachers as $teacher): ?>
-                    <div class="border rounded-lg p-4 hover:bg-gray-50">
+                <?php foreach ($supervisors as $supervisor): ?>
+                    <div class="border border-purple-200 rounded-lg p-4 hover:bg-purple-50 bg-purple-25">
+                        <a href="teacher_report.php?teacher_id=<?= $supervisor['id'] ?>" class="text-purple-600 hover:text-purple-800 font-medium">
+                            <?= htmlspecialchars($supervisor['name']) ?>
+                        </a>
+                        <div class="text-xs text-purple-500 mt-1">موجه المادة</div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- المنسقين -->
+        <?php if (!empty($coordinators)): ?>
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-3 text-green-700 flex items-center">
+                <i class="fas fa-user-tie text-green-600 ml-2"></i>
+                منسقو المادة (<?= count($coordinators) ?>)
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <?php foreach ($coordinators as $coordinator): ?>
+                    <div class="border border-green-200 rounded-lg p-4 hover:bg-green-50 bg-green-25">
+                        <a href="teacher_report.php?teacher_id=<?= $coordinator['id'] ?>" class="text-green-600 hover:text-green-800 font-medium">
+                            <?= htmlspecialchars($coordinator['name']) ?>
+                        </a>
+                        <div class="text-xs text-green-500 mt-1">منسق المادة</div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- المعلمين -->
+        <?php if (!empty($teachers)): ?>
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-3 text-blue-700 flex items-center">
+                <i class="fas fa-chalkboard-teacher text-blue-600 ml-2"></i>
+                معلمو المادة (<?= count($teachers) ?>)
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <?php foreach ($teachers as $teacher): ?>
+                    <div class="border border-blue-200 rounded-lg p-4 hover:bg-blue-50 bg-blue-25">
                         <a href="teacher_report.php?teacher_id=<?= $teacher['id'] ?>" class="text-blue-600 hover:text-blue-800 font-medium">
                             <?= htmlspecialchars($teacher['name']) ?>
                         </a>
+                        <div class="text-xs text-blue-500 mt-1">معلم</div>
                     </div>
                 <?php endforeach; ?>
             </div>

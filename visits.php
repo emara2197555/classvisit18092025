@@ -179,11 +179,12 @@ $total_items = query_row($count_sql, $search_params)['total'] ?? 0;
 // حساب إجمالي عدد الصفحات
 $total_pages = ceil($total_items / $items_per_page);
 
-// تحديث استعلام جلب الزيارات ليشمل اسم المادة الدراسية
+// تحديث استعلام جلب الزيارات ليشمل جميع البيانات المطلوبة
 $visits_sql = "
     SELECT 
         v.id,
         v.visit_date,
+        v.visitor_person_id,
         t.id AS teacher_id,
         t.name AS teacher_name,
         s.name AS school_name,
@@ -311,6 +312,20 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
         </form>
         
         <hr class="my-6 border-gray-300">
+        
+        <?php if ($user_role_name === 'Subject Coordinator'): ?>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-blue-600 ml-2"></i>
+                <div>
+                    <h4 class="font-semibold text-blue-800">ملاحظة للمنسق</h4>
+                    <p class="text-blue-700 text-sm mt-1">
+                        يمكنك حذف زيارات <strong>مادتك فقط</strong> من نوع <span class="bg-blue-100 px-2 py-1 rounded">منسق المادة</span> أو <span class="bg-blue-100 px-2 py-1 rounded">موجه المادة</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
         
         <?php if ($user_role_name !== 'Teacher'): ?>
         <form action="" method="get" class="space-y-4">
@@ -470,13 +485,40 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                                             </svg>
                                         </a>
                                         
-                                        <?php if ($user_role_name !== 'Teacher'): ?>
+                                        <?php 
+                                        // تحديد صلاحيات الحذف حسب نوع المستخدم
+                                        $can_delete = false;
+                                        
+                                        if (in_array($user_role_name, ['Admin', 'Director', 'Academic Deputy'])) {
+                                            // المدراء يمكنهم حذف جميع الزيارات
+                                            $can_delete = true;
+                                        } elseif ($user_role_name === 'Supervisor') {
+                                            // المشرف يمكنه حذف زياراته فقط
+                                            $can_delete = ($visit['visitor_person_id'] == $user_id);
+                                        } elseif ($user_role_name === 'Subject Coordinator') {
+                                            // المنسق يمكنه حذف زيارات مادته فقط (منسق وموجه)
+                                            $coordinator_subject = query_row("SELECT subject_id FROM coordinator_supervisors WHERE user_id = ?", [$user_id]);
+                                            $can_delete = (
+                                                $coordinator_subject && 
+                                                $coordinator_subject['subject_id'] == $visit['subject_id'] &&
+                                                in_array($visit['visitor_type'], ['منسق المادة', 'موجه المادة'])
+                                            );
+                                        }
+                                        
+                                        if ($can_delete): 
+                                        ?>
                                         <a href="delete_visit.php?id=<?= $visit['id'] ?>" class="text-red-600 hover:text-red-800" 
-                                           onclick="return confirm('هل أنت متأكد من حذف هذه الزيارة؟');" title="حذف">
+                                           onclick="return confirm('هل أنت متأكد من حذف هذه الزيارة؟\n\nالمعلم: <?= htmlspecialchars($visit['teacher_name']) ?>\nالمادة: <?= htmlspecialchars($visit['subject_name']) ?>\nنوع الزائر: <?= htmlspecialchars($visit['visitor_type']) ?>');" title="حذف">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
                                         </a>
+                                        <?php else: ?>
+                                        <span class="text-gray-400" title="لا توجد صلاحية للحذف">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636" />
+                                            </svg>
+                                        </span>
                                         <?php endif; ?>
                                     </div>
                                 </td>
