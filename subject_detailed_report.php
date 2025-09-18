@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -114,7 +117,7 @@ $visits = query("
         vt.name AS visitor_type,
         CONCAT(vis.name, ' (', vt.name, ')') AS visitor_name,
         v.total_score,
-        (SELECT (AVG(ve.score) / 3) * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
+        (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -142,7 +145,7 @@ $domains_avg = query("
     SELECT 
         d.id,
         d.name,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -180,9 +183,10 @@ if (!empty($visits)) {
 $strengths = [];
 $weaknesses = [];
 foreach ($domains_avg as $domain) {
-    if ($domain['avg_percentage'] >= 80) {
+    $performance_level = getPerformanceLevel($domain['avg_percentage']);
+    if (strpos($performance_level['color_class'], 'text-green') !== false) {
         $strengths[] = $domain;
-    } elseif ($domain['avg_percentage'] < 70) {
+    } elseif (strpos($performance_level['color_class'], 'text-red') !== false || strpos($performance_level['color_class'], 'text-orange') !== false) {
         $weaknesses[] = $domain;
     }
 }
@@ -213,7 +217,7 @@ if (count($visits) >= 2) {
         // جلب متوسط أول وآخر زيارة لكل مجال
         $domain_trend = query("
             SELECT 
-                (AVG(ve.score) / 3) * 100 AS avg_score,
+                (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_score,
                 v.visit_date
             FROM 
                 visit_evaluations ve
@@ -260,7 +264,7 @@ foreach ($domain_progress as $progress) {
 $best_indicators = query("
     SELECT 
         i.name,
-        (AVG(ve.score) / 3) * 100 AS avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_score
     FROM 
         evaluation_indicators i
     JOIN 
@@ -469,12 +473,29 @@ $common_recommendations = query("
                     <div class="border rounded-lg p-4">
                         <div class="flex justify-between items-center">
                             <span class="font-medium"><?= htmlspecialchars($domain['name']) ?></span>
-                            <span class="text-lg font-bold <?= $domain['avg_percentage'] >= 80 ? 'text-green-600' : ($domain['avg_percentage'] >= 60 ? 'text-yellow-600' : 'text-red-600') ?>">
+                            <?php 
+                            $performance_level = getPerformanceLevel($domain['avg_percentage']);
+                            $text_color = '';
+                            if (strpos($performance_level['color_class'], 'text-green') !== false) $text_color = 'text-green-600';
+                            elseif (strpos($performance_level['color_class'], 'text-blue') !== false) $text_color = 'text-blue-600';
+                            elseif (strpos($performance_level['color_class'], 'text-yellow') !== false) $text_color = 'text-yellow-600';
+                            elseif (strpos($performance_level['color_class'], 'text-orange') !== false) $text_color = 'text-orange-600';
+                            else $text_color = 'text-red-600';
+                            ?>
+                            <span class="text-lg font-bold <?= $text_color ?>">
                                 <?= number_format($domain['avg_percentage'], 1) ?>%
                             </span>
                         </div>
                         <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
-                            <div class="h-2 rounded-full <?= $domain['avg_percentage'] >= 80 ? 'bg-green-500' : ($domain['avg_percentage'] >= 60 ? 'bg-yellow-500' : 'bg-red-500') ?>" 
+                            <?php
+                            $bg_color = '';
+                            if (strpos($performance_level['color_class'], 'text-green') !== false) $bg_color = 'bg-green-500';
+                            elseif (strpos($performance_level['color_class'], 'text-blue') !== false) $bg_color = 'bg-blue-500';
+                            elseif (strpos($performance_level['color_class'], 'text-yellow') !== false) $bg_color = 'bg-yellow-500';
+                            elseif (strpos($performance_level['color_class'], 'text-orange') !== false) $bg_color = 'bg-orange-500';
+                            else $bg_color = 'bg-red-500';
+                            ?>
+                            <div class="h-2 rounded-full <?= $bg_color ?>" 
                                  style="width: <?= $domain['avg_percentage'] ?>%"></div>
                         </div>
                     </div>
@@ -515,7 +536,17 @@ $common_recommendations = query("
                                 <td class="py-2 px-4 border"><?= htmlspecialchars($visit['school_name']) ?></td>
                                 <td class="py-2 px-4 border"><?= htmlspecialchars($visit['visitor_name']) ?></td>
                                 <td class="py-2 px-4 border text-center">
-                                    <span class="px-2 py-1 rounded-full text-sm <?= $visit['avg_percentage'] >= 80 ? 'bg-green-100 text-green-800' : ($visit['avg_percentage'] >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800') ?>">
+                                    <?php 
+                                    $visit_performance = getPerformanceLevel($visit['avg_percentage']);
+                                    $badge_class = $visit_performance['color_class'];
+                                    // تحويل من text-* إلى bg-*-100 text-*-800
+                                    if (strpos($badge_class, 'text-green') !== false) $badge_class = 'bg-green-100 text-green-800';
+                                    elseif (strpos($badge_class, 'text-blue') !== false) $badge_class = 'bg-blue-100 text-blue-800';
+                                    elseif (strpos($badge_class, 'text-yellow') !== false) $badge_class = 'bg-yellow-100 text-yellow-800';
+                                    elseif (strpos($badge_class, 'text-orange') !== false) $badge_class = 'bg-orange-100 text-orange-800';
+                                    else $badge_class = 'bg-red-100 text-red-800';
+                                    ?>
+                                    <span class="px-2 py-1 rounded-full text-sm <?= $badge_class ?>">
                                         <?= number_format($visit['avg_percentage'], 1) ?>%
                                     </span>
                                 </td>

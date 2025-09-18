@@ -1,7 +1,11 @@
 <?php
 /**
  * لوحة تحكم المعلم
+ * يستخدم القوانين الموحدة لنظام الزيارات الصفية
  */
+
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
 
 // تضمين ملفات النظام
 require_once 'includes/auth_functions.php';
@@ -71,7 +75,7 @@ $domains_averages = query("
     SELECT 
         d.id,
         d.name,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -149,7 +153,7 @@ $last_visit_data = query_row("
 ", [$teacher_id, $academic_year_id]);
 
 $stats['last_visit_score'] = $last_visit_data && $last_visit_data['avg_score'] ? 
-    round(($last_visit_data['avg_score'] / 3) * 100, 1) : 0;
+    round(($last_visit_data['avg_score'] / MAX_INDICATOR_SCORE) * 100, 1) : 0;
 $stats['last_visit_date'] = $last_visit_data['visit_date'] ?? null;
 
 // عدد التوصيات المتلقاة (العام الدراسي الحالي)
@@ -510,8 +514,14 @@ require_once 'includes/header.php';
                                     <div class="text-left">
                                         <div class="mb-2">
                                             <?php 
-                                            $total_score = ($visit['avg_score'] / 3) * 100; // Convert from 3-point scale to percentage
-                                            $color = $total_score >= 80 ? 'green' : ($total_score >= 60 ? 'yellow' : 'red');
+                                            $total_score = ($visit['avg_score'] / MAX_INDICATOR_SCORE) * 100; // تحويل باستخدام القوانين الموحدة
+                                            $performance_level = getPerformanceLevel($total_score);
+                                            $color = '';
+                                            if (strpos($performance_level['color_class'], 'text-green') !== false) $color = 'green';
+                                            elseif (strpos($performance_level['color_class'], 'text-blue') !== false) $color = 'blue';
+                                            elseif (strpos($performance_level['color_class'], 'text-yellow') !== false) $color = 'yellow';
+                                            elseif (strpos($performance_level['color_class'], 'text-orange') !== false) $color = 'orange';
+                                            else $color = 'red';
                                             ?>
                                             <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
                                                 <?= round($total_score, 1) ?>%

@@ -1,4 +1,16 @@
 <?php
+/**
+ * صفحة الاحتياجات التدريبية للمعلمين
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - حساب النسب المئوية باستخدام MAX_INDICATOR_SCORE
+ * - عتبة الاحتياجات التدريبية باستخدام TRAINING_NEEDS_THRESHOLD
+ * - تحديد مستويات الأداء باستخدام getPerformanceLevel()
+ * - ألوان موحدة حسب مستوى الأداء
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
+ */
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -6,6 +18,7 @@ ob_start();
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
+require_once 'visit_rules.php';
 
 // حماية الصفحة - إضافة المعلمين للصلاحيات
 protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator', 'Teacher']);
@@ -55,8 +68,9 @@ $workshops_mapping = [
     23 => 'مهارات إدارة الوقت بشكل متوازن بين الشرح والتفاعل والتقييم.'
 ];
 
-// المستويات المطلوبة لتحديد الاحتياج التدريبي
-$threshold_score = 2.5; // إذا كان متوسط الدرجات أقل من هذا الرقم يكون هناك احتياج تدريبي
+// المستويات المطلوبة لتحديد الاحتياج التدريبي - باستخدام الثابت الموحد
+// $threshold_score = 2.5; // القيمة القديمة
+$threshold_score = TRAINING_NEEDS_THRESHOLD; // باستخدام الثابت الموحد من visit_rules.php
 
 // الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
 if (!isset($_SESSION['selected_academic_year'])) {
@@ -301,7 +315,7 @@ if ($teacher) {
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) / 3) * 100 AS percentage_score,
+            (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS percentage_score,
             COUNT(DISTINCT v.visitor_type_id) AS visitor_types_count,
             GROUP_CONCAT(DISTINCT vt.name ORDER BY vt.id) AS visitor_types
         FROM 
@@ -434,7 +448,7 @@ if ($teacher) {
             'domain_id' => $indicator['domain_id'],
             'domain_name' => $indicator['domain_name'],
             'avg_score' => $avg_score,
-            'percentage_score' => round(($avg_score / 3) * 100, 2),
+            'percentage_score' => round(($avg_score / MAX_INDICATOR_SCORE) * 100, 2),
             'visitor_types' => $indicator['visitor_types'],
             'visitor_types_count' => $indicator['visitor_types_count'],
             'needs_training' => $needs_training,
@@ -446,7 +460,7 @@ if ($teacher) {
     $overall_stats = query_row("
         SELECT 
             AVG(ve.score) AS overall_avg,
-            (AVG(ve.score) / 3) * 100 AS overall_percentage
+            (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS overall_percentage
         FROM 
             visit_evaluations ve
         JOIN 
@@ -670,8 +684,9 @@ $academic_years = query($academic_years_query);
                                         <td class="border border-gray-300 px-4 py-3 text-center">
                                             <?php
                                             $percentage = $workshop['score'];
-                                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                            // استخدام دالة getPerformanceLevel الموحدة
+                                            $performance_level = getPerformanceLevel($percentage);
+                                            $color_class = $performance_level['bg_class'] . ' ' . $performance_level['color_class'];
                                             ?>
                                             <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
                                                 <?= number_format($percentage, 1) ?>%
@@ -792,8 +807,9 @@ $academic_years = query($academic_years_query);
                                         <td class="border border-gray-300 px-4 py-3 text-center">
                                             <?php
                                             $percentage = $need['percentage_score'];
-                                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                            // استخدام دالة getPerformanceLevel الموحدة
+                                            $performance_level = getPerformanceLevel($percentage);
+                                            $color_class = $performance_level['bg_class'] . ' ' . $performance_level['color_class'];
                                             ?>
                                             <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
                                                 <?= number_format($percentage, 1) ?>%
@@ -812,9 +828,10 @@ $academic_years = query($academic_years_query);
                                             <?php if ($score !== null): ?>
                                                 <?php 
                                                 // تحويل الدرجة إلى نسبة مئوية
-                                                $score_percentage = ($score / 3) * 100;
-                                                $color_class = $score_percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                              ($score_percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                $score_percentage = ($score / MAX_INDICATOR_SCORE) * 100;
+                                                // استخدام دالة getPerformanceLevel الموحدة
+                                                $performance_level = getPerformanceLevel($score_percentage);
+                                                $color_class = $performance_level['bg_class'] . ' ' . $performance_level['color_class'];
                                                 ?>
                                                 <div class="inline-block px-2 py-1 rounded-full font-bold text-xs <?= $color_class ?>">
                                                     <?= number_format($score_percentage, 1) ?>%

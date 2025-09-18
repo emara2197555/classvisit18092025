@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -101,7 +104,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT (AVG(ve.score) / 3) * 100
+            (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -113,7 +116,7 @@ if ($academic_year_id > 0) {
                AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
             -- متوسط الإدارة الصفية (مجال رقم 4)
-            (SELECT (AVG(ve.score) / 3) * 100
+            (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -127,7 +130,7 @@ if ($academic_year_id > 0) {
             -- المتوسط العام (متوسط المجالات)
             (SELECT AVG(domain_avg)
              FROM (
-                 SELECT (AVG(ve.score) / 3) * 100 as domain_avg
+                 SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as domain_avg
                  FROM visit_evaluations ve 
                  JOIN visits vs ON ve.visit_id = vs.id
                  JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -182,7 +185,7 @@ if ($academic_year_id > 0) {
             COUNT(DISTINCT v.teacher_id) AS teachers_count,
             
             -- متوسط تنفيذ الدرس (مجال رقم 2)
-            (SELECT (AVG(ve.score) / 3) * 100
+            (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -193,7 +196,7 @@ if ($academic_year_id > 0) {
                AND ve.score IS NOT NULL) AS lesson_execution_avg,
                
             -- متوسط الإدارة الصفية (مجال رقم 4)
-            (SELECT (AVG(ve.score) / 3) * 100
+            (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -204,7 +207,7 @@ if ($academic_year_id > 0) {
                AND ve.score IS NOT NULL) AS classroom_management_avg,
                
             -- المتوسط العام للمجالين
-            (SELECT (AVG(ve.score) / 3) * 100
+            (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
              FROM visit_evaluations ve 
              JOIN visits vs ON ve.visit_id = vs.id
              JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -266,7 +269,7 @@ $weakest_query = "
         i.id,
         i.name,
         AVG(ve.score) AS avg_score,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -283,7 +286,7 @@ $weakest_query = "
     GROUP BY 
         i.id, i.name
     HAVING 
-        (AVG(ve.score) / 3) * 100 < 50
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 < " . ACCEPTABLE_THRESHOLD . "
     ORDER BY 
         avg_score ASC
     LIMIT 5
@@ -301,7 +304,7 @@ $strongest_query = "
         i.id,
         i.name,
         AVG(ve.score) AS avg_score,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -640,11 +643,20 @@ $common_recommendations = query($recommendations_query, $recommendations_params)
                                             if (!empty($scores_query)) {
                                                 $total_points = array_sum(array_column($scores_query, 'score'));
                                                 $indicators_count = count($scores_query);
-                                                $visit_performance = ($total_points / ($indicators_count * 3)) * 100;
+                                                $visit_performance = ($total_points / ($indicators_count * MAX_INDICATOR_SCORE)) * 100;
                                             }
                                             ?>
                                             <?php if ($visit_performance > 0): ?>
-                                                <span class="<?= $visit_performance >= 80 ? 'text-green-600' : ($visit_performance >= 60 ? 'text-yellow-600' : 'text-red-600') ?>">
+                                                <?php 
+                                                $visit_perf_level = getPerformanceLevel($visit_performance);
+                                                $visit_color = '';
+                                                if (strpos($visit_perf_level['color_class'], 'text-green') !== false) $visit_color = 'text-green-600';
+                                                elseif (strpos($visit_perf_level['color_class'], 'text-blue') !== false) $visit_color = 'text-blue-600';
+                                                elseif (strpos($visit_perf_level['color_class'], 'text-yellow') !== false) $visit_color = 'text-yellow-600';
+                                                elseif (strpos($visit_perf_level['color_class'], 'text-orange') !== false) $visit_color = 'text-orange-600';
+                                                else $visit_color = 'text-red-600';
+                                                ?>
+                                                <span class="<?= $visit_color ?>">
                                                     <?= number_format($visit_performance, 1) ?>%
                                                 </span>
                                             <?php else: ?>

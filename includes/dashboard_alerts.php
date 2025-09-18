@@ -3,7 +3,13 @@
  * ملف تنبيهات لوحة القيادة
  * 
  * يستخدم لإنشاء وعرض التنبيهات المهمة للمستخدم
+ * محدث لاستخدام القوانين الموحدة من visit_rules.php
+ * 
+ * @version 2.0 - محدث للقوانين الموحدة
  */
+
+// تضمين القوانين الموحدة
+require_once __DIR__ . '/../visit_rules.php';
 
 // تضمين ملف الاتصال بقاعدة البيانات
 require_once __DIR__ . '/db_connection.php';
@@ -121,11 +127,11 @@ $sql_low_evaluations = "
     SELECT COUNT(DISTINCT v.id) as count
     FROM visits v
     JOIN (
-        SELECT visit_id, (SUM(score) / (COUNT(score) * 3)) * 100 as avg_score
+        SELECT visit_id, (SUM(score) / (COUNT(score) * " . MAX_INDICATOR_SCORE . ")) * 100 as avg_score
         FROM visit_evaluations
         WHERE score IS NOT NULL
         GROUP BY visit_id
-        HAVING avg_score < 50
+        HAVING avg_score < " . ACCEPTABLE_THRESHOLD . "
     ) ve ON v.id = ve.visit_id
     WHERE v.academic_year_id = ?
 ";

@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -13,8 +16,10 @@ protect_page();
 // تحديد البيانات بناءً على دور المستخدم
 $user_role = $_SESSION['role_name'] ?? '';
 $is_coordinator = ($user_role === 'Subject Coordinator');
+$is_teacher = ($user_role === 'Teacher');
 $coordinator_subject_id = null;
 $coordinator_school_id = null;
+$teacher_id = null;
 
 if ($is_coordinator) {
     // جلب معلومات المنسق
@@ -28,6 +33,18 @@ if ($is_coordinator) {
     if (!empty($coordinator)) {
         $coordinator_subject_id = $coordinator[0]['subject_id'];
         $coordinator_school_id = $coordinator[0]['school_id'];
+    }
+} elseif ($is_teacher) {
+    // جلب معلومات المعلم
+    $teacher_data = query_row("
+        SELECT id, school_id 
+        FROM teachers 
+        WHERE user_id = ?
+    ", [$_SESSION['user_id']]);
+    
+    if ($teacher_data) {
+        $teacher_id = $teacher_data['id'];
+        $coordinator_school_id = $teacher_data['school_id']; // استخدام نفس المتغير للمدرسة
     }
 }
 
@@ -127,9 +144,11 @@ $sql_with_visits .= "
     WHERE
         t.job_title IN ('معلم', 'منسق المادة')";
 
-// إضافة قيود المنسق
+// إضافة قيود المنسق أو المعلم
 if ($is_coordinator && $coordinator_school_id) {
     $sql_with_visits .= " AND t.school_id = ?";
+} elseif ($is_teacher && $teacher_id) {
+    $sql_with_visits .= " AND t.id = ?";
 }
 
 if ($subject_id > 0) {
@@ -175,9 +194,11 @@ $sql_without_visits .= "
         t.job_title IN ('معلم', 'منسق المادة')
         AND v.id IS NULL";
 
-// إضافة قيود المنسق
+// إضافة قيود المنسق أو المعلم
 if ($is_coordinator && $coordinator_school_id) {
     $sql_without_visits .= " AND t.school_id = ?";
+} elseif ($is_teacher && $teacher_id) {
+    $sql_without_visits .= " AND t.id = ?";
 }
 
 if ($subject_id > 0) {
@@ -201,9 +222,11 @@ if (!empty($date_filter)) {
     $with_visits_params = array_merge($with_visits_params, $date_params);
 }
 
-// إضافة معاملات المنسق
+// إضافة معاملات المنسق أو المعلم
 if ($is_coordinator && $coordinator_school_id) {
     $with_visits_params[] = $coordinator_school_id;
+} elseif ($is_teacher && $teacher_id) {
+    $with_visits_params[] = $teacher_id;
 }
 
 if ($subject_id > 0) {
@@ -221,9 +244,11 @@ if (!empty($date_filter)) {
     $without_visits_params = array_merge($without_visits_params, $date_params);
 }
 
-// إضافة معاملات المنسق
+// إضافة معاملات المنسق أو المعلم
 if ($is_coordinator && $coordinator_school_id) {
     $without_visits_params[] = $coordinator_school_id;
+} elseif ($is_teacher && $teacher_id) {
+    $without_visits_params[] = $teacher_id;
 }
 
 if ($subject_id > 0) {
@@ -314,7 +339,7 @@ $domain_averages = query($sql_domain, $domain_params);
 // تنظيم البيانات في مصفوفة - تحويل إلى نسبة مئوية
 $domain_data = [];
 foreach ($domain_averages as $avg) {
-    $percentage = ($avg['avg_score'] / 3) * 100; // تحويل من 3 إلى 100%
+    $percentage = ($avg['avg_score'] / MAX_INDICATOR_SCORE) * 100; // تحويل باستخدام القوانين الموحدة
     $domain_data[$avg['teacher_id']][$avg['domain_id']] = round($percentage, 2);
 }
 
@@ -373,7 +398,7 @@ $overall_averages = query($sql_overall, $domain_params);
 // تنظيم بيانات المتوسط العام - تحويل إلى نسبة مئوية
 $overall_data = [];
 foreach ($overall_averages as $avg) {
-    $percentage = ($avg['overall_avg'] / 3) * 100; // تحويل من 3 إلى 100%
+    $percentage = ($avg['overall_avg'] / MAX_INDICATOR_SCORE) * 100; // تحويل باستخدام القوانين الموحدة
     $overall_data[$avg['teacher_id']] = round($percentage, 2);
 }
 
@@ -611,6 +636,11 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY id");
         <div class="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
             <strong>مرحباً بك كمنسق مادة!</strong> 
             أنت تعرض تقرير أداء معلمي مادتك فقط.
+        </div>
+    <?php elseif ($is_teacher): ?>
+        <div class="mb-4 p-3 bg-green-100 text-green-800 rounded">
+            <strong>مرحباً بك كمعلم!</strong> 
+            أنت تعرض تقرير أدائك الشخصي فقط.
         </div>
     <?php endif; ?>
     

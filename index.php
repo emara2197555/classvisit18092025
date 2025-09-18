@@ -1,6 +1,19 @@
 <?php
-// تضمين نظام المصادقة
+/**
+ * الصفحة الرئيسية - لوحة التحكم الرئيسية
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - جميع حسابات الأداء تستخدم MAX_INDICATOR_SCORE = 3
+ * - مستويات الأداء موحدة: ممتاز (90%+), جيد جداً (80%+), جيد (65%+), مقبول (50%+)
+ * - عتبات التميز والاحتياجات التدريبية موحدة
+ * - حدود التقارير موحدة (أفضل 5, أفضل 3 مواد, إلخ)
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
+ */
+
+// تضمين نظام المصادقة والقوانين الموحدة
 require_once 'includes/auth_functions.php';
+require_once 'visit_rules.php';
 
 // حماية الصفحة - يجب أن يكون المستخدم مسجل دخول
 protect_page();
@@ -112,15 +125,11 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
                 <h3 class="text-gray-500 text-sm font-medium mb-2">متوسط الأداء العام للمعلمين</h3>
                 <div class="text-3xl font-bold text-gray-800" id="avgPerformance"><?= $avg_performance ?>%</div>
                 <div class="text-xs text-gray-500 mt-1">
-                    <?php if ($avg_performance >= 90): ?>
-                    <span class="text-green-500">ممتاز</span>
-                    <?php elseif ($avg_performance >= 80): ?>
-                    <span class="text-blue-500">جيد جداً</span>
-                    <?php elseif ($avg_performance >= 70): ?>
-                    <span class="text-yellow-500">جيد</span>
-                    <?php else: ?>
-                    <span class="text-red-500">يحتاج إلى تحسين</span>
-                    <?php endif; ?>
+                    <?php 
+                    // استخدام دالة getPerformanceLevel الموحدة
+                    $performance_level = getPerformanceLevel($avg_performance);
+                    ?>
+                    <span class="<?= $performance_level['color_class'] ?>"><?= $performance_level['grade_ar'] ?></span>
                 </div>
             </div>
             <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center text-green-500">
@@ -292,14 +301,14 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
         <!-- مؤشرات الجودة -->
         <div class="grid grid-cols-2 gap-4 mb-4">
             <div class="p-3 bg-green-50 rounded-lg text-center">
-                <div class="text-green-600 text-sm mb-1">متميزين (90%+)</div>
+                <div class="text-green-600 text-sm mb-1">متميزين (<?= EXCELLENT_THRESHOLD ?>%+)</div>
                 <div class="text-2xl font-bold text-green-800"><?= $excellent_teachers_count ?></div>
                 <div class="text-xs text-green-600">
                     <?= $evaluated_teachers_count > 0 ? round(($excellent_teachers_count / $evaluated_teachers_count) * 100, 1) : 0 ?>%
                 </div>
             </div>
             <div class="p-3 bg-red-50 rounded-lg text-center">
-                <div class="text-red-600 text-sm mb-1">يحتاج تطوير (<70%)</div>
+                <div class="text-red-600 text-sm mb-1">يحتاج تطوير (<<?= GOOD_THRESHOLD ?>%)</div>
                 <div class="text-2xl font-bold text-red-800"><?= $needs_improvement_count ?></div>
                 <div class="text-xs text-red-600">
                     <?= $evaluated_teachers_count > 0 ? round(($needs_improvement_count / $evaluated_teachers_count) * 100, 1) : 0 ?>%
@@ -816,11 +825,14 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
                                 <?php if ($subject['avg_performance'] > 0): ?>
                                     <?php
                                     $performance = $subject['avg_performance'];
-                                    $color_class = $performance >= 80 ? 'text-green-700 bg-green-100' : 
-                                                  ($performance >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                    // استخدام دالة getPerformanceLevel الموحدة
+                                    $performance_level = getPerformanceLevel($performance);
                                     ?>
-                                    <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
+                                    <div class="inline-block px-3 py-1 rounded-full font-bold <?= $performance_level['bg_class'] ?> <?= $performance_level['color_class'] ?>">
                                         <?= number_format($performance, 1) ?>%
+                                    </div>
+                                    <div class="text-xs <?= $performance_level['color_class'] ?> mt-1">
+                                        <?= $performance_level['grade_ar'] ?>
                                     </div>
                                 <?php else: ?>
                                     <span class="text-gray-400 font-medium">-</span>
@@ -860,11 +872,14 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
                             </td>
                             <td class="border border-gray-300 px-4 py-4 text-center">
                                 <?php
-                                $overall_color_class = $overall_avg_performance >= 80 ? 'text-green-700 bg-green-200' : 
-                                                      ($overall_avg_performance >= 60 ? 'text-yellow-700 bg-yellow-200' : 'text-red-700 bg-red-200');
+                                // استخدام دالة getPerformanceLevel الموحدة
+                                $overall_performance_level = getPerformanceLevel($overall_avg_performance);
                                 ?>
-                                <div class="inline-block px-4 py-2 rounded-full font-bold text-lg <?= $overall_color_class ?>">
+                                <div class="inline-block px-4 py-2 rounded-full font-bold text-lg <?= $overall_performance_level['bg_class'] ?> <?= $overall_performance_level['color_class'] ?>">
                                     <?= $overall_avg_performance ?>%
+                                </div>
+                                <div class="text-xs <?= $overall_performance_level['color_class'] ?> mt-1">
+                                    <?= $overall_performance_level['grade_ar'] ?>
                                 </div>
                             </td>
                         </tr>
@@ -874,21 +889,29 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
                 
                 <!-- إضافة مفتاح الألوان والإحصائيات -->
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- مفتاح الألوان -->
+                    <!-- مفتاح الألوان - محدث للقوانين الموحدة -->
                     <div class="p-4 bg-gray-50 rounded-lg">
-                        <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان:</h4>
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">مفتاح الألوان (القوانين الموحدة):</h4>
                         <div class="space-y-2 text-sm">
                             <div class="flex items-center">
                                 <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
-                                <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                                <span class="text-gray-600">ممتاز (<?= EXCELLENT_THRESHOLD ?>% فأكثر)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-blue-100 border border-blue-300 rounded-full mr-2"></div>
+                                <span class="text-gray-600">جيد جداً (<?= VERY_GOOD_THRESHOLD ?>% - <?= EXCELLENT_THRESHOLD - 1 ?>%)</span>
                             </div>
                             <div class="flex items-center">
                                 <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
-                                <span class="text-gray-600">جيد (60% - 79%)</span>
+                                <span class="text-gray-600">جيد (<?= GOOD_THRESHOLD ?>% - <?= VERY_GOOD_THRESHOLD - 1 ?>%)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-orange-100 border border-orange-300 rounded-full mr-2"></div>
+                                <span class="text-gray-600">مقبول (<?= ACCEPTABLE_THRESHOLD ?>% - <?= GOOD_THRESHOLD - 1 ?>%)</span>
                             </div>
                             <div class="flex items-center">
                                 <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
-                                <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                                <span class="text-gray-600">يحتاج تحسين (أقل من <?= ACCEPTABLE_THRESHOLD ?>%)</span>
                             </div>
                         </div>
                     </div>

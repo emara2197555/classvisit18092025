@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -142,7 +145,7 @@ $sql = "
         COUNT(DISTINCT v.id) AS visits_count,
         
         -- متوسط تنفيذ الدرس (مجال رقم 2)
-        (SELECT (AVG(ve.score) / 3) * 100
+        (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -157,7 +160,7 @@ $sql = "
            AND ve.score > 0) AS lesson_execution_avg,
            
         -- متوسط الإدارة الصفية (مجال رقم 3)
-        (SELECT (AVG(ve.score) / 3) * 100
+        (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -508,7 +511,11 @@ if ($visitor_type_id > 0) {
                                         <?php if ($class['lesson_execution_avg'] !== null): ?>
                                             <?php 
                                             $lesson_score = $class['lesson_execution_avg'];
-                                            $lesson_color = $lesson_score >= 80 ? 'green' : ($lesson_score >= 60 ? 'yellow' : 'red');
+                                            $lesson_performance = getPerformanceLevel($lesson_score);
+                                            $lesson_color = strpos($lesson_performance['color_class'], 'text-green') !== false ? 'green' : 
+                                                          (strpos($lesson_performance['color_class'], 'text-blue') !== false ? 'blue' : 
+                                                          (strpos($lesson_performance['color_class'], 'text-yellow') !== false ? 'yellow' : 
+                                                          (strpos($lesson_performance['color_class'], 'text-orange') !== false ? 'orange' : 'red')));
                                             ?>
                                             <span class="bg-<?= $lesson_color ?>-100 text-<?= $lesson_color ?>-800 px-3 py-2 rounded-full font-bold text-sm">
                                                 <?= number_format($lesson_score, 1) ?>%
@@ -521,7 +528,11 @@ if ($visitor_type_id > 0) {
                                         <?php if ($class['classroom_management_avg'] !== null): ?>
                                             <?php 
                                             $management_score = $class['classroom_management_avg'];
-                                            $management_color = $management_score >= 80 ? 'green' : ($management_score >= 60 ? 'yellow' : 'red');
+                                            $management_performance = getPerformanceLevel($management_score);
+                                            $management_color = strpos($management_performance['color_class'], 'text-green') !== false ? 'green' : 
+                                                              (strpos($management_performance['color_class'], 'text-blue') !== false ? 'blue' : 
+                                                              (strpos($management_performance['color_class'], 'text-yellow') !== false ? 'yellow' : 
+                                                              (strpos($management_performance['color_class'], 'text-orange') !== false ? 'orange' : 'red')));
                                             ?>
                                             <span class="bg-<?= $management_color ?>-100 text-<?= $management_color ?>-800 px-3 py-2 rounded-full font-bold text-sm">
                                                 <?= number_format($management_score, 1) ?>%

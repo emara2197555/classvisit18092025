@@ -3,7 +3,13 @@
  * ملف إحصائيات لوحة القيادة
  * 
  * يستخدم لاستخراج الإحصائيات التي تعرض في الصفحة الرئيسية
+ * محدث لاستخدام القوانين الموحدة من visit_rules.php
+ * 
+ * @version 2.0 - محدث للقوانين الموحدة
  */
+
+// تضمين القوانين الموحدة
+require_once __DIR__ . '/../visit_rules.php';
 
 // تضمين مكون فلترة العام الأكاديمي والفصل الدراسي
 require_once 'includes/academic_filter.php';
@@ -29,16 +35,8 @@ $sql_evaluated_teachers = "
 $evaluated_teachers_result = query_row($sql_evaluated_teachers, [$academic_year_id]);
 $evaluated_teachers_count = $evaluated_teachers_result['count'] ?? 0;
 
-// متوسط الأداء العام للمعلمين فقط (حسب الوظيفة)
-$sql_avg_performance = "
-    SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100 as avg_score
-    FROM visit_evaluations ve
-    JOIN visits v ON ve.visit_id = v.id
-    JOIN teachers t ON v.teacher_id = t.id
-    WHERE v.academic_year_id = ? AND t.job_title = 'معلم' AND ve.score IS NOT NULL" . $date_condition . "
-";
-$avg_performance_result = query_row($sql_avg_performance, [$academic_year_id]);
-$avg_performance = number_format($avg_performance_result['avg_score'] ?? 0, 1);
+// 🎯 متوسط الأداء العام للمعلمين - باستخدام الدالة الموحدة الوحيدة
+$avg_performance = calculateUnifiedOverallPerformance($academic_year_id, $date_condition);
 
 // عدد التوصيات غير المنفذة
 // التحقق من وجود جدول التوصيات أولاً
@@ -99,13 +97,13 @@ $total_teachers_count = $total_teachers_result['count'] ?? 0;
  * أداء المعلمين
  */
 
-// أفضل المعلمين أداءً
+// أفضل المعلمين أداءً - باستخدام الثوابت الموحدة
 $sql_best_teachers = "
     SELECT 
         t.id,
         t.name as teacher_name,
         s.name as subject_name,
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -120,17 +118,17 @@ $sql_best_teachers = "
         t.id, t.name, s.name
     ORDER BY 
         avg_score DESC
-    LIMIT 5
+    LIMIT " . TOP_TEACHERS_LIMIT . "
 ";
 $best_teachers = query($sql_best_teachers, [$academic_year_id]);
 
-// أقل المعلمين أداءً
+// أقل المعلمين أداءً - باستخدام الثوابت الموحدة
 $sql_worst_teachers = "
     SELECT 
         t.id,
         t.name as teacher_name,
         s.name as subject_name,
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -145,7 +143,7 @@ $sql_worst_teachers = "
         t.id, t.name, s.name
     ORDER BY 
         avg_score ASC
-    LIMIT 5
+    LIMIT " . NEEDS_IMPROVEMENT_LIMIT . "
 ";
 $worst_teachers = query($sql_worst_teachers, [$academic_year_id]);
 
@@ -153,11 +151,11 @@ $worst_teachers = query($sql_worst_teachers, [$academic_year_id]);
  * أداء المدارس / الصفوف
  */
 
-// أفضل مدرسة من حيث نتائج التقييم
+// أفضل مدرسة من حيث نتائج التقييم - باستخدام الثوابت الموحدة
 $sql_best_school = "
     SELECT 
         sch.name as school_name, 
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -176,12 +174,12 @@ $best_school_result = query_row($sql_best_school, [$academic_year_id]);
 $best_school = $best_school_result['school_name'] ?? '';
 $best_school_score = number_format($best_school_result['avg_score'] ?? 0, 0);
 
-// الصف الأعلى أداءً
+// الصف الأعلى أداءً - باستخدام الثوابت الموحدة
 $sql_best_grade = "
     SELECT 
         g.name as grade_name, 
         sec.name as section_name,
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -202,12 +200,12 @@ $best_grade_result = query_row($sql_best_grade, [$academic_year_id]);
 $best_grade = ($best_grade_result['grade_name'] ?? '') . ' - شعبة ' . ($best_grade_result['section_name'] ?? '');
 $best_grade_score = number_format($best_grade_result['avg_score'] ?? 0, 0);
 
-// الصف الأقل أداءً
+// الصف الأقل أداءً - باستخدام الثوابت الموحدة
 $sql_worst_grade = "
     SELECT 
         g.name as grade_name, 
         sec.name as section_name,
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -240,7 +238,7 @@ $sql_subjects_stats = "
         (SELECT COUNT(*) FROM visits WHERE subject_id = s.id AND academic_year_id = ? " . $date_condition . ") as visits_count,
         (SELECT COUNT(DISTINCT v.teacher_id) FROM visits v JOIN teachers t ON v.teacher_id = t.id WHERE v.subject_id = s.id AND v.academic_year_id = ? AND t.job_title = 'معلم' " . $date_condition . ") as visited_teachers_count,
         (
-            SELECT COALESCE((AVG(ve.score) / 3) * 100, 0)
+            SELECT COALESCE((AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100, 0)
             FROM visits v
             JOIN visit_evaluations ve ON v.id = ve.visit_id
             JOIN teachers t ON v.teacher_id = t.id
@@ -379,27 +377,11 @@ $sql_supervisors_visiting = "
 $supervisors_visiting_result = query_row($sql_supervisors_visiting, [$academic_year_id]);
 $supervisors_visiting_count = $supervisors_visiting_result['count'] ?? 0;
 
-// متوسط أداء المعلمين
-$sql_teachers_avg_performance = "
-    SELECT (AVG(ve.score) / 3) * 100 as avg_score
-    FROM visit_evaluations ve
-    JOIN visits v ON ve.visit_id = v.id
-    JOIN teachers t ON v.teacher_id = t.id
-    WHERE v.academic_year_id = ? AND t.job_title = 'معلم' AND ve.score IS NOT NULL" . $date_condition . "
-";
-$teachers_avg_result = query_row($sql_teachers_avg_performance, [$academic_year_id]);
-$teachers_avg_performance = number_format($teachers_avg_result['avg_score'] ?? 0, 1);
+// 🎯 متوسط أداء المعلمين - باستخدام الدالة الموحدة الوحيدة
+$teachers_avg_performance = calculateUnifiedJobPerformance($academic_year_id, 'معلم', $date_condition);
 
-// متوسط أداء المنسقين
-$sql_coordinators_avg_performance = "
-    SELECT (AVG(ve.score) / 3) * 100 as avg_score
-    FROM visit_evaluations ve
-    JOIN visits v ON ve.visit_id = v.id
-    JOIN teachers t ON v.teacher_id = t.id
-    WHERE v.academic_year_id = ? AND t.job_title = 'منسق المادة' AND ve.score IS NOT NULL" . $date_condition . "
-";
-$coordinators_avg_result = query_row($sql_coordinators_avg_performance, [$academic_year_id]);
-$coordinators_avg_performance = number_format($coordinators_avg_result['avg_score'] ?? 0, 1);
+// 🎯 متوسط أداء المنسقين - باستخدام الدالة الموحدة الوحيدة  
+$coordinators_avg_performance = calculateUnifiedJobPerformance($academic_year_id, 'منسق المادة', $date_condition);
 
 /**
  * إحصائيات على مستوى المواد
@@ -429,17 +411,17 @@ $sql_least_visited_subjects = "
 ";
 $least_visited_subjects = query($sql_least_visited_subjects, [$academic_year_id]);
 
-// أفضل المواد أداءً
+// أفضل المواد أداءً - باستخدام الثوابت الموحدة
 $sql_best_subjects_performance = "
-    SELECT s.name as subject_name, (AVG(ve.score) / 3) * 100 as avg_score
+    SELECT s.name as subject_name, (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM visit_evaluations ve
     JOIN visits v ON ve.visit_id = v.id
     JOIN subjects s ON v.subject_id = s.id
     WHERE v.academic_year_id = ? AND ve.score IS NOT NULL" . $date_condition . "
     GROUP BY s.id, s.name
-    HAVING COUNT(v.id) >= 2
+    HAVING COUNT(v.id) >= " . MIN_VISITS_FOR_REPORTS . "
     ORDER BY avg_score DESC
-    LIMIT 3
+    LIMIT " . TOP_SUBJECTS_LIMIT . "
 ";
 $best_subjects_performance = query($sql_best_subjects_performance, [$academic_year_id]);
 
@@ -447,26 +429,26 @@ $best_subjects_performance = query($sql_best_subjects_performance, [$academic_ye
  * إحصائيات الجودة والتميز
  */
 
-// نسبة المعلمين المتميزين (90%+)
+// نسبة المعلمين المتميزين - باستخدام الثوابت الموحدة
 $sql_excellent_teachers = "
     SELECT COUNT(DISTINCT v.teacher_id) as count
     FROM visit_evaluations ve
     JOIN visits v ON ve.visit_id = v.id
     WHERE v.academic_year_id = ? AND ve.score IS NOT NULL" . $date_condition . "
     GROUP BY v.teacher_id
-    HAVING (AVG(ve.score) / 3) * 100 >= 90
+    HAVING (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 >= " . EXCELLENT_THRESHOLD . "
 ";
 $excellent_teachers_result = query($sql_excellent_teachers, [$academic_year_id]);
 $excellent_teachers_count = count($excellent_teachers_result);
 
-// نسبة المعلمين المحتاجين تطوير (<70%)
+// نسبة المعلمين المحتاجين تطوير - باستخدام الثوابت الموحدة
 $sql_needs_improvement_teachers = "
     SELECT COUNT(DISTINCT v.teacher_id) as count
     FROM visit_evaluations ve
     JOIN visits v ON ve.visit_id = v.id
     WHERE v.academic_year_id = ? AND ve.score IS NOT NULL" . $date_condition . "
     GROUP BY v.teacher_id
-    HAVING (AVG(ve.score) / 3) * 100 < 70
+    HAVING (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 < " . GOOD_THRESHOLD . "
 ";
 $needs_improvement_result = query($sql_needs_improvement_teachers, [$academic_year_id]);
 $needs_improvement_count = count($needs_improvement_result);
@@ -569,9 +551,9 @@ $sql_teachers_visited_by_deputy = "
 ";
 $teachers_visited_by_deputy = query($sql_teachers_visited_by_deputy, [$academic_year_id]);
 
-// متوسط أداء المعلمين الذين زارهم المدير
+// متوسط أداء المعلمين الذين زارهم المدير - باستخدام الثوابت الموحدة
 $sql_principal_visited_teachers_avg = "
-    SELECT (AVG(ve.score) / 3) * 100 as avg_score
+    SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM visit_evaluations ve
     JOIN visits v ON ve.visit_id = v.id
     JOIN teachers t_visitor ON v.visitor_person_id = t_visitor.id
@@ -580,9 +562,9 @@ $sql_principal_visited_teachers_avg = "
 $principal_visited_teachers_avg_result = query_row($sql_principal_visited_teachers_avg, [$academic_year_id]);
 $principal_visited_teachers_avg = number_format($principal_visited_teachers_avg_result['avg_score'] ?? 0, 1);
 
-// متوسط أداء المعلمين الذين زارهم النائب الأكاديمي
+// متوسط أداء المعلمين الذين زارهم النائب الأكاديمي - باستخدام الثوابت الموحدة
 $sql_deputy_visited_teachers_avg = "
-    SELECT (AVG(ve.score) / 3) * 100 as avg_score
+    SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM visit_evaluations ve
     JOIN visits v ON ve.visit_id = v.id
     JOIN teachers t_visitor ON v.visitor_person_id = t_visitor.id

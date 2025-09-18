@@ -1,4 +1,15 @@
 <?php
+/**
+ * صفحة إدارة الزيارات الصفية
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - عرض مستويات الأداء للزيارات (ممتاز، جيد جداً، إلخ)
+ * - حساب النسب المئوية باستخدام الثوابت الموحدة
+ * - استبعاد مجال العلوم تلقائياً حسب has_lab
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
+ */
+
 // بدء التخزين المؤقت للمخرجات - سيحل مشكلة Headers already sent
 ob_start();
 
@@ -6,6 +17,7 @@ ob_start();
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
+require_once 'visit_rules.php';
 
 // حماية الصفحة - الوصول للمديرين والمشرفين ومنسقي المواد والمعلمين
 protect_page(['Admin', 'Director', 'Academic Deputy', 'Supervisor', 'Subject Coordinator', 'Teacher']);
@@ -179,12 +191,13 @@ $total_items = query_row($count_sql, $search_params)['total'] ?? 0;
 // حساب إجمالي عدد الصفحات
 $total_pages = ceil($total_items / $items_per_page);
 
-// تحديث استعلام جلب الزيارات ليشمل جميع البيانات المطلوبة
+// تحديث استعلام جلب الزيارات ليشمل جميع البيانات المطلوبة + درجة الأداء
 $visits_sql = "
     SELECT 
         v.id,
         v.visit_date,
         v.visitor_person_id,
+        v.has_lab,
         t.id AS teacher_id,
         t.name AS teacher_name,
         s.name AS school_name,
@@ -192,7 +205,23 @@ $visits_sql = "
         g.name AS grade_name,
         sec.name AS section_name,
         subj.id AS subject_id,
-        subj.name AS subject_name
+        subj.name AS subject_name,
+        -- حساب متوسط الأداء للزيارة باستخدام القوانين الموحدة
+        (SELECT AVG(ve.score) 
+         FROM visit_evaluations ve 
+         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id 
+         WHERE ve.visit_id = v.id 
+         AND ve.score IS NOT NULL 
+         AND (v.has_lab = 1 OR ei.domain_id != " . SCIENCE_DOMAIN_ID . ")
+        ) as avg_score,
+        -- عدد المؤشرات المقيمة
+        (SELECT COUNT(*) 
+         FROM visit_evaluations ve 
+         JOIN evaluation_indicators ei ON ve.indicator_id = ei.id 
+         WHERE ve.visit_id = v.id 
+         AND ve.score IS NOT NULL 
+         AND (v.has_lab = 1 OR ei.domain_id != " . SCIENCE_DOMAIN_ID . ")
+        ) as indicators_count
     FROM 
         visits v
     JOIN 
@@ -215,6 +244,12 @@ $visits_sql = "
 
 try {
     $visits = query($visits_sql, $search_params);
+    
+    // ملاحظة: الاستعلام يتضمن حساب الأداء لكل زيارة مما قد يؤثر على الأداء
+    // في حالة وجود عدد كبير من الزيارات، يُنصح بإضافة فهرسة على:
+    // - visit_evaluations (visit_id, score)
+    // - evaluation_indicators (domain_id)
+    
 } catch (Exception $e) {
     $visits = [];
     $alert_message = show_alert('حدث خطأ أثناء استرجاع البيانات: ' . $e->getMessage(), 'error');
@@ -415,6 +450,171 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
         <?= $alert_message ?>
     <?php endif; ?>
     
+    <!-- إحصائيات سريعة للأداء -->
+    <?php if ($total_items > 0): ?>
+        <?php
+        // استعلام لحساب إحصائيات الأداء لجميع الزيارات الناتجة عن البحث (وليس المعروضة فقط)
+        $all_visits_sql = "
+            SELECT 
+                v.id,
+                v.has_lab,
+                (SELECT AVG(ve.score) 
+                 FROM visit_evaluations ve 
+                 JOIN evaluation_indicators ei ON ve.indicator_id = ei.id 
+                 WHERE ve.visit_id = v.id 
+                 AND ve.score IS NOT NULL 
+                 AND (v.has_lab = 1 OR ei.domain_id != " . SCIENCE_DOMAIN_ID . ")
+                ) as avg_score,
+                (SELECT COUNT(*) 
+                 FROM visit_evaluations ve 
+                 JOIN evaluation_indicators ei ON ve.indicator_id = ei.id 
+                 WHERE ve.visit_id = v.id 
+                 AND ve.score IS NOT NULL 
+                 AND (v.has_lab = 1 OR ei.domain_id != " . SCIENCE_DOMAIN_ID . ")
+                ) as indicators_count
+            FROM visits v
+            JOIN teachers t ON v.teacher_id = t.id
+            JOIN schools s ON v.school_id = s.id
+            JOIN visitor_types vt ON v.visitor_type_id = vt.id
+            JOIN grades g ON v.grade_id = g.id
+            JOIN sections sec ON v.section_id = sec.id
+            JOIN subjects subj ON v.subject_id = subj.id
+            $search_condition
+        ";
+        
+        $all_visits_for_stats = query($all_visits_sql, $search_params);
+        
+        // حساب توزيع مستويات الأداء لجميع الزيارات الناتجة عن البحث
+        $performance_stats = [
+            'excellent' => 0,
+            'very_good' => 0,
+            'good' => 0,
+            'acceptable' => 0,
+            'needs_improvement' => 0,
+            'not_evaluated' => 0
+        ];
+        
+        foreach ($all_visits_for_stats as $visit) {
+            if ($visit['avg_score'] && $visit['indicators_count'] > 0) {
+                $percentage = ($visit['avg_score'] / MAX_INDICATOR_SCORE) * 100;
+                $level = getPerformanceLevel($percentage);
+                
+                switch ($level['grade_ar']) {
+                    case 'ممتاز':
+                        $performance_stats['excellent']++;
+                        break;
+                    case 'جيد جداً':
+                        $performance_stats['very_good']++;
+                        break;
+                    case 'جيد':
+                        $performance_stats['good']++;
+                        break;
+                    case 'مقبول':
+                        $performance_stats['acceptable']++;
+                        break;
+                    default:
+                        $performance_stats['needs_improvement']++;
+                }
+            } else {
+                $performance_stats['not_evaluated']++;
+            }
+        }
+        
+        $total_visits_for_stats = count($all_visits_for_stats);
+        
+        // 🎯 استخدام الدالة الموحدة لضمان نفس النتيجة في جميع الصفحات
+        $overall_avg_percentage = calculateUnifiedOverallPerformance($selected_year_id, $date_condition);
+        $overall_performance_level = $overall_avg_percentage > 0 ? getPerformanceLevel($overall_avg_percentage) : null;
+        ?>
+        
+        <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-chart-bar ml-2 text-blue-600"></i>
+                    إحصائيات الأداء لجميع الزيارات الناتجة عن البحث (<?= $total_visits_for_stats ?> زيارة)
+                </h3>
+                
+                <?php if ($overall_performance_level): ?>
+                <div class="text-center">
+                    <div class="inline-block px-3 py-1 rounded-full text-sm font-semibold <?= $overall_performance_level['bg_class'] ?> <?= $overall_performance_level['color_class'] ?>">
+                        متوسط عام: <?= $overall_avg_percentage ?>%
+                    </div>
+                    <div class="text-xs <?= $overall_performance_level['color_class'] ?> mt-1">
+                        <?= $overall_performance_level['grade_ar'] ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <?php if ($performance_stats['excellent'] > 0): ?>
+                <div class="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div class="text-lg font-bold text-green-600"><?= $performance_stats['excellent'] ?></div>
+                    <div class="text-xs text-green-800">ممتاز</div>
+                    <div class="text-xs text-green-600"><?= round(($performance_stats['excellent'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+                
+                <?php if ($performance_stats['very_good'] > 0): ?>
+                <div class="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div class="text-lg font-bold text-blue-600"><?= $performance_stats['very_good'] ?></div>
+                    <div class="text-xs text-blue-800">جيد جداً</div>
+                    <div class="text-xs text-blue-600"><?= round(($performance_stats['very_good'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+                
+                <?php if ($performance_stats['good'] > 0): ?>
+                <div class="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div class="text-lg font-bold text-yellow-600"><?= $performance_stats['good'] ?></div>
+                    <div class="text-xs text-yellow-800">جيد</div>
+                    <div class="text-xs text-yellow-600"><?= round(($performance_stats['good'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+                
+                <?php if ($performance_stats['acceptable'] > 0): ?>
+                <div class="text-center p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div class="text-lg font-bold text-orange-600"><?= $performance_stats['acceptable'] ?></div>
+                    <div class="text-xs text-orange-800">مقبول</div>
+                    <div class="text-xs text-orange-600"><?= round(($performance_stats['acceptable'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+                
+                <?php if ($performance_stats['needs_improvement'] > 0): ?>
+                <div class="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+                    <div class="text-lg font-bold text-red-600"><?= $performance_stats['needs_improvement'] ?></div>
+                    <div class="text-xs text-red-800">يحتاج تحسين</div>
+                    <div class="text-xs text-red-600"><?= round(($performance_stats['needs_improvement'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+                
+                <?php if ($performance_stats['not_evaluated'] > 0): ?>
+                <div class="text-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="text-lg font-bold text-gray-600"><?= $performance_stats['not_evaluated'] ?></div>
+                    <div class="text-xs text-gray-800">لم يتم التقييم</div>
+                    <div class="text-xs text-gray-600"><?= round(($performance_stats['not_evaluated'] / $total_visits_for_stats) * 100, 1) ?>%</div>
+                </div>
+                <?php endif; ?>
+            </div>
+            
+            <div class="mt-3 text-xs text-gray-500 text-center">
+                <div class="mb-1">
+                    <i class="fas fa-info-circle ml-1"></i>
+                    المستويات محسوبة باستخدام القوانين الموحدة: ممتاز (<?= EXCELLENT_THRESHOLD ?>%+)، جيد جداً (<?= VERY_GOOD_THRESHOLD ?>%+)، جيد (<?= GOOD_THRESHOLD ?>%+)، مقبول (<?= ACCEPTABLE_THRESHOLD ?>%+)
+                </div>
+                <div class="mb-1 text-blue-600">
+                    <i class="fas fa-calculator ml-1"></i>
+                    طريقة الحساب: مجموع النقاط ÷ (مجموع المؤشرات × 3) × 100 (نفس طريقة الصفحة الرئيسية)
+                </div>
+                <?php if ($total_visits_for_stats != count($visits)): ?>
+                <div class="text-purple-600">
+                    <i class="fas fa-list ml-1"></i>
+                    الإحصائيات محسوبة على جميع الزيارات (<?= $total_visits_for_stats ?>) | المعروض في هذه الصفحة: <?= count($visits) ?> زيارة
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+    
     <!-- جدول الزيارات -->
     <div class="bg-white rounded-lg shadow-md p-6">
         <div class="flex justify-between mb-4">
@@ -440,6 +640,7 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                             <th class="px-4 py-2 border text-right">الشعبة</th>
                             <th class="px-4 py-2 border text-right">المدرسة</th>
                             <th class="px-4 py-2 border text-right">الزائر</th>
+                            <th class="px-4 py-2 border text-center">الأداء</th>
                             <th class="px-4 py-2 border text-center">الإجراءات</th>
                         </tr>
                     </thead>
@@ -462,6 +663,25 @@ $visitor_types = query("SELECT id, name FROM visitor_types ORDER BY name");
                                 <td class="px-4 py-2 border"><?= htmlspecialchars($visit['section_name']) ?></td>
                                 <td class="px-4 py-2 border"><?= htmlspecialchars($visit['school_name']) ?></td>
                                 <td class="px-4 py-2 border"><?= htmlspecialchars($visit['visitor_type']) ?></td>
+                                <td class="px-4 py-2 border text-center">
+                                    <?php 
+                                    if ($visit['avg_score'] && $visit['indicators_count'] > 0) {
+                                        // حساب النسبة المئوية باستخدام القوانين الموحدة
+                                        $percentage = ($visit['avg_score'] / MAX_INDICATOR_SCORE) * 100;
+                                        $performance_level = getPerformanceLevel($percentage);
+                                        ?>
+                                        <div class="text-center">
+                                            <div class="inline-block px-2 py-1 rounded-full text-xs font-semibold <?= $performance_level['bg_class'] ?> <?= $performance_level['color_class'] ?>">
+                                                <?= round($percentage, 1) ?>%
+                                            </div>
+                                            <div class="text-xs <?= $performance_level['color_class'] ?> mt-1">
+                                                <?= $performance_level['grade_ar'] ?>
+                                            </div>
+                                        </div>
+                                    <?php } else { ?>
+                                        <span class="text-gray-400 text-xs">لم يتم التقييم</span>
+                                    <?php } ?>
+                                </td>
                                 <td class="px-4 py-2 border text-center">
                                     <div class="flex space-x-2 space-x-reverse justify-center">
                                         <a href="view_visit.php?id=<?= $visit['id'] ?>" class="text-blue-600 hover:text-blue-800" title="عرض">

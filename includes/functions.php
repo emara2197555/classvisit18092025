@@ -110,11 +110,12 @@ function get_grade($average) {
     // تحويل المتوسط إلى نسبة مئوية (من 3 إلى 100%)
     $percentage = ($average / 3) * 100;
     
-    if ($percentage >= 90) return 'ممتاز';
-    if ($percentage >= 80) return 'جيد جداً';
-    if ($percentage >= 65) return 'جيد';
-    if ($percentage >= 50) return 'مقبول';
-    return 'يحتاج إلى تحسين';
+    // استخدام نفس العتبات الموحدة من visit_rules.php
+    if ($percentage >= 90) return 'ممتاز';        // EXCELLENT_THRESHOLD
+    if ($percentage >= 80) return 'جيد جداً';      // VERY_GOOD_THRESHOLD  
+    if ($percentage >= 65) return 'جيد';          // GOOD_THRESHOLD
+    if ($percentage >= 50) return 'مقبول';        // ACCEPTABLE_THRESHOLD
+    return 'يحتاج إلى تحسين';                     // أقل من 50%
 }
 
 /**

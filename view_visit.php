@@ -1,4 +1,16 @@
 <?php
+/**
+ * صفحة عرض تفاصيل الزيارة الصفية
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - حساب أداء الزيارة باستخدام calculateVisitPerformance()
+ * - تحديد مستوى الأداء باستخدام getPerformanceLevel()
+ * - استخدام الثوابت الموحدة في JavaScript
+ * - استبعاد مجال العلوم تلقائياً حسب has_lab
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
+ */
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -6,6 +18,7 @@ ob_start();
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
 require_once 'includes/auth_functions.php';
+require_once 'visit_rules.php';
 
 // حماية الصفحة - جميع المستخدمين المسجلين يمكنهم عرض الزيارات
 protect_page();
@@ -201,53 +214,22 @@ try {
         $evaluations_by_domain[$domain_id][] = $eval;
     }
 
-    // حساب متوسط الأداء الصحيح: مجموع النقاط مقسوم على عدد المؤشرات
-    $total_scores = 0;
-    $valid_indicators_count = 0;
-
-    // استعلام لجلب جميع التقييمات لهذه الزيارة
-    if (($visit['has_lab'] ?? 0) == 0) {
-        $scores_sql = "
-            SELECT ve.score
-            FROM visit_evaluations ve
-            JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
-            WHERE ve.visit_id = ? AND ei.domain_id <> 5
-        ";
-        $scores = query($scores_sql, [$visit_id]);
-    } else {
-        $scores_sql = "
-            SELECT score 
-            FROM visit_evaluations 
-            WHERE visit_id = ?
-        ";
-        $scores = query($scores_sql, [$visit_id]);
-    }
-
-    foreach ($scores as $score_item) {
-        // نستثني المؤشرات غير المقاسة (score = NULL)
-        if ($score_item['score'] !== null) {
-            $total_scores += (float)$score_item['score'];
-            $valid_indicators_count++;
-        }
-    }
-
-    // حساب المتوسط فقط للمؤشرات المقاسة
-    $average_score = $valid_indicators_count > 0 ? round($total_scores / $valid_indicators_count, 2) : 0;
-    // تحويل الدرجة إلى نسبة مئوية (من 3 إلى 100%)
-    $percentage_score = $valid_indicators_count > 0 ? round(($total_scores / ($valid_indicators_count * 3)) * 100, 2) : 0;
+    // 🎯 استخدام الدالة الموحدة لحساب أداء الزيارة
+    $visit_performance = calculateVisitPerformance($visit_id, ($visit['has_lab'] ?? 0) == 1);
     
-    // تحديد التقدير بناءً على النسبة المئوية
+    $average_score = $visit_performance['average_score'];
+    $percentage_score = $visit_performance['percentage'];
+    $valid_indicators_count = $visit_performance['total_indicators'];
+    
+    // 🎯 استخدام دالة getPerformanceLevel الموحدة لتحديد التقدير
     $percentage = $percentage_score;
-    if ($percentage >= 90) {
-        $grade = $texts['excellent'];
-    } elseif ($percentage >= 80) {
-        $grade = $texts['very_good'];
-    } elseif ($percentage >= 65) {
-        $grade = $texts['good'];
-    } elseif ($percentage >= 50) {
-        $grade = $texts['acceptable'];
+    $performance_level = getPerformanceLevel($percentage);
+    
+    // تحديد التقدير بناءً على اللغة
+    if ($subject_is_english) {
+        $grade = $performance_level['grade_en'];
     } else {
-        $grade = $texts['needs_improvement'];
+        $grade = $performance_level['grade_ar'];
     }
 } catch (Exception $e) {
     echo show_alert('حدث خطأ أثناء استرجاع بيانات الزيارة: ' . $e->getMessage(), 'error');
@@ -600,26 +582,10 @@ if ($visit['attendance_type'] == 'remote') {
         <div class="flex flex-col lg:flex-row items-center justify-center space-y-6 lg:space-y-0 lg:space-x-8 lg:space-x-reverse">
             <div class="w-full lg:w-1/3">
                 <?php
-                $bg_color = 'bg-gray-100';
-                $text_color = 'text-gray-800';
-                
-                // تحديد الألوان بناءً على النسبة المئوية بدلاً من المتوسط
-                if ($percentage_score >= 90) {
-                    $bg_color = 'bg-green-100';
-                    $text_color = 'text-green-800';
-                } else if ($percentage_score >= 80) {
-                    $bg_color = 'bg-blue-100';
-                    $text_color = 'text-blue-800';
-                } else if ($percentage_score >= 65) {
-                    $bg_color = 'bg-yellow-100';
-                    $text_color = 'text-yellow-800';
-                } else if ($percentage_score >= 50) {
-                    $bg_color = 'bg-orange-100';
-                    $text_color = 'text-orange-800';
-                } else {
-                    $bg_color = 'bg-red-100';
-                    $text_color = 'text-red-800';
-                }
+                // 🎯 استخدام دالة getPerformanceLevel الموحدة لتحديد الألوان
+                $performance_level = getPerformanceLevel($percentage_score);
+                $bg_color = $performance_level['bg_class'];
+                $text_color = $performance_level['color_class'];
                 ?>
                 <div class="text-center">
                     <div class="final-score text-3xl font-bold <?= $text_color ?> mb-2">
@@ -814,16 +780,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const scorePercentage = <?= $percentage_score ?>;
     const remainingPercentage = 100 - scorePercentage;
     
-    // تحديد اللون بناءً على النتيجة
+    // تحديد اللون بناءً على النتيجة باستخدام العتبات الموحدة
     let chartColor = '#ef4444'; // أحمر للنتيجة المنخفضة
     
-    if (scorePercentage >= 90) {
+    if (scorePercentage >= <?= EXCELLENT_THRESHOLD ?>) {
         chartColor = '#10b981'; // أخضر للممتاز
-    } else if (scorePercentage >= 80) {
+    } else if (scorePercentage >= <?= VERY_GOOD_THRESHOLD ?>) {
         chartColor = '#3b82f6'; // أزرق للجيد جدًا
-    } else if (scorePercentage >= 65) {
+    } else if (scorePercentage >= <?= GOOD_THRESHOLD ?>) {
         chartColor = '#f59e0b'; // أصفر ذهبي للجيد
-    } else if (scorePercentage >= 50) {
+    } else if (scorePercentage >= <?= ACCEPTABLE_THRESHOLD ?>) {
         chartColor = '#f97316'; // برتقالي للمقبول
     }
     

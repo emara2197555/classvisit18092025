@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -65,7 +68,7 @@ $sql = "
         COUNT(DISTINCT v.teacher_id) AS teachers_count,
         
         -- متوسط التخطيط (مجال رقم 1)
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -78,7 +81,7 @@ $sql = "
            AND ve.score IS NOT NULL) AS planning_avg,
         
         -- متوسط تنفيذ الدرس (مجال رقم 2)
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -91,7 +94,7 @@ $sql = "
            AND ve.score IS NOT NULL) AS lesson_execution_avg,
            
         -- متوسط الإدارة الصفية (مجال رقم 3)
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -104,7 +107,7 @@ $sql = "
            AND ve.score IS NOT NULL) AS classroom_management_avg,
            
         -- متوسط التقويم (مجال رقم 4)
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -117,7 +120,7 @@ $sql = "
            AND ve.score IS NOT NULL) AS evaluation_avg,
            
         -- متوسط النشاط العملي (مجال رقم 5)
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          JOIN evaluation_indicators ei ON ve.indicator_id = ei.id
@@ -130,7 +133,7 @@ $sql = "
            AND ve.score IS NOT NULL) AS practical_avg,
            
         -- المتوسط العام
-        (SELECT (SUM(ve.score) / (COUNT(ve.score) * 3)) * 100
+        (SELECT (SUM(ve.score) / (COUNT(ve.score) * " . MAX_INDICATOR_SCORE . ")) * 100
          FROM visit_evaluations ve 
          JOIN visits vs ON ve.visit_id = vs.id
          WHERE vs.subject_id = s.id 

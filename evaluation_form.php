@@ -2,10 +2,18 @@
 /**
  * نموذج تقييم زيارة صفية - نسخة جديدة مبسطة
  * تم إنشاؤها لحل مشكلة نوع الزائر
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - حساب النسب المئوية باستخدام MAX_INDICATOR_SCORE
+ * - عتبات الأداء الموحدة في JavaScript (90%, 80%, 65%, 50%)
+ * - التحقق من صحة الدرجات باستخدام isValidIndicatorScore()
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
  */
 
 require_once 'includes/db_connection.php';
 require_once 'includes/auth_functions.php';
+require_once 'visit_rules.php';
 
 // بدء الجلسة
 session_start();
@@ -109,9 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $score = null; // NULL للمؤشرات غير المقاسة
                     } else {
                         $score = intval($value); // 0, 1, 2, 3
-                        // التأكد من أن النقاط صحيحة
-                        if ($score < 0 || $score > 3) {
-                            continue; // تجاهل القيم غير الصحيحة
+                        // التأكد من أن النقاط صحيحة باستخدام الدالة الموحدة
+                        if (!isValidIndicatorScore($score)) {
+                            throw new Exception("درجة غير صحيحة للمؤشر $indicator_id: $score. يجب أن تكون بين 0 و " . MAX_INDICATOR_SCORE);
                         }
                     }
                     
@@ -916,8 +924,8 @@ function calculateTotal() {
         }
     });
     
-    // حساب النسبة المئوية (بناءً على المؤشرات المقيمة فقط)
-    const maxPossibleScore = totalIndicators * 3; // أقصى نقاط ممكنة للمؤشرات المقيمة فقط
+    // حساب النسبة المئوية (بناءً على المؤشرات المقيمة فقط) - باستخدام الثوابت الموحدة
+    const maxPossibleScore = totalIndicators * <?= MAX_INDICATOR_SCORE ?>; // أقصى نقاط ممكنة للمؤشرات المقيمة فقط
     const percentage = totalIndicators > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
     
     // تحديث العرض
@@ -926,28 +934,29 @@ function calculateTotal() {
     document.getElementById('percentage-score').textContent = percentage + '%';
     
     
-    // تحديد مستوى الأداء
+    // تحديد مستوى الأداء - باستخدام العتبات الموحدة
     let performanceLevel = '';
     let levelColor = '';
     
-    if (percentage >= 90) {
+    if (percentage >= <?= EXCELLENT_THRESHOLD ?>) {
         performanceLevel = 'ممتاز';
         levelColor = 'text-green-600';
-    } else if (percentage >= 80) {
+    } else if (percentage >= <?= VERY_GOOD_THRESHOLD ?>) {
         performanceLevel = 'جيد جداً';
         levelColor = 'text-blue-600';
-    } else if (percentage >= 70) {
+    } else if (percentage >= <?= GOOD_THRESHOLD ?>) {
         performanceLevel = 'جيد';
         levelColor = 'text-yellow-600';
-    } else if (percentage >= 60) {
+    } else if (percentage >= <?= ACCEPTABLE_THRESHOLD ?>) {
         performanceLevel = 'مقبول';
         levelColor = 'text-orange-600';
-        } else {
-        performanceLevel = 'يحتاج تطوير';
+    } else {
+        performanceLevel = 'يحتاج تحسين';
         levelColor = 'text-red-600';
     }
     
-    console.log(`🎯 مستوى الأداء: ${performanceLevel}`);
+    console.log(`🎯 مستوى الأداء: ${performanceLevel} (باستخدام القوانين الموحدة)`);
+    console.log(`📊 العتبات الموحدة: ممتاز(<?= EXCELLENT_THRESHOLD ?>%+), جيد جداً(<?= VERY_GOOD_THRESHOLD ?>%+), جيد(<?= GOOD_THRESHOLD ?>%+), مقبول(<?= ACCEPTABLE_THRESHOLD ?>%+)`);
     
     return { totalScore, percentage, performanceLevel };
 }

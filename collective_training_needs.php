@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -78,8 +81,8 @@ $additional_workshops = [
     'وضع أهداف تعلم تراعي الفروق الفردية للطلبة'
 ];
 
-// المستويات المطلوبة لتحديد الاحتياج التدريبي
-$threshold_score = 2.5; // إذا كان متوسط الدرجات أقل من هذا الرقم يكون هناك احتياج تدريبي
+// المستويات المطلوبة لتحديد الاحتياج التدريبي (استخدام القوانين الموحدة)
+$threshold_score = TRAINING_NEEDS_THRESHOLD; // إذا كان متوسط الدرجات أقل من هذا الرقم يكون هناك احتياج تدريبي
 
 // الحصول على معرف العام الدراسي المحدد من جلسة المستخدم
 if (!isset($_SESSION['selected_academic_year'])) {
@@ -232,7 +235,7 @@ if ($subject_id) {
             ed.id AS domain_id,
             ed.name AS domain_name,
             AVG(ve.score) AS avg_score,
-            (AVG(ve.score) / 3) * 100 AS percentage_score
+            (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS percentage_score
         FROM 
             visit_evaluations ve
         JOIN 
@@ -311,7 +314,7 @@ if ($subject_id) {
                 ei.id AS indicator_id,
                 ei.name AS indicator_name,
                 AVG(ve.score) AS avg_score,
-                (AVG(ve.score) / 3) * 100 AS percentage_score,
+                (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS percentage_score,
                 COUNT(DISTINCT v.id) as visit_count
             FROM 
                 visit_evaluations ve
@@ -585,10 +588,9 @@ if ($subject_id) {
                                             <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 $percentage = $need['percentage_score'];
-                                                $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                              ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
+                                                $performance_level = getPerformanceLevel($percentage);
                                                 ?>
-                                                <div class="inline-block px-3 py-1 rounded-full font-bold <?= $color_class ?>">
+                                                <div class="inline-block px-3 py-1 rounded-full font-bold <?= $performance_level['color_class'] ?>">
                                                     <?= number_format($percentage, 1) ?>%
                                                 </div>
                                             </td>
@@ -604,15 +606,23 @@ if ($subject_id) {
                                 <div class="flex flex-wrap gap-4 text-sm">
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                                        <span class="text-gray-600">ممتاز (<?= EXCELLENT_THRESHOLD ?>% فأكثر)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-blue-100 border border-blue-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">جيد جداً (<?= VERY_GOOD_THRESHOLD ?>% - <?= EXCELLENT_THRESHOLD - 0.1 ?>%)</span>
                                     </div>
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">جيد (60% - 79%)</span>
+                                        <span class="text-gray-600">جيد (<?= GOOD_THRESHOLD ?>% - <?= VERY_GOOD_THRESHOLD - 0.1 ?>%)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-orange-100 border border-orange-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">مقبول (<?= ACCEPTABLE_THRESHOLD ?>% - <?= GOOD_THRESHOLD - 0.1 ?>%)</span>
                                     </div>
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                                        <span class="text-gray-600">يحتاج تحسين (أقل من <?= ACCEPTABLE_THRESHOLD ?>%)</span>
                                     </div>
                                 </div>
                             </div>
@@ -698,8 +708,8 @@ if ($subject_id) {
                                             }
                                         }
                                         
-                                        $avg_score = $total_visits > 0 ? $total_score / $total_visits : 0;
-                                        $percentage_score = ($avg_score / 3) * 100;
+                        $avg_score = $total_visits > 0 ? $total_score / $total_visits : 0;
+                        $percentage_score = ($avg_score / MAX_INDICATOR_SCORE) * 100;
                                     ?>
                                         <tr class="hover:bg-gray-50 transition-colors duration-200">
                                             <td class="border border-gray-300 px-4 py-3 text-right">
@@ -710,11 +720,10 @@ if ($subject_id) {
                                                 <?php
                                                 if (isset($visitor_metrics[15][$indicator_id])) {
                                                     $score = $visitor_metrics[15][$indicator_id];
-                                                    $percentage = number_format($score['percentage_score'], 1);
-                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                                                    echo $percentage . '%';
+                                                    $percentage = $score['percentage_score'];
+                                                    $performance_level = getPerformanceLevel($percentage);
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                                                    echo number_format($percentage, 1) . '%';
                                                     echo '</div>';
                                                     echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
@@ -727,11 +736,10 @@ if ($subject_id) {
                                                 <?php
                                                 if (isset($visitor_metrics[16][$indicator_id])) {
                                                     $score = $visitor_metrics[16][$indicator_id];
-                                                    $percentage = number_format($score['percentage_score'], 1);
-                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                                                    echo $percentage . '%';
+                                                    $percentage = $score['percentage_score'];
+                                                    $performance_level = getPerformanceLevel($percentage);
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                                                    echo number_format($percentage, 1) . '%';
                                                     echo '</div>';
                                                     echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
@@ -744,11 +752,10 @@ if ($subject_id) {
                                                 <?php
                                                 if (isset($visitor_metrics[17][$indicator_id])) {
                                                     $score = $visitor_metrics[17][$indicator_id];
-                                                    $percentage = number_format($score['percentage_score'], 1);
-                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                                                    echo $percentage . '%';
+                                                    $percentage = $score['percentage_score'];
+                                                    $performance_level = getPerformanceLevel($percentage);
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                                                    echo number_format($percentage, 1) . '%';
                                                     echo '</div>';
                                                     echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
@@ -761,11 +768,10 @@ if ($subject_id) {
                                                 <?php
                                                 if (isset($visitor_metrics[18][$indicator_id])) {
                                                     $score = $visitor_metrics[18][$indicator_id];
-                                                    $percentage = number_format($score['percentage_score'], 1);
-                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                                                    echo $percentage . '%';
+                                                    $percentage = $score['percentage_score'];
+                                                    $performance_level = getPerformanceLevel($percentage);
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                                                    echo number_format($percentage, 1) . '%';
                                                     echo '</div>';
                                                     echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                                                 } else {
@@ -790,11 +796,9 @@ if ($subject_id) {
                                             <td class="border border-gray-300 px-4 py-3 text-center">
                                                 <?php
                                                 if ($total_visits > 0) {
-                                                    $percentage = number_format($percentage_score, 1);
-                                                    $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                                                  ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                                                    echo $percentage . '%';
+                                                    $performance_level = getPerformanceLevel($percentage_score);
+                                                    echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                                                    echo number_format($percentage_score, 1) . '%';
                                                     echo '</div>';
                                                 } else {
                                                     echo '<span class="text-gray-400 font-medium">-</span>';
@@ -813,15 +817,23 @@ if ($subject_id) {
                                 <div class="flex flex-wrap gap-4 text-sm">
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-green-100 border border-green-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">ممتاز (80% فأكثر)</span>
+                                        <span class="text-gray-600">ممتاز (<?= EXCELLENT_THRESHOLD ?>% فأكثر)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-blue-100 border border-blue-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">جيد جداً (<?= VERY_GOOD_THRESHOLD ?>% - <?= EXCELLENT_THRESHOLD - 0.1 ?>%)</span>
                                     </div>
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">جيد (60% - 79%)</span>
+                                        <span class="text-gray-600">جيد (<?= GOOD_THRESHOLD ?>% - <?= VERY_GOOD_THRESHOLD - 0.1 ?>%)</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <div class="w-4 h-4 bg-orange-100 border border-orange-300 rounded-full mr-2"></div>
+                                        <span class="text-gray-600">مقبول (<?= ACCEPTABLE_THRESHOLD ?>% - <?= GOOD_THRESHOLD - 0.1 ?>%)</span>
                                     </div>
                                     <div class="flex items-center">
                                         <div class="w-4 h-4 bg-red-100 border border-red-300 rounded-full mr-2"></div>
-                                        <span class="text-gray-600">يحتاج تحسين (أقل من 60%)</span>
+                                        <span class="text-gray-600">يحتاج تحسين (أقل من <?= ACCEPTABLE_THRESHOLD ?>%)</span>
                                     </div>
                                 </div>
                             </div>
@@ -951,11 +963,10 @@ if ($subject_id) {
                         <?php
                         if (isset($visitor_metrics[15][$indicator_id])) {
                             $score = $visitor_metrics[15][$indicator_id];
-                            $percentage = number_format($score['percentage_score'], 1);
-                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                            echo $percentage . '%';
+                            $percentage = $score['percentage_score'];
+                            $performance_level = getPerformanceLevel($percentage);
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                            echo number_format($percentage, 1) . '%';
                             echo '</div>';
                             echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
@@ -968,11 +979,10 @@ if ($subject_id) {
                         <?php
                         if (isset($visitor_metrics[16][$indicator_id])) {
                             $score = $visitor_metrics[16][$indicator_id];
-                            $percentage = number_format($score['percentage_score'], 1);
-                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                            echo $percentage . '%';
+                            $percentage = $score['percentage_score'];
+                            $performance_level = getPerformanceLevel($percentage);
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                            echo number_format($percentage, 1) . '%';
                             echo '</div>';
                             echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
@@ -985,11 +995,10 @@ if ($subject_id) {
                         <?php
                         if (isset($visitor_metrics[17][$indicator_id])) {
                             $score = $visitor_metrics[17][$indicator_id];
-                            $percentage = number_format($score['percentage_score'], 1);
-                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                            echo $percentage . '%';
+                            $percentage = $score['percentage_score'];
+                            $performance_level = getPerformanceLevel($percentage);
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                            echo number_format($percentage, 1) . '%';
                             echo '</div>';
                             echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {
@@ -1002,11 +1011,10 @@ if ($subject_id) {
                         <?php
                         if (isset($visitor_metrics[18][$indicator_id])) {
                             $score = $visitor_metrics[18][$indicator_id];
-                            $percentage = number_format($score['percentage_score'], 1);
-                            $color_class = $percentage >= 80 ? 'text-green-700 bg-green-100' : 
-                                          ($percentage >= 60 ? 'text-yellow-700 bg-yellow-100' : 'text-red-700 bg-red-100');
-                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $color_class . '">';
-                            echo $percentage . '%';
+                            $percentage = $score['percentage_score'];
+                            $performance_level = getPerformanceLevel($percentage);
+                            echo '<div class="inline-block px-3 py-1 rounded-full font-bold ' . $performance_level['color_class'] . '">';
+                            echo number_format($percentage, 1) . '%';
                             echo '</div>';
                             echo '<div class="text-xs text-gray-500 mt-1">(' . $score['visit_count'] . ' زيارة)</div>';
                         } else {

@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -98,8 +101,8 @@ $workshops_mapping = [
     23 => 'مهارات إدارة الوقت بشكل متوازن بين الشرح والتفاعل والتقييم.'
 ];
 
-// المستوى المطلوب للاعتبار كخبير (نسبة مئوية ≥ 90%)
-$expert_threshold = 90;
+// المستوى المطلوب للاعتبار كخبير (استخدام القوانين الموحدة)
+$expert_threshold = EXCELLENT_THRESHOLD;
 
 // جلب المعلمين المتميزين في كل مؤشر
 $expert_trainers_sql = "
@@ -112,7 +115,7 @@ $expert_trainers_sql = "
         t.name AS teacher_name,
         s.name AS subject_name,
         AVG(ve.score) AS avg_score,
-        (AVG(ve.score) * (100/3)) AS percentage_score,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS percentage_score,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         visit_evaluations ve
@@ -269,7 +272,7 @@ $top_domain_count = !empty($domain_stats) ? reset($domain_stats) : 0;
             <?php if (empty($expert_trainers)): ?>
                 <br><br><span class="text-orange-600">
                 <i class="fas fa-info-circle mr-1"></i>
-                لم تصل بعد للحد الأدنى للتميز في أي مؤشر (85% مع زيارتين على الأقل). 
+                لم تصل بعد للحد الأدنى للتميز في أي مؤشر (<?= EXCELLENT_THRESHOLD ?>% مع زيارتين على الأقل). 
                 استمر في التطوير لتصبح مدرباً معتمداً!
                 </span>
             <?php endif; ?>
@@ -383,13 +386,9 @@ $top_domain_count = !empty($domain_stats) ? reset($domain_stats) : 0;
                                             $grade_class = '';
                                             $grade_text = '';
                                             
-                                            if ($percentage >= 95) {
-                                                $grade_class = 'bg-green-100 text-green-800';
-                                                $grade_text = 'ممتاز مرتفع';
-                                            } elseif ($percentage >= 90) {
-                                                $grade_class = 'bg-green-100 text-green-700';
-                                                $grade_text = 'ممتاز';
-                                            }
+                            $performance_level = getPerformanceLevel($percentage);
+                            $grade_class = $performance_level['color_class'];
+                            $grade_text = $performance_level['grade_ar'];
                                         ?>
                                         <tr class="hover:bg-gray-50">
                                             <td class="py-4 px-4">

@@ -1,11 +1,20 @@
 <?php
 /**
  * لوحة تحكم المنسق
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - حساب النسب المئوية للأداء
+ * - تحديد مستويات الأداء (ممتاز، جيد جداً، إلخ)
+ * - ثوابت التقييم الموحدة
+ * - دالة get_grade() في functions.php متوافقة مع نفس العتبات
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
  */
 
 // تضمين ملفات النظام
 require_once 'includes/auth_functions.php';
 require_once 'includes/functions.php';
+require_once 'visit_rules.php';
 
 // حماية الصفحة للمنسقين فقط
 protect_page(['Subject Coordinator']);
@@ -80,7 +89,7 @@ if ($subject_id && $school_id) {
     $stats['visits_this_month'] = 0;
 }
 
-// متوسط الأداء للمادة
+// متوسط الأداء للمادة (باستخدام الدوال الموحدة)
 if ($subject_id && $school_id) {
     $avg_performance = query_row("
         SELECT AVG(visit_scores.avg_score) as avg_score
@@ -93,7 +102,10 @@ if ($subject_id && $school_id) {
         INNER JOIN teachers t ON v.teacher_id = t.id
         WHERE v.subject_id = ? AND v.school_id = ? AND t.job_title = 'معلم'
     ", [$subject_id, $school_id]);
-    $stats['avg_performance'] = $avg_performance['avg_score'] ? round(($avg_performance['avg_score'] / 3) * 100, 1) : 0;
+    
+    // استخدام الدالة الموحدة لحساب النسبة المئوية
+    $avg_score = $avg_performance['avg_score'] ?? 0;
+    $stats['avg_performance'] = $avg_score ? round(($avg_score / MAX_INDICATOR_SCORE) * 100, 1) : 0;
 } else {
     $stats['avg_performance'] = 0;
 }
@@ -146,8 +158,45 @@ if ($subject_id && $school_id) {
         ORDER BY 
             visits_count DESC, t.name
     ", [$subject_id, $subject_id, $school_id]);
+    
+    // حساب توزيع مستويات الأداء
+    $performance_distribution = [
+        'excellent' => 0,
+        'very_good' => 0, 
+        'good' => 0,
+        'acceptable' => 0,
+        'needs_improvement' => 0,
+        'no_visits' => 0
+    ];
+    
+    foreach ($teachers_performance as $teacher) {
+        if ($teacher['visits_count'] > 0) {
+            $percentage = ($teacher['avg_score'] / MAX_INDICATOR_SCORE) * 100;
+            $level = getPerformanceLevel($percentage);
+            
+            switch ($level['grade_ar']) {
+                case 'ممتاز':
+                    $performance_distribution['excellent']++;
+                    break;
+                case 'جيد جداً':
+                    $performance_distribution['very_good']++;
+                    break;
+                case 'جيد':
+                    $performance_distribution['good']++;
+                    break;
+                case 'مقبول':
+                    $performance_distribution['acceptable']++;
+                    break;
+                default:
+                    $performance_distribution['needs_improvement']++;
+            }
+        } else {
+            $performance_distribution['no_visits']++;
+        }
+    }
 } else {
     $teachers_performance = [];
+    $performance_distribution = [];
 }
 
 // الموجهين المخصصين للمنسق
@@ -213,12 +262,28 @@ require_once 'includes/header.php';
     </div>
 
     <!-- متوسط الأداء -->
-    <div class="bg-gradient-to-br from-orange-500 to-red-500 text-white rounded-xl p-6 shadow-lg">
+    <?php 
+    $avg_percentage = $stats['avg_performance'];
+    $avg_performance_level = getPerformanceLevel($avg_percentage);
+    
+    // تحديد لون الخلفية حسب مستوى الأداء
+    $gradient_colors = [
+        'ممتاز' => 'from-green-500 to-green-600',
+        'جيد جداً' => 'from-blue-500 to-blue-600', 
+        'جيد' => 'from-yellow-500 to-yellow-600',
+        'مقبول' => 'from-orange-500 to-orange-600',
+        'يحتاج تحسين' => 'from-red-500 to-red-600'
+    ];
+    $bg_gradient = $gradient_colors[$avg_performance_level['grade_ar']] ?? 'from-gray-500 to-gray-600';
+    ?>
+    <div class="bg-gradient-to-br <?= $bg_gradient ?> text-white rounded-xl p-6 shadow-lg">
         <div class="flex items-center justify-between">
             <div>
                 <h3 class="text-lg font-semibold mb-2">متوسط الأداء</h3>
-                <p class="text-3xl font-bold"><?= $stats['avg_performance'] ?>%</p>
-                <p class="text-orange-200 text-sm mt-1">للمادة بشكل عام</p>
+                <p class="text-3xl font-bold"><?= $avg_percentage ?>%</p>
+                <p class="text-white opacity-80 text-sm mt-1">
+                    <?= $avg_performance_level['grade_ar'] ?> - للمادة بشكل عام
+                </p>
             </div>
             <div class="bg-white bg-opacity-20 rounded-full p-3">
                 <i class="fas fa-chart-line text-2xl"></i>
@@ -251,12 +316,22 @@ require_once 'includes/header.php';
                             <div class="text-left">
                                 <?php 
                                 if ($teacher['visits_count'] > 0) {
-                                    $score = $teacher['avg_score'] ? round(($teacher['avg_score'] / 3) * 100, 1) : 0;
-                                    $color = $score >= 80 ? 'green' : ($score >= 60 ? 'yellow' : 'red');
+                                    $avg_score = $teacher['avg_score'] ?? 0;
+                                    $percentage = $avg_score ? round(($avg_score / MAX_INDICATOR_SCORE) * 100, 1) : 0;
+                                    
+                                    // استخدام الدالة الموحدة لتحديد مستوى الأداء
+                                    $performance_level = getPerformanceLevel($percentage);
+                                    $color_class = str_replace('text-', '', $performance_level['color_class']);
+                                    $color = explode('-', $color_class)[0]; // استخراج اللون الأساسي
                                     ?>
-                                    <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
-                                        <?= $score ?>%
-                                    </span>
+                                    <div class="text-center">
+                                        <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-3 py-1 rounded-full font-bold">
+                                            <?= $percentage ?>%
+                                        </span>
+                                        <div class="text-xs <?= $performance_level['color_class'] ?> mt-1">
+                                            <?= $performance_level['grade_ar'] ?>
+                                        </div>
+                                    </div>
                                 <?php } else { ?>
                                     <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm">
                                         لا توجد زيارات
@@ -299,13 +374,21 @@ require_once 'includes/header.php';
                             <?php if ($visit['avg_score']): ?>
                                 <div class="text-left">
                                     <?php 
-                                    $total_score = $visit['avg_score'];
-                                    $color = $total_score >= 2.4 ? 'green' : ($total_score >= 1.8 ? 'yellow' : 'red');
-                                    $percentage = ($total_score / 3) * 100; // تحويل النتيجة من 3 إلى نسبة مئوية
+                                    $avg_score = $visit['avg_score'];
+                                    $percentage = ($avg_score / MAX_INDICATOR_SCORE) * 100;
+                                    
+                                    // استخدام الدالة الموحدة لتحديد مستوى الأداء
+                                    $performance_level = getPerformanceLevel($percentage);
+                                    $color = explode('-', str_replace('text-', '', $performance_level['color_class']))[0];
                                     ?>
-                                    <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-2 py-1 rounded text-xs font-semibold">
-                                        <?= round($percentage, 1) ?>%
-                                    </span>
+                                    <div class="text-center">
+                                        <span class="bg-<?= $color ?>-100 text-<?= $color ?>-800 px-2 py-1 rounded text-xs font-semibold">
+                                            <?= round($percentage, 1) ?>%
+                                        </span>
+                                        <div class="text-xs <?= $performance_level['color_class'] ?> mt-1">
+                                            <?= $performance_level['grade_ar'] ?>
+                                        </div>
+                                    </div>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -322,6 +405,71 @@ require_once 'includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- توزيع مستويات الأداء -->
+<?php if (!empty($performance_distribution) && array_sum($performance_distribution) > 0): ?>
+<div class="mt-8 bg-white rounded-xl shadow-lg p-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+        <i class="fas fa-chart-pie text-indigo-600 ml-3"></i>
+        توزيع مستويات الأداء للمعلمين
+    </h2>
+    
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <?php if ($performance_distribution['excellent'] > 0): ?>
+        <div class="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+            <div class="text-2xl font-bold text-green-600"><?= $performance_distribution['excellent'] ?></div>
+            <div class="text-sm text-green-800">ممتاز</div>
+            <div class="text-xs text-green-600"><?= EXCELLENT_THRESHOLD ?>%+</div>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($performance_distribution['very_good'] > 0): ?>
+        <div class="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="text-2xl font-bold text-blue-600"><?= $performance_distribution['very_good'] ?></div>
+            <div class="text-sm text-blue-800">جيد جداً</div>
+            <div class="text-xs text-blue-600"><?= VERY_GOOD_THRESHOLD ?>%+</div>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($performance_distribution['good'] > 0): ?>
+        <div class="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div class="text-2xl font-bold text-yellow-600"><?= $performance_distribution['good'] ?></div>
+            <div class="text-sm text-yellow-800">جيد</div>
+            <div class="text-xs text-yellow-600"><?= GOOD_THRESHOLD ?>%+</div>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($performance_distribution['acceptable'] > 0): ?>
+        <div class="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <div class="text-2xl font-bold text-orange-600"><?= $performance_distribution['acceptable'] ?></div>
+            <div class="text-sm text-orange-800">مقبول</div>
+            <div class="text-xs text-orange-600"><?= ACCEPTABLE_THRESHOLD ?>%+</div>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($performance_distribution['needs_improvement'] > 0): ?>
+        <div class="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+            <div class="text-2xl font-bold text-red-600"><?= $performance_distribution['needs_improvement'] ?></div>
+            <div class="text-sm text-red-800">يحتاج تحسين</div>
+            <div class="text-xs text-red-600">&lt;<?= ACCEPTABLE_THRESHOLD ?>%</div>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($performance_distribution['no_visits'] > 0): ?>
+        <div class="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="text-2xl font-bold text-gray-600"><?= $performance_distribution['no_visits'] ?></div>
+            <div class="text-sm text-gray-800">بدون زيارات</div>
+            <div class="text-xs text-gray-600">لم يتم تقييمهم</div>
+        </div>
+        <?php endif; ?>
+    </div>
+    
+    <div class="mt-4 text-sm text-gray-600 text-center">
+        <i class="fas fa-info-circle ml-1"></i>
+        المستويات محسوبة باستخدام القوانين الموحدة من visit_rules.php
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- قسم الروابط السريعة -->
 <div class="mt-8 bg-gradient-to-r from-gray-100 to-gray-200 rounded-xl p-6">

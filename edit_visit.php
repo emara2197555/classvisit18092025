@@ -1,10 +1,22 @@
 <?php
+/**
+ * صفحة تعديل الزيارة الصفية
+ * 
+ * تستخدم هذه الصفحة ملف visit_rules.php للقوانين الموحدة:
+ * - استبعاد مجال العلوم باستخدام SCIENCE_DOMAIN_ID
+ * - التحقق من صحة الدرجات باستخدام isValidIndicatorScore()
+ * - استخدام MAX_INDICATOR_SCORE للتحقق من الحد الأقصى
+ * 
+ * @version 2.0 - محدثة لاستخدام القوانين الموحدة
+ */
+
 // بدء التخزين المؤقت للمخرجات لمنع مشكلة "headers already sent"
 ob_start();
 
 // تضمين ملفات الاتصال بقاعدة البيانات والوظائف المشتركة
 require_once 'includes/db_connection.php';
 require_once 'includes/functions.php';
+require_once 'visit_rules.php';
 
 // التحقق من وجود معرف الزيارة
 $visit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -151,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 visitor_type_id = ?,
                 visitor_person_id = ?,
                 visit_date = ?,
+                general_notes = ?,
                 recommendation_notes = ?,
                 appreciation_notes = ?,
                 updated_at = NOW(),
@@ -168,8 +181,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['visitor_type_id'],
             $_POST['visitor_person_id'],
             $_POST['visit_date'],
-            $_POST['recommendation_notes'],
-            $_POST['appreciation_notes'],
+            $_POST['general_notes'] ?? '',
+            $_POST['recommendation_notes'] ?? '',
+            $_POST['appreciation_notes'] ?? '',
             $_POST['academic_year_id'],
             $visit_id
         ];
@@ -182,16 +196,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $evaluation_id = (int)substr($key, strlen('score_'));
                 // السماح بقيمة فارغة لتعني NULL (لم يتم قياسه)
                 $score = ($value === '' ? null : (int)$value);
+                
+                // التحقق من صحة الدرجة باستخدام الدالة الموحدة
+                if ($score !== null && !isValidIndicatorScore($score)) {
+                    throw new Exception("درجة غير صحيحة للمؤشر: $score. يجب أن تكون بين 0 و " . MAX_INDICATOR_SCORE);
+                }
                 $notes = $_POST['notes_' . $evaluation_id] ?? '';
                 $recommendation_id = $_POST['recommendation_' . $evaluation_id] ?? null;
                 
-                // إذا لم يكن هناك معمل، نتجاهل مؤشرات مجال المعمل (domain_id = 5)
-                if ((int)($visit['has_lab'] ?? 0) === 0) {
-                    $domain_for_eval = $evaluation_domain_map[$evaluation_id] ?? null;
-                    if ($domain_for_eval === 5) {
-                        continue;
-                    }
-                }
+                // TEMPORARY: السماح بتعديل مؤشرات مجال العلوم مؤقتاً لتصحيح البيانات
+                // إذا لم يكن هناك معمل، نتجاهل مؤشرات مجال المعمل (باستخدام الثابت الموحد)
+                // if ((int)($visit['has_lab'] ?? 0) === 0) {
+                //     $domain_for_eval = $evaluation_domain_map[$evaluation_id] ?? null;
+                //     if ($domain_for_eval === SCIENCE_DOMAIN_ID) {
+                //         continue;
+                //     }
+                // }
                 
                 // تحديث التقييم
                 $update_evaluation_query = (
@@ -386,16 +406,46 @@ require_once 'includes/header.php';
                 </div>
                 
                 <!-- انصح المعلم -->
-                <div class="mb-4">
-                    <label for="recommendation_notes" class="block mb-1"><?= $texts['i_recommend'] ?></label>
-                    <textarea id="recommendation_notes" name="recommendation_notes" rows="3" class="w-full border border-gray-300 rounded-md"><?= htmlspecialchars($visit['recommendation_notes'] ?? '') ?></textarea>
+                <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <label for="recommendation_notes" class="block mb-2 text-blue-800 font-semibold">
+                        <i class="fas fa-lightbulb ml-2"></i>
+                        <?= $texts['i_recommend'] ?>
+                    </label>
+                    <textarea id="recommendation_notes" name="recommendation_notes" rows="4" 
+                              class="w-full border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="<?= $subject_is_english ? 'Enter your recommendations for the teacher...' : 'اكتب توصياتك للمعلم هنا...' ?>"><?= htmlspecialchars($visit['recommendation_notes'] ?? '') ?></textarea>
+                </div>
+                
+                <!-- ملاحظات عامة -->
+                <div class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label for="general_notes" class="block mb-2 text-gray-800 font-semibold">
+                        <i class="fas fa-sticky-note ml-2"></i>
+                        <?= $texts['general_notes'] ?>
+                    </label>
+                    <textarea id="general_notes" name="general_notes" rows="3" 
+                              class="w-full border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                              placeholder="<?= $subject_is_english ? 'Enter general notes about the visit...' : 'اكتب ملاحظات عامة حول الزيارة...' ?>"><?= htmlspecialchars($visit['general_notes'] ?? '') ?></textarea>
                 </div>
                 
                 <!-- اشكر المعلم -->
-                <div class="mb-4">
-                    <label for="appreciation_notes" class="block mb-1"><?= $texts['i_thank'] ?></label>
-                    <textarea id="appreciation_notes" name="appreciation_notes" rows="3" class="w-full border border-gray-300 rounded-md"><?= htmlspecialchars($visit['appreciation_notes'] ?? '') ?></textarea>
+                <div class="mb-4 bg-green-50 p-4 rounded-lg border border-green-200">
+                    <label for="appreciation_notes" class="block mb-2 text-green-800 font-semibold">
+                        <i class="fas fa-heart ml-2"></i>
+                        <?= $texts['i_thank'] ?>
+                    </label>
+                    <textarea id="appreciation_notes" name="appreciation_notes" rows="4" 
+                              class="w-full border border-green-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                              placeholder="<?= $subject_is_english ? 'Enter your appreciation points for the teacher...' : 'اكتب نقاط الشكر والتقدير للمعلم هنا...' ?>"><?= htmlspecialchars($visit['appreciation_notes'] ?? '') ?></textarea>
                 </div>
+            </div>
+        </div>
+        
+        <!-- تنبيه مؤقت -->
+        <div class="mb-4 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>تنبيه مؤقت:</strong> 
+                <span class="mr-2">جزء المعمل (النشاط العملي) معروض مؤقتاً لتصحيح البيانات الخاطئة</span>
             </div>
         </div>
         
@@ -405,10 +455,11 @@ require_once 'includes/header.php';
             
             <?php foreach ($domains as $domain): ?>
                 <?php 
+                // TEMPORARY: إظهار مجال العلوم مؤقتاً لتصحيح البيانات الخاطئة
                 // إذا لم يكن هناك معمل (has_lab = 0) نتخطى عرض مجال المعمل (id = 5)
-                if (($visit['has_lab'] ?? 0) == 0 && (int)$domain['id'] === 5) { 
-                    continue; 
-                } 
+                // if (($visit['has_lab'] ?? 0) == 0 && (int)$domain['id'] === 5) { 
+                //     continue; 
+                // } 
                 ?>
                 <div class="mb-6">
                     <?php 

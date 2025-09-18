@@ -3,7 +3,13 @@
  * ملف بيانات الرسوم البيانية للوحة القيادة
  * 
  * يحتوي على استعلامات جلب بيانات الرسوم البيانية
+ * محدث لاستخدام القوانين الموحدة من visit_rules.php
+ * 
+ * @version 2.0 - محدث للقوانين الموحدة
  */
+
+// تضمين القوانين الموحدة
+require_once __DIR__ . '/../visit_rules.php';
 
 // الحصول على معرف العام الدراسي المحدد إذا لم يكن موجودًا بالفعل
 if (!isset($academic_year_id) || !isset($date_condition)) {
@@ -18,7 +24,7 @@ if (!isset($academic_year_id) || !isset($date_condition)) {
 $sql_domains_performance = "
     SELECT 
         ed.name as domain_name, 
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 
@@ -65,7 +71,7 @@ $domains_chart_data = [
 $sql_performance_over_time = "
     SELECT 
         DATE_FORMAT(v.visit_date, '%Y-%m') as month,
-        (AVG(ve.score) / 3) * 100 as avg_score,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score,
         COUNT(*) as visit_count
     FROM 
         visit_evaluations ve
@@ -172,7 +178,7 @@ $performance_over_time_chart_data = [
 $sql_level_performance = "
     SELECT 
         el.name as level_name, 
-        (AVG(ve.score) / 3) * 100 as avg_score
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 as avg_score
     FROM 
         visit_evaluations ve
     JOIN 

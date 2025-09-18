@@ -1,4 +1,7 @@
 <?php
+// استخدام القوانين الموحدة لنظام الزيارات الصفية
+require_once 'visit_rules.php';
+
 // بدء التخزين المؤقت للمخرجات
 ob_start();
 
@@ -113,7 +116,7 @@ $visits = query("
         vt.name AS visitor_type,
         CONCAT(t.name, ' (', vt.name, ')') AS visitor_name,
         v.total_score,
-        (SELECT (AVG(ve.score) / 3) * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
+        (SELECT (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 FROM visit_evaluations ve WHERE ve.visit_id = v.id AND ve.score IS NOT NULL) AS avg_percentage
     FROM 
         visits v
     JOIN 
@@ -141,7 +144,7 @@ $domain_visits = query("
         v.visit_date,
         d.id AS domain_id,
         d.name AS domain_name,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage,
         COUNT(ve.score) AS evaluated_indicators
     FROM 
         visits v
@@ -194,7 +197,7 @@ $domains_avg = query("
     SELECT 
         d.id,
         d.name,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage
     FROM 
         evaluation_domains d
     JOIN 
@@ -232,7 +235,7 @@ $weakest_indicators = query("
         i.name,
         d.name as domain_name,
         AVG(ve.score) AS avg_score,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -266,7 +269,7 @@ $strongest_indicators = query("
         i.name,
         d.name as domain_name,
         AVG(ve.score) AS avg_score,
-        (AVG(ve.score) / 3) * 100 AS avg_percentage,
+        (AVG(ve.score) / " . MAX_INDICATOR_SCORE . ") * 100 AS avg_percentage,
         COUNT(DISTINCT v.id) AS visits_count
     FROM 
         evaluation_indicators i
@@ -550,7 +553,16 @@ $common_recommendations = query("
                         <?php foreach ($domains_avg as $index => $domain): ?>
                             <div style="margin: 3px 0; padding: 2px; background: <?= $index % 2 == 0 ? '#f8fafc' : 'white' ?>;">
                                 <strong><?= htmlspecialchars($domain['name']) ?>:</strong> 
-                                <span style="color: <?= $domain['avg_percentage'] >= 80 ? '#16a34a' : ($domain['avg_percentage'] >= 60 ? '#ca8a04' : '#dc2626') ?>;">
+                                <?php 
+                                $performance_level = getPerformanceLevel($domain['avg_percentage']);
+                                $color_style = '';
+                                if (strpos($performance_level['color_class'], 'text-green') !== false) $color_style = '#16a34a';
+                                elseif (strpos($performance_level['color_class'], 'text-blue') !== false) $color_style = '#2563eb';
+                                elseif (strpos($performance_level['color_class'], 'text-yellow') !== false) $color_style = '#ca8a04';
+                                elseif (strpos($performance_level['color_class'], 'text-orange') !== false) $color_style = '#ea580c';
+                                else $color_style = '#dc2626';
+                                ?>
+                                <span style="color: <?= $color_style ?>;">
                                     <?= number_format($domain['avg_percentage'], 1) ?>%
                                 </span>
                             </div>
@@ -617,11 +629,19 @@ $common_recommendations = query("
                                             <td style="border: 1px solid #d1d5db; padding: 2px;">
                                                 <?= htmlspecialchars($visit['subject_name']) ?>
                                             </td>
-                                            <td style="border: 1px solid #d1d5db; padding: 2px; text-align: center; color: <?= $visit['avg_percentage'] >= 80 ? '#16a34a' : ($visit['avg_percentage'] >= 60 ? '#ca8a04' : '#dc2626') ?>;">
+                                            <td style="border: 1px solid #d1d5db; padding: 2px; text-align: center; color: <?php 
+                                                $performance_level = getPerformanceLevel($visit['avg_percentage']);
+                                                $color_style = '';
+                                                if (strpos($performance_level['color_class'], 'text-green') !== false) echo '#16a34a';
+                                                elseif (strpos($performance_level['color_class'], 'text-blue') !== false) echo '#2563eb';
+                                                elseif (strpos($performance_level['color_class'], 'text-yellow') !== false) echo '#ca8a04';
+                                                elseif (strpos($performance_level['color_class'], 'text-orange') !== false) echo '#ea580c';
+                                                else echo '#dc2626';
+                                            ?>;">
                                                 <?= number_format($visit['avg_percentage'], 1) ?>%
                                             </td>
                                             <td style="border: 1px solid #d1d5db; padding: 2px;">
-                                                <?= get_grade($visit['avg_percentage'] * 3 / 100) ?>
+                                                <?= get_grade($visit['avg_percentage']) ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

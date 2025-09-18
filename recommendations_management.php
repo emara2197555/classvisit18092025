@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // إضافة توصية جديدة
             $indicator_id = $_POST['indicator_id'] ?? null;
             $text = trim($_POST['text'] ?? '');
+            $text_en = trim($_POST['text_en'] ?? '');
             $sort_order = $_POST['sort_order'] ?? 0;
             
             // التحقق من وجود البيانات الأساسية
@@ -39,9 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // إضافة التوصية إلى قاعدة البيانات
-            $sql = "INSERT INTO recommendations (indicator_id, text, sort_order, created_at, updated_at) 
-                    VALUES (?, ?, ?, NOW(), NOW())";
-            execute($sql, [$indicator_id, $text, $sort_order]);
+            $sql = "INSERT INTO recommendations (indicator_id, text, text_en, sort_order, created_at, updated_at) 
+                    VALUES (?, ?, ?, ?, NOW(), NOW())";
+            execute($sql, [$indicator_id, $text, $text_en, $sort_order]);
             
             $_SESSION['success_message'] = "تمت إضافة التوصية بنجاح";
             header('Location: recommendations_management.php');
@@ -52,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $recommendation_id = $_POST['recommendation_id'] ?? null;
             $indicator_id = $_POST['indicator_id'] ?? null;
             $text = trim($_POST['text'] ?? '');
+            $text_en = trim($_POST['text_en'] ?? '');
             $sort_order = $_POST['sort_order'] ?? 0;
             
             if (!$recommendation_id || !$indicator_id || !$text) {
@@ -66,9 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // تحديث التوصية في قاعدة البيانات
             $sql = "UPDATE recommendations 
-                    SET indicator_id = ?, text = ?, sort_order = ?, updated_at = NOW() 
+                    SET indicator_id = ?, text = ?, text_en = ?, sort_order = ?, updated_at = NOW() 
                     WHERE id = ?";
-            execute($sql, [$indicator_id, $text, $sort_order, $recommendation_id]);
+            execute($sql, [$indicator_id, $text, $text_en, $sort_order, $recommendation_id]);
             
             $_SESSION['success_message'] = "تم تعديل التوصية بنجاح";
             header('Location: recommendations_management.php');
@@ -247,7 +249,8 @@ require_once 'includes/header.php';
                     <tr>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المجال</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المؤشر</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نص التوصية</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نص التوصية (عربي)</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نص التوصية (إنجليزي)</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ترتيب العرض</th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">الإجراءات</th>
                     </tr>
@@ -265,6 +268,12 @@ require_once 'includes/header.php';
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-900 recommendation-text">
                                 <?= htmlspecialchars($rec['text']) ?>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-600 recommendation-text-en">
+                                <?= htmlspecialchars($rec['text_en'] ?? '') ?>
+                                <?php if (empty($rec['text_en'])): ?>
+                                    <span class="text-gray-400 italic">غير متوفر</span>
+                                <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">
                                 <?= $rec['sort_order'] ?>
@@ -319,10 +328,17 @@ require_once 'includes/header.php';
                 </div>
                 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">نص التوصية *</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">نص التوصية (عربي) *</label>
                     <textarea id="modal_text" name="text" rows="4" 
                               class="w-full border border-gray-300 rounded-md px-3 py-2" 
-                              placeholder="أدخل نص التوصية..." required></textarea>
+                              placeholder="أدخل نص التوصية باللغة العربية..." required></textarea>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">نص التوصية (إنجليزي)</label>
+                    <textarea id="modal_text_en" name="text_en" rows="4" 
+                              class="w-full border border-gray-300 rounded-md px-3 py-2" 
+                              placeholder="Enter recommendation text in English..."></textarea>
                 </div>
                 
                 <div class="mb-6">
@@ -395,6 +411,7 @@ function showEditModal(recommendation) {
     updateModalIndicators();
     document.getElementById('modal_indicator').value = recommendation.indicator_id;
     document.getElementById('modal_text').value = recommendation.text;
+    document.getElementById('modal_text_en').value = recommendation.text_en || '';
     document.getElementById('modal_sort_order').value = recommendation.sort_order;
     document.getElementById('submit_button').name = 'edit_recommendation';
     document.getElementById('submit_button').textContent = 'حفظ التعديل';
